@@ -225,9 +225,59 @@ class CursesMenu:
         stdscr.addstr(0, title_x, title_border)
         stdscr.addstr(1, title_x, title_text)
         stdscr.addstr(2, title_x, title_footer)
-
-        # Calculate how many items can fit on screen
-        menu_height = height - 7  # Header (3) + description area (2) + margins (2)
+        
+        # Draw description box right below the title box
+        description_box_y = 4  # Position right below title box
+        
+        selected = self.manager.current_menu[self.manager.selected_idx]
+        desc_text = ""
+        if selected.description:
+            desc_text = selected.description
+        
+        # Create description box - potentially with two lines of content
+        desc_box_border_top = "╔" + "═" * (width - 2) + "╗"
+        desc_box_footer = "╚" + "═" * (width - 2) + "╝"
+        
+        # Calculate if description needs two lines
+        desc_max_width = width - 6  # Account for borders and padding
+        needs_two_lines = len(desc_text) > desc_max_width
+        
+        if needs_two_lines and len(desc_text) > 0:
+            # Split text between two lines, no truncation needed
+            first_line = desc_text[:desc_max_width]
+            second_line = desc_text[desc_max_width:]
+            
+            # Ensure second line isn't too long either
+            if len(second_line) > desc_max_width:
+                second_line = second_line[:desc_max_width - 3] + "..."
+                
+            # Format box with two content lines
+            desc_box_line1 = "║ " + first_line + " " * (width - len(first_line) - 4) + " ║"
+            desc_box_line2 = "║ " + second_line + " " * (width - len(second_line) - 4) + " ║"
+            
+            # Draw the 4-line description box
+            stdscr.addstr(description_box_y, 0, desc_box_border_top)
+            stdscr.addstr(description_box_y + 1, 0, desc_box_line1)
+            stdscr.addstr(description_box_y + 2, 0, desc_box_line2)
+            stdscr.addstr(description_box_y + 3, 0, desc_box_footer)
+            
+            # Menu starts after the taller box (with a 1-line gap)
+            menu_start_y = description_box_y + 5
+        else:
+            # Single line is enough
+            desc_box_middle = "║ " + desc_text + " " * (width - len(desc_text) - 4) + " ║"
+            
+            # Draw the 3-line description box
+            stdscr.addstr(description_box_y, 0, desc_box_border_top)
+            stdscr.addstr(description_box_y + 1, 0, desc_box_middle)
+            stdscr.addstr(description_box_y + 2, 0, desc_box_footer)
+            
+            # Menu starts after the standard box (with a 1-line gap)
+            menu_start_y = description_box_y + 4  
+        
+        # Dynamically calculate how many menu items can fit on screen
+        # Based on header + actual description box size + gap + margin
+        menu_height = height - menu_start_y - 1
         
         # Calculate scrolling window
         total_items = len(self.manager.current_menu)
@@ -237,14 +287,8 @@ class CursesMenu:
         if self.manager.selected_idx >= menu_height:
             # Start showing items so selected is visible
             start_idx = max(0, self.manager.selected_idx - menu_height + 1)
-        
-        # Show scroll indicators if needed
-        if start_idx > 0:
-            scroll_up = "▲ More options above ▲"
-            stdscr.addstr(3, max((width - len(scroll_up)) // 2, 0), scroll_up)
-        
-        # Draw visible menu items (with scrolling)
-        menu_start_y = 4 if start_idx == 0 else 5  # Adjust for scroll indicator
+            
+        # Calculate how many items we can show with available space
         visible_items = min(menu_height, total_items - start_idx)
         
         # First pass: draw all non-selected items
@@ -260,7 +304,10 @@ class CursesMenu:
             # Normal display for non-selected items
             option_text = f"▶ {option.name}"
             x = max((width - len(option_text)) // 2, 0)
-            stdscr.addstr(y, x, option_text)
+            
+            # Only draw if it fits on screen
+            if y < height - 1:
+                stdscr.addstr(y, x, option_text)
         
         # Second pass: draw only the selected item with highlighting
         # This ensures it's drawn on top with proper attributes
@@ -274,42 +321,16 @@ class CursesMenu:
             padded_text = f" {option_text} "
             padded_x = max((width - len(padded_text)) // 2, 0)
             
-            # Draw with highlighting
-            try:
-                # Use only A_REVERSE for better compatibility
-                stdscr.attron(curses.A_REVERSE)
-                stdscr.addstr(selected_y, padded_x, padded_text)
-                stdscr.attroff(curses.A_REVERSE)
-            except curses.error:
-                # Fallback if we encounter any curses errors
-                pass
-        
-        # Show more items indicator if needed
-        if start_idx + visible_items < total_items:
-            scroll_down = "▼ More options below ▼"
-            scroll_y = menu_start_y + visible_items
-            if scroll_y < height - 3:  # Make sure we don't overlap with description area
-                stdscr.addstr(scroll_y, max((width - len(scroll_down)) // 2, 0), scroll_down)
-
-        # Draw description at the bottom, outside of the navigation area
-        if self.manager.current_menu:
-            # Border for description area
-            border_y = height - 3
-            stdscr.addstr(border_y, 0, "─" * width)
-            
-            # Show description of currently highlighted option
-            desc_y = height - 2
-            desc_text = ""
-            
-            selected = self.manager.current_menu[self.manager.selected_idx]
-            if selected.description:
-                desc_text = selected.description
-                # Truncate if too long
-                if len(desc_text) > width - 4:
-                    desc_text = desc_text[:width - 7] + "..."
-            
-            desc_x = 2  # Left-aligned with a small indent
-            stdscr.addstr(desc_y, desc_x, desc_text)
+            # Draw with highlighting only if it fits on screen
+            if selected_y < height - 1:
+                try:
+                    # Use only A_REVERSE for better compatibility
+                    stdscr.attron(curses.A_REVERSE)
+                    stdscr.addstr(selected_y, padded_x, padded_text)
+                    stdscr.attroff(curses.A_REVERSE)
+                except curses.error:
+                    # Fallback if we encounter any curses errors
+                    pass
 
         stdscr.refresh()
 
