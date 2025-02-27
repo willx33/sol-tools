@@ -1,0 +1,8 @@
+{
+  "proxy_enabled": false,
+  "proxy_file": "/Users/will/Developer/sol-tools/data/proxies.txt",
+  "data_dir": "/Users/will/Developer/sol-tools/data",
+  "log_dir": "/Users/will/Developer/sol-tools/logs",
+  "cache_dir": "/Users/will/Developer/sol-tools/cache",
+  "theme": "dark"
+}

@@ -1,16 +1,34 @@
-# Sol Tools - Ultimate Crypto Toolkit
+# Sol-Tools: Ultimate Crypto God Tools
 
-A comprehensive toolkit for blockchain and cryptocurrency analysis, combining multiple specialized tools into a single CLI interface.
+A comprehensive command-line toolkit that unifies multiple cryptocurrency analysis and operations tools into a single powerful interface. This project brings together functionality from Dragon, Sharp-Setup, Solana-Token-Bot, Dune API tools, CSV processing, and more.
 
 ## Features
 
-- **Dragon Analysis Tools**: Advanced wallet, trader, and token analysis for Solana, Ethereum, and GMGN
-- **Dune Analytics Integration**: Query the Dune API and parse results
-- **Sharp Tools**: Wallet processing, CSV merging, and PnL analysis utilities
-- **Solana Monitoring**: Real-time monitoring and alerts for Solana transactions
-- **Telegram Integration**: Send alerts and scrape data from Telegram channels
-- **Wallet Utilities**: Check, filter, split, and analyze wallet addresses
-- **Interactive CLI**: User-friendly menu-based interface with keyboard navigation
+### Dragon Tools
+- **Solana Analytics**: Bundle checker, wallet analysis, top traders, transaction scanning, copy wallet finder, top holders, early buyers
+- **Ethereum Analytics**: Wallet checker, top traders, transaction scanning, timestamp finder
+- **GMGN Integration**: New tokens, completing tokens, soaring tokens, bonded tokens
+
+### Solana Tools
+- **Token Monitoring**: Real-time monitoring of new transactions for specific tokens
+- **Wallet Monitoring**: Watch transactions for specific wallets
+- **Telegram Scraper**: Extract token data from Telegram channels
+
+### Dune Analytics
+- **Query Runner**: Execute Dune queries and save results to CSV
+- **Result Parser**: Extract token addresses from query results
+
+### Sharp Tools
+- **Wallet Checker**: Analyze wallet statistics via BullX API
+- **Wallet Splitter**: Break large wallet lists into smaller chunks
+- **CSV Merger**: Combine multiple CSV files into a single file
+- **PnL Checker**: Filter wallet CSVs based on performance metrics
+
+### Core Features
+- **Interactive CLI**: User-friendly menu with keyboard navigation (arrow keys)
+- **Environment Manager**: GUI for adding/editing API keys and environment variables
+- **Unified Configuration**: Centralized settings across all tools
+- **Cross-blockchain Support**: Works with Solana, Ethereum, and other networks
 
 ## Installation
 
@@ -19,54 +37,42 @@ A comprehensive toolkit for blockchain and cryptocurrency analysis, combining mu
 git clone https://github.com/yourusername/sol-tools.git
 cd sol-tools
 
-# Install dependencies
-pip install -r requirements.txt
-
-# Install in development mode
+# Install with pip
 pip install -e .
 ```
 
 ## Usage
 
 ```bash
-# Launch the interactive CLI
+# Launch the CLI with curses interface (default)
 sol-tools
 
-# Get help information
-sol-tools --help
+# Launch with text-based menu
+sol-tools --text-menu
+
+# Check version
+sol-tools --version
 ```
 
-## First-time Setup
+## Configuration
 
-On first run, the application will guide you through setting up required API keys and configuration options.
+The application uses environment variables for configuration. You can set these in a `.env` file in the project root or use the Settings menu in the application.
 
-You can also manually create a `.env` file in the root directory with the following variables:
+Required environment variables by module:
 
-```
-# Required API Keys
-DUNE_API_KEY=your_dune_api_key
-HELIUS_API_KEY=your_helius_api_key
-TELEGRAM_BOT_TOKEN=your_telegram_bot_token
-TELEGRAM_CHAT_ID=your_telegram_chat_id
+- **Dragon**: `SOLSCAN_API_KEY`, `ETHERSCAN_API_KEY`
+- **Solana**: `HELIUS_API_KEY`, `SOLANA_RPC_URL`, `SOLANA_WEBSOCKET_URL`
+- **Ethereum**: `ETHEREUM_RPC_URL`, `ETHERSCAN_API_KEY`
+- **Dune**: `DUNE_API_KEY`
+- **Telegram**: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`
+- **GMGN**: `PUMPFUN_API_KEY`, `MOONSHOT_API_KEY`
+- **BullX**: `BULLX_API_KEY`
 
-# Optional Configuration
-PROXY_ENABLED=false
-DATA_DIRECTORY=data
-```
+## Requirements
 
-## Module Documentation
-
-Each module has specific functionalities and requirements. See the detailed documentation for each:
-
-- [Dragon Tools](docs/dragon.md)
-- [Dune Tools](docs/dune.md)
-- [Sharp Tools](docs/sharp.md)
-- [Solana Tools](docs/solana.md)
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
+- Python 3.9+
+- See requirements.txt for package dependencies
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+MIT License
