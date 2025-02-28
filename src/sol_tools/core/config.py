@@ -10,8 +10,8 @@ from dotenv import load_dotenv, set_key
 # Base paths
 ROOT_DIR = Path(__file__).parents[3]
 DATA_DIR = ROOT_DIR / "data"
-INPUT_DATA_DIR = DATA_DIR / "input-data-new"
-OUTPUT_DATA_DIR = DATA_DIR / "output-data-new"
+INPUT_DATA_DIR = DATA_DIR / "input-data"
+OUTPUT_DATA_DIR = DATA_DIR / "output-data"
 CONFIG_DIR = ROOT_DIR / "config"
 CACHE_DIR = ROOT_DIR / "cache"
 LOG_DIR = ROOT_DIR / "logs"
@@ -133,11 +133,8 @@ def load_config() -> Dict[str, Any]:
             ensure_file_dir(file_path)
             file_path.touch()
     
-    # Remove any leftover legacy directories
-    legacy_dirs = [
-        DATA_DIR / "input-data",
-        DATA_DIR / "output-data"
-    ]
+    # Remove any modules stored directly in data (legacy organization)
+    legacy_dirs = []
     
     for module in modules:
         legacy_dirs.append(DATA_DIR / module)
