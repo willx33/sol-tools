@@ -383,6 +383,9 @@ class WorkflowResult:
             exports_dir.mkdir(parents=True, exist_ok=True)
             output_path = str(exports_dir / f"workflow_results_{timestamp}.{export_format}")
         
+        # Ensure parent directory exists before writing
+        ensure_file_dir(output_path)
+        
         # Create a summary dictionary
         summary = {
             "workflow": {
@@ -588,6 +591,23 @@ def ensure_data_dir(module: str, subdir: Optional[str] = None, data_type: str = 
     return directory
 
 
+def ensure_file_dir(file_path: Union[str, Path]) -> Path:
+    """
+    Ensure that the parent directory of a file exists.
+    Creates all parent directories if they don't exist.
+    
+    Args:
+        file_path: Path to the file (can be either a string or Path object)
+        
+    Returns:
+        Path object to the file's parent directory
+    """
+    path = Path(file_path)
+    directory = path.parent
+    directory.mkdir(parents=True, exist_ok=True)
+    return directory
+
+
 def save_unified_data(module: str, 
                     data_items: List[Dict[str, Any]], 
                     filename_prefix: str,
@@ -633,6 +653,9 @@ def save_unified_data(module: str,
         },
         "items": data_items
     }
+    
+    # Ensure parent directory exists before writing
+    ensure_file_dir(output_path)
     
     # Save the data
     with open(output_path, 'w') as f:

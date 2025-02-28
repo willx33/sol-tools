@@ -50,6 +50,8 @@ except ImportError as e:
 def save_dragon_log(category: str, data_key: str, response_data: Dict[str, Any], error: Optional[str] = None):
     """Save API response data to log files for debugging and analysis."""
     try:
+        from ...utils.common import ensure_file_dir
+        
         timestamp = int(time.time())
         log_data = {
             "timestamp": timestamp,
@@ -60,11 +62,14 @@ def save_dragon_log(category: str, data_key: str, response_data: Dict[str, Any],
         
         # Create category directory
         category_dir = LOGS_DIR / category
-        category_dir.mkdir(exist_ok=True)
+        category_dir.mkdir(parents=True, exist_ok=True)
         
         # Save to log file
         safe_key = data_key.replace("/", "_").replace("\\", "_")
         log_file = category_dir / f"{category}_{safe_key}_{timestamp}.json"
+        
+        # Ensure parent directory exists
+        ensure_file_dir(log_file)
         
         with open(log_file, 'w', encoding='utf-8') as f:
             json.dump(log_data, f, indent=2, ensure_ascii=False)

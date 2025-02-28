@@ -80,6 +80,8 @@ class SharpAdapter:
             else:
                 config = self._get_default_wallet_config()
                 # Save default config for future reference
+                from ...utils.common import ensure_file_dir
+                ensure_file_dir(config_path)
                 with open(config_path, "w", encoding="utf-8") as f:
                     json.dump(config, indent=2, fp=f)
         
@@ -106,9 +108,11 @@ class SharpAdapter:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         
         # Save filtered wallet addresses
+        from ...utils.common import ensure_file_dir
         wallet_dir = self.sharp_dir / "wallets"
         output_wallets_file = wallet_dir / f"output-wallets_{timestamp}.txt"
         
+        ensure_file_dir(output_wallets_file)
         with open(output_wallets_file, "w", encoding="utf-8") as f:
             for row in filtered_results:
                 f.write(row["wallet"] + "\n")
@@ -146,9 +150,10 @@ class SharpAdapter:
             }
             
         # Create timestamped output directory
+        from ...utils.common import ensure_file_dir
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         split_dir = self.sharp_dir / f"wallets/split/split_{timestamp}"
-        os.makedirs(split_dir, exist_ok=True)
+        split_dir.mkdir(parents=True, exist_ok=True)
         
         # Split wallets into chunks
         total_wallets = len(wallets)
@@ -163,6 +168,7 @@ class SharpAdapter:
             
             # Create output file
             output_file = split_dir / f"wallets_{i+1:03d}.txt"
+            ensure_file_dir(output_file)
             with open(output_file, "w", encoding="utf-8") as f:
                 for wallet in chunk:
                     f.write(wallet + "\n")
@@ -219,9 +225,13 @@ class SharpAdapter:
                 merged_data = pd.concat([merged_data, df], ignore_index=True)
             
             # Save to merged file
+            from ...utils.common import ensure_file_dir
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
             merged_filename = f"merged_{timestamp}.csv"
             merged_path = merged_dir / merged_filename
+            
+            # Ensure parent directory exists
+            ensure_file_dir(merged_path)
             
             merged_data.to_csv(merged_path, index=False)
             
@@ -272,6 +282,8 @@ class SharpAdapter:
             else:
                 config = self._get_default_pnl_config()
                 # Save default config for future reference
+                from ...utils.common import ensure_file_dir
+                ensure_file_dir(config_path)
                 with open(config_path, "w", encoding="utf-8") as f:
                     json.dump(config, indent=2, fp=f)
         
@@ -286,10 +298,14 @@ class SharpAdapter:
             filtered_df = df.iloc[:filtered_count]
             
             # Save filtered results
+            from ...utils.common import ensure_file_dir
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
             base_name = os.path.splitext(csv_file)[0]
             filtered_filename = f"{base_name}_filtered_{timestamp}.csv"
             filtered_path = filtered_dir / filtered_filename
+            
+            # Ensure parent directory exists
+            ensure_file_dir(filtered_path)
             
             filtered_df.to_csv(filtered_path, index=False)
             
@@ -359,9 +375,13 @@ class SharpAdapter:
         Returns:
             Path to the saved CSV file
         """
+        from ...utils.common import ensure_file_dir
         wallet_dir = self.sharp_dir / "wallets"
         file_prefix = "portfolio_results_filtered" if filtered else "portfolio_results"
         csv_filename = wallet_dir / f"{file_prefix}_{timestamp}.csv"
+        
+        # Ensure parent directory exists
+        ensure_file_dir(csv_filename)
         
         fieldnames = [
             "wallet",

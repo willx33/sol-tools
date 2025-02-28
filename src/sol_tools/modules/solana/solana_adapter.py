@@ -224,8 +224,13 @@ class SolanaAdapter:
                 "error": f"Invalid Solana wallet addresses: {invalid_wallets}"
             }
             
+        # Import ensure_file_dir from utils
+        from ...utils.common import ensure_file_dir
+        
         # Save wallet addresses to file for later use
         wallet_file = self.solana_dir / "wallets/monitor-wallets.txt"
+        # Ensure parent directory exists
+        ensure_file_dir(wallet_file)
         with open(wallet_file, "w") as f:
             for wallet in wallet_addresses:
                 f.write(f"{wallet}\n")
@@ -290,7 +295,11 @@ class SolanaAdapter:
         output_file = None
         
         if export_csv:
+            from ...utils.common import ensure_file_dir
+            
             output_file = self.solana_dir / f"telegram/scrape_{channel}_{timestamp}.csv"
+            # Ensure parent directory exists
+            ensure_file_dir(output_file)
             # In a real implementation, we would write actual data to this file
             with open(output_file, "w") as f:
                 f.write("timestamp,message_id,text,tokens,links\n")

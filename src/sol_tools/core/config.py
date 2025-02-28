@@ -115,6 +115,9 @@ def load_config() -> Dict[str, Any]:
     (OUTPUT_DATA_DIR / "solana" / "transaction_data").mkdir(parents=True, exist_ok=True)
     (OUTPUT_DATA_DIR / "solana" / "wallet_data").mkdir(parents=True, exist_ok=True)
     
+    # Import ensure_file_dir from utils
+    from ..utils.common import ensure_file_dir
+    
     # Ensure placeholder files exist
     placeholder_files = [
         (INPUT_DATA_DIR / "dragon" / "ethereum" / "wallet_lists" / "wallets.txt"),
@@ -126,6 +129,8 @@ def load_config() -> Dict[str, Any]:
     
     for file_path in placeholder_files:
         if not file_path.exists():
+            # Ensure parent directory exists before creating file
+            ensure_file_dir(file_path)
             file_path.touch()
     
     # Remove any leftover legacy directories
@@ -147,6 +152,8 @@ def load_config() -> Dict[str, Any]:
     else:
         config = DEFAULT_CONFIG
         CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+        # Ensure parent directory exists
+        MAIN_CONFIG.parent.mkdir(parents=True, exist_ok=True)
         with open(MAIN_CONFIG, "w") as f:
             json.dump(config, indent=2, fp=f)
     
@@ -156,6 +163,8 @@ def load_config() -> Dict[str, Any]:
 def save_config(config: Dict[str, Any]) -> None:
     """Save configuration to main config file."""
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    # Ensure parent directory exists
+    MAIN_CONFIG.parent.mkdir(parents=True, exist_ok=True)
     with open(MAIN_CONFIG, "w") as f:
         json.dump(config, indent=2, fp=f)
 
@@ -298,6 +307,8 @@ def edit_env_variables() -> None:
                 env_vars[selected] = value_answer["value"]
     
     # Save .env file
+    # Ensure parent directory exists
+    ENV_FILE.parent.mkdir(parents=True, exist_ok=True)
     with open(ENV_FILE, "w") as f:
         for key, value in env_vars.items():
             f.write(f"{key}={value}\n")
