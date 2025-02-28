@@ -10,6 +10,8 @@ from dotenv import load_dotenv, set_key
 # Base paths
 ROOT_DIR = Path(__file__).parents[3]
 DATA_DIR = ROOT_DIR / "data"
+INPUT_DATA_DIR = DATA_DIR / "input-data"
+OUTPUT_DATA_DIR = DATA_DIR / "output-data"
 CONFIG_DIR = ROOT_DIR / "config"
 CACHE_DIR = ROOT_DIR / "cache"
 LOG_DIR = ROOT_DIR / "logs"
@@ -57,6 +59,8 @@ DEFAULT_CONFIG = {
     "proxy_enabled": False,
     "proxy_file": str(DATA_DIR / "proxies.txt"),
     "data_dir": str(DATA_DIR),
+    "input_data_dir": str(INPUT_DATA_DIR),
+    "output_data_dir": str(OUTPUT_DATA_DIR),
     "log_dir": str(LOG_DIR),
     "cache_dir": str(CACHE_DIR),
     "theme": "dark"
@@ -66,12 +70,20 @@ DEFAULT_CONFIG = {
 def load_config() -> Dict[str, Any]:
     """Load configuration from files and environment variables."""
     # Create directories if they don't exist
-    for directory in [DATA_DIR, CONFIG_DIR, CACHE_DIR, LOG_DIR]:
+    for directory in [DATA_DIR, CONFIG_DIR, CACHE_DIR, LOG_DIR, INPUT_DATA_DIR, OUTPUT_DATA_DIR]:
         directory.mkdir(parents=True, exist_ok=True)
     
-    # Create data module directories
-    for module in ["dragon", "dune", "sharp", "solana"]:
+    # List of all modules
+    modules = ["dragon", "dune", "sharp", "solana", "gmgn", "ethereum"]
+    
+    # Create data module directories with input and output subdirectories
+    for module in modules:
+        # Legacy support for old directory structure
         (DATA_DIR / module).mkdir(parents=True, exist_ok=True)
+        
+        # New organized directory structure
+        (INPUT_DATA_DIR / module).mkdir(parents=True, exist_ok=True)
+        (OUTPUT_DATA_DIR / module).mkdir(parents=True, exist_ok=True)
     
     # Load environment variables
     load_dotenv(ENV_FILE)

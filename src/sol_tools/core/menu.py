@@ -171,6 +171,8 @@ def create_main_menu(handlers: Dict[str, Callable]) -> List[MenuOption]:
                   description="Gets trending tokens from GMGN. Output: data/dragon/GMGN/."),
         MenuOption("Bonded Tokens", handlers.get('dragon_gmgn_bonded'),
                   description="Gets bonded tokens from GMGN. Output: data/dragon/GMGN/."),
+        MenuOption("Market Cap Data", handlers.get('gmgn_mcap_data'),
+                  description="Fetches market cap data for Solana tokens. Output: data/output-data/gmgn/."),
         MenuOption("Back", None)
     ]
     

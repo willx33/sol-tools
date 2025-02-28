@@ -417,21 +417,31 @@ def test_telegram():
         console.print(f"[red]❌ Error sending Telegram message: {e}[/red]")
 
 
-def ensure_data_dir(module: str, subdir: Optional[str] = None) -> Path:
+def ensure_data_dir(module: str, subdir: Optional[str] = None, data_type: str = "legacy") -> Path:
     """
     Ensure that a data directory exists for a module and return its path.
     
     Args:
-        module: The module name (dragon, dune, sharp, solana)
+        module: The module name (dragon, dune, sharp, solana, gmgn)
         subdir: Optional subdirectory within the module
+        data_type: Type of data directory ("input", "output", or "legacy")
         
     Returns:
         Path object to the directory
     """
+    from ..core.config import DATA_DIR, INPUT_DATA_DIR, OUTPUT_DATA_DIR
+    
+    if data_type.lower() == "input":
+        base_dir = INPUT_DATA_DIR
+    elif data_type.lower() == "output":
+        base_dir = OUTPUT_DATA_DIR
+    else:  # legacy or any other value will use the old structure
+        base_dir = DATA_DIR
+    
     if subdir:
-        directory = DATA_DIR / module / subdir
+        directory = base_dir / module / subdir
     else:
-        directory = DATA_DIR / module
+        directory = base_dir / module
         
     directory.mkdir(parents=True, exist_ok=True)
     return directory

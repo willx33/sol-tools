@@ -4,6 +4,7 @@ import os
 import sys
 import curses
 import argparse
+import asyncio
 from typing import Dict, Callable, Any
 
 from . import __version__
@@ -15,6 +16,7 @@ from .modules.dragon import handlers as dragon_handlers
 from .modules.dune import handlers as dune_handlers
 from .modules.sharp import handlers as sharp_handlers
 from .modules.solana import handlers as solana_handlers
+from .modules.gmgn import handlers as gmgn_handlers
 from .utils import common as utils_handlers
 
 
@@ -56,6 +58,9 @@ def create_handlers() -> Dict[str, Callable[[], Any]]:
         'dune_query': dune_handlers.run_query,
         'dune_parse': dune_handlers.parse_csv,
         
+        # GMGN module handler
+        'gmgn_mcap_data': lambda: asyncio.run(gmgn_handlers.fetch_mcap_data_handler()),
+        
         # Sharp module handlers
         'sharp_wallet_checker': lambda: sharp_handlers.wallet_checker(),
         'sharp_wallet_checker_json': lambda: sharp_handlers.wallet_checker(export_format='json'),
@@ -94,13 +99,10 @@ def check_requirements():
     Check if all required files and directories exist.
     Create any missing directories needed for operation.
     """
-    # Load config to create default directories
+    # Load config to create default directories including input/output data dirs
     config = load_config()
     
-    # Check for data directories
-    for module in ["dragon", "dune", "sharp", "solana"]:
-        # Create data/module directory if it doesn't exist
-        os.makedirs(os.path.join(config["data_dir"], module), exist_ok=True)
+    # All directory creation is now handled in the load_config function
 
 
 def parse_args():
