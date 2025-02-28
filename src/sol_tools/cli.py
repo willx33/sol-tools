@@ -57,9 +57,23 @@ def create_handlers() -> Dict[str, Callable[[], Any]]:
         'dune_parse': dune_handlers.parse_csv,
         
         # Sharp module handlers
-        'sharp_wallet_checker': sharp_handlers.wallet_checker,
-        'sharp_wallet_splitter': sharp_handlers.wallet_splitter,
-        'sharp_csv_merger': sharp_handlers.csv_merger,
+        'sharp_wallet_checker': lambda: sharp_handlers.wallet_checker(),
+        'sharp_wallet_checker_json': lambda: sharp_handlers.wallet_checker(export_format='json'),
+        'sharp_wallet_checker_csv': lambda: sharp_handlers.wallet_checker(export_format='csv'),
+        'sharp_wallet_checker_excel': lambda: sharp_handlers.wallet_checker(export_format='excel'),
+        
+        # Sharp wallet splitter with export options
+        'sharp_wallet_splitter': lambda: sharp_handlers.wallet_splitter(),
+        'sharp_wallet_splitter_json': lambda: sharp_handlers.wallet_splitter(export_format='json'),
+        'sharp_wallet_splitter_csv': lambda: sharp_handlers.wallet_splitter(export_format='csv'),
+        'sharp_wallet_splitter_excel': lambda: sharp_handlers.wallet_splitter(export_format='excel'),
+        
+        # Sharp CSV merger with export options
+        'sharp_csv_merger': lambda: sharp_handlers.csv_merger(),
+        'sharp_csv_merger_json': lambda: sharp_handlers.csv_merger(export_format='json'),
+        'sharp_csv_merger_csv': lambda: sharp_handlers.csv_merger(export_format='csv'),
+        'sharp_csv_merger_excel': lambda: sharp_handlers.csv_merger(export_format='excel'),
+        
         'sharp_pnl_checker': sharp_handlers.pnl_checker,
         
         # Solana module handlers

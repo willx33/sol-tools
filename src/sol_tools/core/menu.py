@@ -103,13 +103,49 @@ def create_main_menu(handlers: Dict[str, Callable]) -> List[MenuOption]:
     ]
     
     # Sharp wallet and CSV tools
+    wallet_checker_submenu = [
+        MenuOption("Standard (No Export)", handlers.get('sharp_wallet_checker'),
+                  description="Basic wallet check with no export file."),
+        MenuOption("Export as JSON", handlers.get('sharp_wallet_checker_json'),
+                  description="Wallet check with JSON export of results."),
+        MenuOption("Export as CSV", handlers.get('sharp_wallet_checker_csv'),
+                  description="Wallet check with CSV export of results."),
+        MenuOption("Export as Excel", handlers.get('sharp_wallet_checker_excel'),
+                  description="Wallet check with Excel workbook export of results."),
+        MenuOption("Back", None)
+    ]
+    
+    wallet_splitter_submenu = [
+        MenuOption("Standard (No Export)", handlers.get('sharp_wallet_splitter'),
+                  description="Standard wallet splitting with no export."),
+        MenuOption("Export as JSON", handlers.get('sharp_wallet_splitter_json'),
+                  description="Wallet splitting with JSON export of results."),
+        MenuOption("Export as CSV", handlers.get('sharp_wallet_splitter_csv'),
+                  description="Wallet splitting with CSV export of results."),
+        MenuOption("Export as Excel", handlers.get('sharp_wallet_splitter_excel'),
+                  description="Wallet splitting with Excel workbook export."),
+        MenuOption("Back", None)
+    ]
+    
+    csv_merger_submenu = [
+        MenuOption("Standard (No Export)", handlers.get('sharp_csv_merger'),
+                  description="Standard CSV merging with no export."),
+        MenuOption("Export as JSON", handlers.get('sharp_csv_merger_json'),
+                  description="CSV merging with JSON export of results."),
+        MenuOption("Export as CSV", handlers.get('sharp_csv_merger_csv'),
+                  description="CSV merging with CSV export of results."),
+        MenuOption("Export as Excel", handlers.get('sharp_csv_merger_excel'),
+                  description="CSV merging with Excel workbook export."),
+        MenuOption("Back", None)
+    ]
+    
     sharp_menu = [
-        MenuOption("Wallet Checker", handlers.get('sharp_wallet_checker'),
-                  description="Checks wallet data via BullX API. Uses/saves data/sharp/wallets/."),
-        MenuOption("Wallet Splitter", handlers.get('sharp_wallet_splitter'),
-                  description="Splits wallet lists to 25k chunks. Output: data/sharp/splitter/."),
-        MenuOption("CSV Merger", handlers.get('sharp_csv_merger'),
-                  description="Combines CSV files. Uses data/sharp/csv/, output to merged/."),
+        MenuOption("Wallet Checker", children=wallet_checker_submenu,
+                  description="Checks wallet data via BullX API with enhanced progress tracking."),
+        MenuOption("Wallet Splitter", children=wallet_splitter_submenu,
+                  description="Splits wallet lists to 25k chunks with progress tracking."),
+        MenuOption("CSV Merger", children=csv_merger_submenu,
+                  description="Combines CSV files with progress tracking and metadata."),
         MenuOption("PnL CSV Checker", handlers.get('sharp_pnl_checker'),
                   description="Filters CSV by profit metrics. Uses data/sharp/pnl/."),
         MenuOption("Back", None)

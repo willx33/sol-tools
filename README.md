@@ -19,9 +19,9 @@ A comprehensive command-line toolkit that unifies multiple cryptocurrency analys
 - **Result Parser**: Extract token addresses from query results
 
 ### Sharp Tools
-- **Wallet Checker**: Analyze wallet statistics via BullX API
-- **Wallet Splitter**: Break large wallet lists into smaller chunks
-- **CSV Merger**: Combine multiple CSV files into a single file
+- **Wallet Checker**: Analyze wallet statistics via BullX API with real-time progress tracking and export
+- **Wallet Splitter**: Break large wallet lists into smaller chunks with validation and detailed reporting
+- **CSV Merger**: Combine multiple CSV files with advanced options and comprehensive metadata
 - **PnL Checker**: Filter wallet CSVs based on performance metrics
 
 ### Core Features
@@ -29,6 +29,9 @@ A comprehensive command-line toolkit that unifies multiple cryptocurrency analys
 - **Environment Manager**: GUI for adding/editing API keys and environment variables
 - **Unified Configuration**: Centralized settings across all tools
 - **Cross-blockchain Support**: Works with Solana, Ethereum, and other networks
+- **Progress Tracking**: Real-time progress bars with ETA for all operations
+- **Export Functionality**: Export results in JSON, CSV, and Excel formats with detailed metadata
+- **Workflow Management**: Comprehensive tracking of inputs, outputs, and statistics for all operations
 
 ## Installation
 

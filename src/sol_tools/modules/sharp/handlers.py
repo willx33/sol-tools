@@ -36,8 +36,15 @@ HEADERS = {
 }
 
 
-def wallet_checker():
-    """Check wallet statistics using BullX API and filter by performance metrics."""
+def wallet_checker(export_format: str = None):
+    """
+    Check wallet statistics using BullX API and filter by performance metrics.
+    
+    Args:
+        export_format: Optional format to export results ('json', 'csv', 'excel')
+    """
+    from ...utils.common import ProgressManager, WorkflowResult, format_duration
+    
     clear_terminal()
     console.print("[bold blue]🔍 Sharp Wallet Checker[/bold blue]")
     console.print("Analyze wallet performance data from BullX API\n")
@@ -64,8 +71,12 @@ def wallet_checker():
     answers = inquirer.prompt(questions)
     input_method = answers["input_method"]
     
+    # Initialize workflow result tracking
+    workflow_result = WorkflowResult()
+    
     # Get wallets based on selected method
     wallets = []
+    input_file = None  # Track the input file for the workflow result
     
     if input_method == "Load from file":
         # Find existing wallet files
@@ -189,6 +200,7 @@ def wallet_checker():
                 for wallet in wallets:
                     f.write(wallet + "\n")
             console.print(f"[green]✓[/green] Saved {len(wallets)} addresses to {save_file}")
+            input_file = str(save_file)
     
     elif input_method == "Import from clipboard":
         import pyperclip
@@ -233,6 +245,7 @@ def wallet_checker():
                     for wallet in wallets:
                         f.write(wallet + "\n")
                 console.print(f"[green]✓[/green] Saved {len(wallets)} addresses to {save_file}")
+                input_file = str(save_file)
                 
         except ImportError:
             console.print("[red]Error: pyperclip module not installed.[/red]")
@@ -252,6 +265,7 @@ def wallet_checker():
             return
             
         latest_file = output_files[0]
+        input_file = str(latest_file)
         
         # Show info about the file
         mod_time = datetime.fromtimestamp(os.path.getmtime(latest_file))
@@ -262,6 +276,10 @@ def wallet_checker():
         
         console.print(f"[green]✓[/green] Loaded {len(wallets)} addresses from {latest_file.name}")
         console.print(f"   File date: {time_str}")
+    
+    # Update workflow result with input file
+    if input_file:
+        workflow_result.add_input("wallet_list", input_file)
     
     # Make sure we have wallets to process
     if not wallets:
@@ -328,6 +346,10 @@ def wallet_checker():
         "Advanced settings",
         "Continue with current settings",
     ]
+    
+    # Add export option if not provided
+    if export_format is None:
+        config_menu_choices.insert(2, "Export options")
     
     questions = [
         inquirer.List(
@@ -451,6 +473,32 @@ def wallet_checker():
             
         console.print(f"[green]✓[/green] Output options saved to {config_file}")
     
+    elif config_choice == "Export options" and export_format is None:
+        # Configure export options
+        console.print("\n[bold]Export Options[/bold]")
+        
+        export_format_choices = [
+            "None (don't export)",
+            "JSON",
+            "CSV",
+            "Excel"
+        ]
+        
+        questions = [
+            inquirer.List(
+                "export_format",
+                message="Export results format:",
+                choices=export_format_choices
+            )
+        ]
+        answers = inquirer.prompt(questions)
+        export_choice = answers["export_format"]
+        
+        if export_choice == "None (don't export)":
+            export_format = None
+        else:
+            export_format = export_choice.lower()
+    
     elif config_choice == "Advanced settings":
         # Edit advanced settings
         console.print("\n[bold]Advanced Settings[/bold]")
@@ -483,8 +531,15 @@ def wallet_checker():
             
         console.print(f"[green]✓[/green] Advanced settings saved to {config_file}")
     
+    # Set up progress tracking
+    progress_manager = ProgressManager(
+        total_steps=3,
+        description="Wallet Analysis"
+    ).initialize()
+    workflow_result.set_progress_manager(progress_manager)
+    
     # Start processing
-    console.print("\n[bold]Starting wallet analysis[/bold]")
+    progress_manager.start_step("api_processing", f"Processing {len(wallets)} wallets through BullX API...")
     
     # Timestamp for output files
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -546,59 +601,53 @@ def wallet_checker():
         except Exception as e:
             raise ValueError(f"Failed to extract portfolio data: {e}")
     
-    # Process wallet data with fancy progress bar
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        BarColumn(),
-        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-        TimeElapsedColumn()
-    ) as progress:
-        task = progress.add_task("[cyan]Processing wallets...[/cyan]", total=len(wallets))
+    # Process wallets incrementally with progress updates
+    for i, wallet in enumerate(wallets):
+        # Update progress
+        progress_manager.update_step(
+            i, 
+            len(wallets), 
+            f"Processing wallet {i+1}/{len(wallets)}: {wallet[:8]}..."
+        )
         
-        for i, wallet in enumerate(wallets):
-            progress.update(task, description=f"[cyan]Processing wallet {i+1}/{len(wallets)}[/cyan]")
+        try:
+            # In a real implementation, this would call the BullX API
+            # For now, we'll use a simulated response
             
-            try:
-                # In a real implementation, this would call the BullX API
-                # For now, we'll use a simulated response
-                
-                if config.get("save_transaction_data", False):
-                    # Sleep to simulate longer API call for transaction data
-                    time.sleep(0.1)
-                
-                # Simulate API call (replace with actual API call)
-                # response = requests.post(BULLX_GETPORTFOLIO_URL, json={"wallet": wallet}, headers=HEADERS)
-                api_response = {"success": True, "data": {}}  # Simulated response
-                
-                # Process API response
-                row = extract_portfolio_data(api_response, wallet)
-                results.append(row)
-                
-            except Exception as e:
-                # Handle failed requests
-                if config.get("retry_failed", True):
-                    # Try one more time after delay
-                    try:
-                        time.sleep(config.get("retry_delay", 2))
-                        # Simulate second API call
-                        api_response = {"success": True, "data": {}}
-                        row = extract_portfolio_data(api_response, wallet)
-                        results.append(row)
-                    except Exception as retry_e:
-                        console.print(f"[red]Failed to process wallet after retry: {wallet}: {retry_e}[/red]")
-                        failed_wallets.append(wallet)
-                else:
-                    console.print(f"[red]Failed to process wallet: {wallet}: {e}[/red]")
+            if config.get("save_transaction_data", False):
+                # Sleep to simulate longer API call for transaction data
+                time.sleep(0.05)
+            
+            # Simulate API call (replace with actual API call)
+            # response = requests.post(BULLX_GETPORTFOLIO_URL, json={"wallet": wallet}, headers=HEADERS)
+            api_response = {"success": True, "data": {}}  # Simulated response
+            
+            # Process API response
+            row = extract_portfolio_data(api_response, wallet)
+            results.append(row)
+            
+        except Exception as e:
+            # Handle failed requests
+            if config.get("retry_failed", True):
+                # Try one more time after delay
+                try:
+                    time.sleep(config.get("retry_delay", 2))
+                    # Simulate second API call
+                    api_response = {"success": True, "data": {}}
+                    row = extract_portfolio_data(api_response, wallet)
+                    results.append(row)
+                except Exception as retry_e:
+                    console.print(f"[red]Failed to process wallet after retry: {wallet}: {retry_e}[/red]")
                     failed_wallets.append(wallet)
-            
-            # Update progress bar
-            progress.update(task, advance=1)
+            else:
+                console.print(f"[red]Failed to process wallet: {wallet}: {e}[/red]")
+                failed_wallets.append(wallet)
     
-    # Show summary of processing results
-    console.print(f"\n[green]✓[/green] Processed {len(results)} wallets successfully")
-    if failed_wallets:
-        console.print(f"[yellow]⚠[/yellow] Failed to process {len(failed_wallets)} wallets")
+    # Mark API processing step as complete
+    progress_manager.complete_step("API processing completed")
+    
+    # Start filtering step
+    progress_manager.start_step("filtering", "Filtering wallets based on criteria...")
     
     # Filter results
     filtered_results = []
@@ -633,12 +682,22 @@ def wallet_checker():
     main_output_file = wallet_dir / f"output-wallets_{timestamp}.txt"
     shutil.copy(output_wallets_file, main_output_file)
     
-    # Show filtering results
-    pass_percentage = len(filtered_results) / len(results) * 100 if results else 0
-    console.print(f"\n[bold green]Filtering Results:[/bold green]")
-    console.print(f"[green]✓[/green] {len(filtered_results)} wallets passed filters ({pass_percentage:.1f}%)")
-    console.print(f"[green]✓[/green] Filtered wallets saved to '{output_wallets_file}'")
-    console.print(f"[green]✓[/green] Also saved to '{main_output_file}' for quick access")
+    # Add files to workflow result
+    workflow_result.add_output("filtered_wallets", str(output_wallets_file))
+    workflow_result.add_output("filtered_wallets_main", str(main_output_file))
+    
+    # Complete filtering step
+    progress_manager.complete_step("Filtering completed")
+    
+    # Start export step
+    progress_manager.start_step("exporting", "Generating output files...")
+    
+    # Add stats to workflow result
+    workflow_result.add_stat("Total Wallets", len(wallets))
+    workflow_result.add_stat("Processed Wallets", len(results))
+    workflow_result.add_stat("Failed Wallets", len(failed_wallets))
+    workflow_result.add_stat("Filtered Wallets", len(filtered_results))
+    workflow_result.add_stat("Pass Rate", f"{len(filtered_results)/len(results)*100:.1f}%" if results else "0%")
     
     # Generate CSV files
     fieldnames = [
@@ -666,7 +725,7 @@ def wallet_checker():
             writer.writeheader()
             for row in results:
                 writer.writerow(row)
-        console.print(f"[green]✓[/green] Complete results ({len(results)} wallets) saved to '{csv_filename}'")
+        workflow_result.add_output("unfiltered_csv", str(csv_filename))
     
     # Save filtered CSV
     if config.get("save_filtered_csv", True):
@@ -676,11 +735,17 @@ def wallet_checker():
             writer.writeheader()
             for row in filtered_results:
                 writer.writerow(row)
-        console.print(f"[green]✓[/green] Filtered results ({len(filtered_results)} wallets) saved to '{csv_filename_filtered}'")
+        workflow_result.add_output("filtered_csv", str(csv_filename_filtered))
+        
+        # Also add the filtered results as a DataFrame for easy export
+        filtered_df = pd.DataFrame(filtered_results)
+        workflow_result.add_dataframe("filtered_results", filtered_df)
     
     # Save configuration used for this run
-    with open(run_dir / "run_config.json", "w", encoding="utf-8") as f:
+    run_config_file = run_dir / "run_config.json"
+    with open(run_config_file, "w", encoding="utf-8") as f:
         json.dump(config, indent=2, fp=f)
+    workflow_result.add_output("run_config", str(run_config_file))
     
     # Save failed wallets if any
     if failed_wallets:
@@ -688,7 +753,27 @@ def wallet_checker():
         with open(failed_file, "w", encoding="utf-8") as f:
             for wallet in failed_wallets:
                 f.write(wallet + "\n")
-        console.print(f"[yellow]⚠[/yellow] Failed wallets saved to '{failed_file}'")
+        workflow_result.add_output("failed_wallets", str(failed_file))
+    
+    # Complete export step and finalize workflow
+    progress_manager.complete_step("Export completed")
+    workflow_result.finalize()
+    
+    # Export the results if requested
+    if export_format:
+        export_path = workflow_result.export_results(export_format)
+        if export_path:
+            workflow_result.add_output("exported_results", export_path)
+    
+    # Show filtering results
+    pass_percentage = len(filtered_results) / len(results) * 100 if results else 0
+    console.print(f"\n[bold green]Filtering Results:[/bold green]")
+    console.print(f"[green]✓[/green] {len(filtered_results)} wallets passed filters ({pass_percentage:.1f}%)")
+    console.print(f"[green]✓[/green] Filtered wallets saved to '{output_wallets_file}'")
+    console.print(f"[green]✓[/green] Also saved to '{main_output_file}' for quick access")
+    
+    # Print workflow summary
+    workflow_result.print_summary()
     
     # Suggest next steps
     console.print("\n[bold green]Wallet checker completed successfully![/bold green]")
@@ -702,8 +787,15 @@ def wallet_checker():
         console.print("\n[yellow]⚠ No wallets passed the filters. Consider adjusting filter criteria.[/yellow]")
 
 
-def wallet_splitter():
-    """Split large wallet lists into smaller chunks for easier processing."""
+def wallet_splitter(export_format: str = None):
+    """
+    Split large wallet lists into smaller chunks for easier processing.
+    
+    Args:
+        export_format: Optional format to export results ('json', 'csv', 'excel')
+    """
+    from ...utils.common import ProgressManager, WorkflowResult, format_duration
+    
     clear_terminal()
     console.print("[bold blue]📂 Sharp Wallet Splitter[/bold blue]")
     console.print("Split large wallet lists into smaller chunks for APIs with size limits\n")
@@ -711,6 +803,9 @@ def wallet_splitter():
     # Setup directories
     wallet_dir = ensure_data_dir("sharp", "wallets")
     output_dir = ensure_data_dir("sharp", "wallets/split")
+    
+    # Initialize workflow result tracking
+    workflow_result = WorkflowResult()
     
     # Find wallet files
     wallet_files = list(wallet_dir.glob("*.txt"))
@@ -863,6 +958,9 @@ def wallet_splitter():
         console.print("Please add wallet addresses to this file and run the tool again.")
         return
     
+    # Add input file to workflow result
+    workflow_result.add_input("wallet_list", input_file)
+    
     # Get wallet split options
     console.print("\n[bold]Split Options:[/bold]")
     
@@ -929,43 +1027,71 @@ def wallet_splitter():
     remove_duplicates = answers["remove_duplicates"]
     validate_addresses = answers["validate_addresses"]
     
+    # Add configuration to workflow result
+    workflow_result.add_data("config", {
+        "preset": preset,
+        "max_wallets_per_file": max_wallets_per_file,
+        "remove_duplicates": remove_duplicates,
+        "validate_addresses": validate_addresses
+    })
+    
+    # Set up progress tracking with 3 steps
+    progress_manager = ProgressManager(
+        total_steps=3,
+        description="Wallet Splitting"
+    ).initialize()
+    workflow_result.set_progress_manager(progress_manager)
+    
+    # Start processing - Step 1: Loading and validating
+    progress_manager.start_step("loading", f"Loading and processing wallets from {os.path.basename(input_file)}...")
+    
     # Read wallet addresses
     with open(input_file, "r", encoding="utf-8") as f:
         wallets = [line.strip() for line in f if line.strip()]
     
     if not wallets:
         console.print(f"[red]No wallet addresses found in file: {input_file}[/red]")
+        workflow_result.set_error("No wallet addresses found in input file")
         return
     
     original_count = len(wallets)
     console.print(f"\n[green]✓[/green] Loaded {original_count} addresses from {os.path.basename(input_file)}")
     
     # Process wallets
+    results = []
+    invalid_addresses = []
+    
     if validate_addresses:
         valid_wallets = []
-        invalid_wallets = []
         
-        for wallet in wallets:
+        # Update step description
+        progress_manager.update_step(0, original_count, "Validating wallet addresses...")
+        
+        for i, wallet in enumerate(wallets):
             # Simple validation - Solana addresses are 32-44 characters
             # In a real implementation, you would use proper validation with regex or libraries
             if len(wallet) >= 30 and len(wallet) <= 50:
                 valid_wallets.append(wallet)
             else:
-                invalid_wallets.append(wallet)
+                invalid_addresses.append(wallet)
+                
+            # Update progress occasionally (every 1000 wallets)
+            if i % 1000 == 0:
+                progress_manager.update_step(i, original_count, f"Validated {i}/{original_count} addresses...")
         
-        if invalid_wallets:
-            console.print(f"[yellow]⚠[/yellow] Found {len(invalid_wallets)} invalid wallet addresses")
+        if invalid_addresses:
+            console.print(f"[yellow]⚠[/yellow] Found {len(invalid_addresses)} invalid wallet addresses")
             
             # Ask if user wants to see invalid addresses
-            if len(invalid_wallets) <= 10:
+            if len(invalid_addresses) <= 10:
                 console.print("[bold]Invalid addresses:[/bold]")
-                for wallet in invalid_wallets:
+                for wallet in invalid_addresses:
                     console.print(f"  - {wallet}")
             else:
                 questions = [
                     inquirer.Confirm(
                         "show_invalid",
-                        message=f"Show all {len(invalid_wallets)} invalid addresses?",
+                        message=f"Show all {len(invalid_addresses)} invalid addresses?",
                         default=False
                     ),
                 ]
@@ -973,7 +1099,7 @@ def wallet_splitter():
                 
                 if answers["show_invalid"]:
                     console.print("[bold]Invalid addresses:[/bold]")
-                    for wallet in invalid_wallets:
+                    for wallet in invalid_addresses:
                         console.print(f"  - {wallet}")
         
         wallets = valid_wallets
@@ -984,10 +1110,17 @@ def wallet_splitter():
         unique_wallets = []
         seen = set()
         
-        for wallet in wallets:
+        # Update step description
+        progress_manager.update_step(0, len(wallets), "Removing duplicate addresses...")
+        
+        for i, wallet in enumerate(wallets):
             if wallet not in seen:
                 seen.add(wallet)
                 unique_wallets.append(wallet)
+                
+            # Update progress occasionally
+            if i % 1000 == 0:
+                progress_manager.update_step(i, len(wallets), f"Processed {i}/{len(wallets)} addresses for duplicates...")
         
         duplicate_count = len(wallets) - len(unique_wallets)
         if duplicate_count > 0:
@@ -995,19 +1128,23 @@ def wallet_splitter():
         
         wallets = unique_wallets
     
+    # Complete the first step
+    progress_manager.complete_step("Wallet processing completed")
+    
     # Create timestamped output directory with description
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     folder_name = f"split_{timestamp}_{max_wallets_per_file}_per_file"
     split_dir = output_dir / folder_name
     os.makedirs(split_dir, exist_ok=True)
     
-    # Split wallets into chunks
+    # Split wallets into chunks - Step 2: Splitting
     total_wallets = len(wallets)
     num_files = (total_wallets + max_wallets_per_file - 1) // max_wallets_per_file
     
     # If no wallets to process
     if total_wallets == 0:
         console.print("[yellow]No valid wallets to split![/yellow]")
+        workflow_result.set_error("No valid wallets to split after validation")
         return
     
     # Show summary before processing
@@ -1027,31 +1164,42 @@ def wallet_splitter():
     
     if not answers["confirm_split"]:
         console.print("[yellow]Operation cancelled by user.[/yellow]")
+        workflow_result.set_error("Operation cancelled by user")
         return
     
-    # Process with progress bar
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        BarColumn(),
-        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-        TimeElapsedColumn()
-    ) as progress:
-        task = progress.add_task("[cyan]Creating split files...[/cyan]", total=num_files)
+    # Start the splitting step
+    progress_manager.start_step("splitting", f"Splitting {total_wallets} wallets into {num_files} files...")
+    
+    # Process with progress updates
+    for i in range(num_files):
+        start_idx = i * max_wallets_per_file
+        end_idx = min((i + 1) * max_wallets_per_file, total_wallets)
+        chunk = wallets[start_idx:end_idx]
         
-        for i in range(num_files):
-            start_idx = i * max_wallets_per_file
-            end_idx = min((i + 1) * max_wallets_per_file, total_wallets)
-            chunk = wallets[start_idx:end_idx]
-            
-            # Create output file
-            output_file = split_dir / f"wallets_{i+1:03d}.txt"
-            with open(output_file, "w", encoding="utf-8") as f:
-                for wallet in chunk:
-                    f.write(wallet + "\n")
-            
-            # Update progress
-            progress.update(task, advance=1, description=f"[cyan]Created file {i+1}/{num_files}[/cyan]")
+        # Create output file
+        output_file = split_dir / f"wallets_{i+1:03d}.txt"
+        with open(output_file, "w", encoding="utf-8") as f:
+            for wallet in chunk:
+                f.write(wallet + "\n")
+        
+        # Add file result to results list
+        results.append({
+            "file_number": i+1,
+            "file_path": str(output_file),
+            "file_name": f"wallets_{i+1:03d}.txt",
+            "wallet_count": len(chunk),
+            "start_index": start_idx,
+            "end_index": end_idx - 1
+        })
+        
+        # Update progress
+        progress_manager.update_step(i+1, num_files, f"Created file {i+1}/{num_files}: wallets_{i+1:03d}.txt")
+    
+    # Complete splitting step
+    progress_manager.complete_step("Splitting completed")
+    
+    # Start summary generation - Step 3: Creating summary
+    progress_manager.start_step("summary", "Creating summary and collecting statistics...")
     
     # Create a summary file
     summary_file = split_dir / "split_summary.txt"
@@ -1072,11 +1220,56 @@ def wallet_splitter():
             count = end_idx - start_idx
             f.write(f"wallets_{i+1:03d}.txt: {count} wallets\n")
     
+    # If invalid addresses were found, save them to a file
+    if invalid_addresses:
+        invalid_file = split_dir / "invalid_addresses.txt"
+        with open(invalid_file, "w", encoding="utf-8") as f:
+            for wallet in invalid_addresses:
+                f.write(wallet + "\n")
+        workflow_result.add_output("invalid_addresses", str(invalid_file))
+    
+    # Add outputs to workflow result
+    workflow_result.add_output("summary_file", str(summary_file))
+    workflow_result.add_output("split_directory", str(split_dir))
+    
+    # Add stats to workflow result
+    workflow_result.add_stat("Original Wallet Count", original_count)
+    workflow_result.add_stat("Final Wallet Count", total_wallets)
+    workflow_result.add_stat("Invalid Addresses", len(invalid_addresses))
+    workflow_result.add_stat("Duplicate Addresses", original_count - len(invalid_addresses) - total_wallets)
+    workflow_result.add_stat("Files Created", num_files)
+    workflow_result.add_stat("Wallets Per File", max_wallets_per_file)
+    
+    # Add results to workflow result
+    for result in results:
+        workflow_result.add_output(f"file_{result['file_number']}", result['file_path'])
+    
+    # Create a dataframe for organized export
+    import pandas as pd
+    files_df = pd.DataFrame(results)
+    workflow_result.add_dataframe("split_files", files_df)
+    
+    # Complete summary step
+    progress_manager.complete_step("Summary completed")
+    
+    # Finalize workflow
+    workflow_result.finalize()
+    
+    # Export the results if requested
+    if export_format:
+        export_path = workflow_result.export_results(export_format, split_dir)
+        if export_path:
+            workflow_result.add_output("exported_results", export_path)
+            console.print(f"[green]✓[/green] Results exported to: {export_path}")
+    
     # Show results
     console.print(f"\n[bold green]Wallet splitting completed successfully![/bold green]")
     console.print(f"[green]✓[/green] Split {total_wallets} wallets into {num_files} files")
     console.print(f"[green]✓[/green] Files saved to: {split_dir}")
     console.print(f"[green]✓[/green] Summary saved to: {summary_file}")
+    
+    # Print a summary of the results
+    workflow_result.print_summary()
     
     # Suggest next steps
     console.print("\n[bold]Next steps:[/bold]")
@@ -1086,8 +1279,15 @@ def wallet_splitter():
         console.print("[yellow]Note: You created a large number of files. Consider using a higher wallets-per-file setting for easier management.[/yellow]")
 
 
-def csv_merger():
-    """Merge multiple CSV files into a single consolidated file with advanced options."""
+def csv_merger(export_format: str = None):
+    """
+    Merge multiple CSV files into a single consolidated file with advanced options.
+    
+    Args:
+        export_format: Optional format to export results ('json', 'csv', 'excel')
+    """
+    from ...utils.common import ProgressManager, WorkflowResult, format_duration
+    
     clear_terminal()
     console.print("[bold blue]📊 Sharp CSV Merger[/bold blue]")
     console.print("Merge multiple CSV files into a single consolidated file\n")
@@ -1095,6 +1295,9 @@ def csv_merger():
     # Setup directories
     unmerged_dir = ensure_data_dir("sharp", "csv/unmerged")
     merged_dir = ensure_data_dir("sharp", "csv/merged")
+    
+    # Initialize workflow result tracking
+    workflow_result = WorkflowResult()
     
     # Input method selection
     input_options = [
@@ -1115,6 +1318,8 @@ def csv_merger():
     
     # Get CSV files based on selected method
     csv_files = []
+    imported_files = False
+    source_dir = unmerged_dir
     
     if input_method == "Use files from unmerged directory":
         # Check for CSV files in the default directory
@@ -1179,6 +1384,7 @@ def csv_merger():
         ]
         answers = inquirer.prompt(questions)
         import_dir = answers["import_dir"]
+        source_dir = import_dir
         
         # Check if directory exists
         if not os.path.isdir(import_dir):
@@ -1218,6 +1424,7 @@ def csv_merger():
             ),
         ]
         answers = inquirer.prompt(questions)
+        imported_files = True
         
         if answers["copy_files"]:
             # Copy files to unmerged directory
@@ -1232,6 +1439,7 @@ def csv_merger():
             
             # Get paths in the unmerged directory
             csv_files = [Path(unmerged_dir) / f for f in selected_files]
+            source_dir = unmerged_dir
         else:
             # Use files directly from the import directory
             csv_files = [Path(import_dir) / f for f in selected_files]
@@ -1241,9 +1449,33 @@ def csv_merger():
         console.print("[red]No CSV files available to merge.[/red]")
         return
     
-    # Show selected files
-    console.print(f"\n[bold]Selected {len(csv_files)} CSV files for merging:[/bold]")
+    # Add source information to workflow result
+    workflow_result.add_data("source_directory", str(source_dir))
+    if imported_files:
+        workflow_result.add_data("imported_files", True)
+        workflow_result.add_data("import_directory", str(import_dir))
+    
+    # Add input files to workflow result
     for i, file in enumerate(csv_files):
+        workflow_result.add_input(f"input_file_{i+1}", str(file))
+    
+    # Show selected files - scan the files in parallel with progress tracking
+    file_stats = []
+    console.print(f"\n[bold]Selected {len(csv_files)} CSV files for merging:[/bold]")
+    
+    # Set up progress tracking for file scanning
+    progress_manager = ProgressManager(
+        total_steps=4,  # 1) Scan files, 2) Merge, 3) Process, 4) Save
+        description="CSV Merging"
+    ).initialize()
+    workflow_result.set_progress_manager(progress_manager)
+    
+    # Start first step - scanning files
+    progress_manager.start_step("scanning", "Scanning selected CSV files...")
+    
+    for i, file in enumerate(csv_files):
+        progress_manager.update_step(i, len(csv_files), f"Scanning file {i+1}/{len(csv_files)}: {os.path.basename(file)}")
+        
         # Get file size and row count if possible
         try:
             size_kb = os.path.getsize(file) / 1024
@@ -1255,9 +1487,32 @@ def csv_merger():
                 # Count lines, subtract 1 for header
                 line_count = sum(1 for _ in f) - 1
                 
+            file_info = {
+                "file_path": str(file),
+                "file_name": os.path.basename(file),
+                "row_count": line_count,
+                "column_count": num_columns,
+                "size_kb": size_kb,
+                "readable": True
+            }
+            
             console.print(f"  {i+1}. {os.path.basename(file)} ({line_count} rows, {num_columns} columns, {size_kb:.1f} KB)")
-        except Exception:
-            console.print(f"  {i+1}. {os.path.basename(file)} (unable to read file details)")
+        except Exception as e:
+            console.print(f"  {i+1}. {os.path.basename(file)} (unable to read file details: {e})")
+            file_info = {
+                "file_path": str(file),
+                "file_name": os.path.basename(file),
+                "readable": False,
+                "error": str(e)
+            }
+        
+        file_stats.append(file_info)
+    
+    # Complete file scanning step
+    progress_manager.complete_step("File scanning completed")
+    
+    # Add file statistics to workflow result
+    workflow_result.add_data("file_statistics", file_stats)
     
     # Merge options
     console.print("\n[bold]Merge Options:[/bold]")
@@ -1288,6 +1543,13 @@ def csv_merger():
     if not output_filename.endswith('.csv'):
         output_filename += '.csv'
     
+    # Add merge options to workflow result
+    workflow_result.add_data("merge_options", {
+        "skip_headers": skip_headers,
+        "remove_duplicates": remove_duplicates,
+        "output_filename": output_filename
+    })
+    
     # Confirm merge
     console.print(f"\n[bold]Ready to merge {len(csv_files)} CSV files[/bold]")
     console.print(f"Output file: {output_filename}")
@@ -1303,106 +1565,163 @@ def csv_merger():
     
     if not answers["confirm_merge"]:
         console.print("[yellow]CSV merge cancelled by user.[/yellow]")
+        workflow_result.set_error("Operation cancelled by user")
         return
     
-    # Process the merge with progress bar
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        BarColumn(),
-        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-        TimeElapsedColumn()
-    ) as progress:
-        # Create main task
-        main_task = progress.add_task("[cyan]Merging CSV files...[/cyan]", total=len(csv_files))
+    # Start merging step
+    progress_manager.start_step("merging", "Merging CSV files...")
+    
+    try:
+        # Process first file and get columns
+        progress_manager.update_step(0, len(csv_files), f"Reading first file: {os.path.basename(csv_files[0])}")
         
         try:
-            # Process first file and get columns
-            progress.update(main_task, description=f"[cyan]Reading first file: {os.path.basename(csv_files[0])}[/cyan]")
+            # Try to detect encoding and separator automatically
+            merged_data = pd.read_csv(csv_files[0], sep=None, engine='python')
+        except Exception:
+            # Fall back to default CSV format
+            merged_data = pd.read_csv(csv_files[0])
+            
+        headers = merged_data.columns
+        rows_processed = len(merged_data)
+        columns_count = len(headers)
+        
+        merge_results = [{
+            "file_name": os.path.basename(csv_files[0]),
+            "rows_added": rows_processed,
+            "status": "success"
+        }]
+        
+        # Iterate through remaining files
+        for i, file in enumerate(csv_files[1:], 1):
+            file_name = os.path.basename(file)
+            progress_manager.update_step(i, len(csv_files), f"Merging file {i+1}/{len(csv_files)}: {file_name}")
             
             try:
-                # Try to detect encoding and separator automatically
-                merged_data = pd.read_csv(csv_files[0], sep=None, engine='python')
-            except Exception:
-                # Fall back to default CSV format
-                merged_data = pd.read_csv(csv_files[0])
-                
-            headers = merged_data.columns
-            rows_processed = len(merged_data)
-            progress.update(main_task, advance=1)
-            
-            # Iterate through remaining files
-            for i, file in enumerate(csv_files[1:], 1):
-                file_name = os.path.basename(file)
-                progress.update(main_task, description=f"[cyan]Merging file {i+1}/{len(csv_files)}: {file_name}[/cyan]")
-                
-                try:
-                    if skip_headers:
-                        # Skip first row (header) in subsequent files
-                        df = pd.read_csv(file, header=0)
-                    else:
-                        # Read with header but then align columns
-                        df = pd.read_csv(file, header=None)
-                        df.columns = headers
-                        
-                    # Concatenate to the merged data
-                    merged_data = pd.concat([merged_data, df], ignore_index=True)
-                    rows_processed += len(df)
+                if skip_headers:
+                    # Skip first row (header) in subsequent files
+                    df = pd.read_csv(file, header=0)
+                else:
+                    # Read with header but then align columns
+                    df = pd.read_csv(file, header=None)
+                    df.columns = headers
                     
-                except Exception as e:
-                    console.print(f"[yellow]Warning: Error processing {file_name}: {e}[/yellow]")
-                    console.print("[yellow]Skipping this file and continuing with the merge.[/yellow]")
+                # Concatenate to the merged data
+                pre_merge_count = len(merged_data)
+                merged_data = pd.concat([merged_data, df], ignore_index=True)
+                rows_added = len(df)
                 
-                progress.update(main_task, advance=1)
-            
-            # Remove duplicates if requested
-            if remove_duplicates:
-                progress.update(main_task, description="[cyan]Removing duplicate rows...[/cyan]")
-                original_rows = len(merged_data)
-                merged_data = merged_data.drop_duplicates()
-                duplicates_removed = original_rows - len(merged_data)
+                merge_results.append({
+                    "file_name": file_name,
+                    "rows_added": rows_added,
+                    "status": "success"
+                })
                 
-            # Save the merged data
-            progress.update(main_task, description="[cyan]Saving merged file...[/cyan]")
-            
-            # Ensure output directory exists
-            os.makedirs(merged_dir, exist_ok=True)
-            
-            # Save to merged file
-            merged_path = os.path.join(merged_dir, output_filename)
-            merged_data.to_csv(merged_path, index=False)
-            
-            # Complete progress
-            progress.update(main_task, completed=True)
-            
-        except Exception as e:
-            console.print(f"[red]Error merging CSV files: {e}[/red]")
-            return
-    
-    # Show results
-    console.print(f"\n[bold green]CSV merge completed successfully![/bold green]")
-    console.print(f"[green]✓[/green] Merged {len(csv_files)} CSV files")
-    console.print(f"[green]✓[/green] Total rows in output: {len(merged_data)}")
-    
-    if remove_duplicates and 'duplicates_removed' in locals():
-        console.print(f"[green]✓[/green] Removed {duplicates_removed} duplicate rows")
+            except Exception as e:
+                console.print(f"[yellow]Warning: Error processing {file_name}: {e}[/yellow]")
+                console.print("[yellow]Skipping this file and continuing with the merge.[/yellow]")
+                
+                merge_results.append({
+                    "file_name": file_name,
+                    "status": "error",
+                    "error": str(e)
+                })
         
-    console.print(f"[green]✓[/green] Output file saved to: {merged_path}")
-    
-    # Calculate file size
-    file_size_kb = os.path.getsize(merged_path) / 1024
-    file_size_mb = file_size_kb / 1024
-    
-    if file_size_mb >= 1:
-        console.print(f"[green]✓[/green] Output file size: {file_size_mb:.2f} MB")
-    else:
-        console.print(f"[green]✓[/green] Output file size: {file_size_kb:.2f} KB")
-    
-    # Suggest next steps
-    console.print("\n[bold]Next steps:[/bold]")
-    console.print("1. Use the merged CSV for your data analysis")
-    console.print("2. Check the output file to ensure all data was merged correctly")
-    console.print("3. Run the PnL Checker tool to filter the merged data based on performance metrics")
+        # Complete merging step
+        progress_manager.complete_step("CSV merging completed")
+        
+        # Start processing step - handle duplicates if requested
+        progress_manager.start_step("processing", "Processing merged data...")
+        duplicates_removed = 0
+        
+        if remove_duplicates:
+            progress_manager.update_step(0, 1, "Removing duplicate rows...")
+            original_rows = len(merged_data)
+            merged_data = merged_data.drop_duplicates()
+            duplicates_removed = original_rows - len(merged_data)
+            
+            progress_manager.update_step(1, 1, f"Removed {duplicates_removed} duplicate rows")
+        
+        # Complete processing step
+        progress_manager.complete_step("Data processing completed")
+        
+        # Start saving step
+        progress_manager.start_step("saving", "Saving merged data...")
+        
+        # Ensure output directory exists
+        os.makedirs(merged_dir, exist_ok=True)
+        
+        # Save to merged file
+        merged_path = os.path.join(merged_dir, output_filename)
+        merged_data.to_csv(merged_path, index=False)
+        
+        # Add output file to workflow result
+        workflow_result.add_output("merged_csv", merged_path)
+        
+        # Add merged dataframe for export
+        workflow_result.add_dataframe("merged_data", merged_data)
+        
+        # Add merge results dataframe
+        results_df = pd.DataFrame(merge_results)
+        workflow_result.add_dataframe("merge_results", results_df)
+        
+        # Calculate file size
+        file_size_kb = os.path.getsize(merged_path) / 1024
+        file_size_mb = file_size_kb / 1024
+        
+        # Add statistics to workflow result
+        workflow_result.add_stat("Input Files", len(csv_files))
+        workflow_result.add_stat("Total Rows", len(merged_data))
+        workflow_result.add_stat("Total Columns", columns_count)
+        workflow_result.add_stat("Duplicates Removed", duplicates_removed)
+        
+        if file_size_mb >= 1:
+            workflow_result.add_stat("Output Size", f"{file_size_mb:.2f} MB")
+        else:
+            workflow_result.add_stat("Output Size", f"{file_size_kb:.2f} KB")
+        
+        # Complete saving step
+        progress_manager.complete_step("Save completed")
+        
+        # Finalize workflow result
+        workflow_result.finalize()
+        
+        # Export results if format specified
+        if export_format:
+            export_path = workflow_result.export_results(export_format, merged_dir)
+            if export_path:
+                workflow_result.add_output("exported_results", export_path)
+                console.print(f"[green]✓[/green] Results exported to: {export_path}")
+        
+        # Show results
+        console.print(f"\n[bold green]CSV merge completed successfully![/bold green]")
+        console.print(f"[green]✓[/green] Merged {len(csv_files)} CSV files")
+        console.print(f"[green]✓[/green] Total rows in output: {len(merged_data)}")
+        
+        if remove_duplicates:
+            console.print(f"[green]✓[/green] Removed {duplicates_removed} duplicate rows")
+            
+        console.print(f"[green]✓[/green] Output file saved to: {merged_path}")
+        
+        if file_size_mb >= 1:
+            console.print(f"[green]✓[/green] Output file size: {file_size_mb:.2f} MB")
+        else:
+            console.print(f"[green]✓[/green] Output file size: {file_size_kb:.2f} KB")
+        
+        # Print workflow summary
+        workflow_result.print_summary()
+        
+        # Suggest next steps
+        console.print("\n[bold]Next steps:[/bold]")
+        console.print("1. Use the merged CSV for your data analysis")
+        console.print("2. Check the output file to ensure all data was merged correctly")
+        console.print("3. Run the PnL Checker tool to filter the merged data based on performance metrics")
+        
+    except Exception as e:
+        console.print(f"[red]Error merging CSV files: {e}[/red]")
+        workflow_result.set_error(f"Error merging CSV files: {e}")
+        workflow_result.finalize()
+        return
 
 
 def pnl_checker():
