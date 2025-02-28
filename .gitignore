@@ -128,3 +128,4 @@ cache/
 # Mac
 .DS_Store
 venv/bin/f2py
+data
