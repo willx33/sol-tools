@@ -148,32 +148,78 @@ def test_module_simulations():
     
     return True
 
+def run_dragon_tests():
+    """Run Dragon module tests."""
+    try:
+        from .test_dragon import run_dragon_tests
+        return run_dragon_tests()
+    except ImportError as e:
+        print_colored(f"✗ Could not import Dragon test module: {e}", "red")
+        return False
+    except Exception as e:
+        print_colored(f"✗ Error running Dragon tests: {e}", "red")
+        return False
+
 def run_all_tests():
     """Run all test functions."""
-    print_colored("\n🧪 Running sol-tools file system tests...", "cyan")
-    print_colored("Testing automatic directory creation functionality\n", "cyan")
+    print_colored("\n🧪 Running sol-tools comprehensive tests...", "cyan")
     
     try:
-        tests_passed = 0
-        total_tests = 3
+        all_tests = [
+            {
+                "name": "File System Tests",
+                "subtests": [
+                    ("ensure_file_dir", test_ensure_file_dir),
+                    ("file_write_operations", test_file_write_operations),
+                    ("module_simulations", test_module_simulations)
+                ]
+            },
+            {
+                "name": "Dragon Module Tests",
+                "tests": run_dragon_tests
+            }
+        ]
         
-        if test_ensure_file_dir():
-            tests_passed += 1
+        # Track overall results
+        total_passed = 0
+        total_tests = 0
         
-        if test_file_write_operations():
-            tests_passed += 1
+        # Run test groups
+        for test_group in all_tests:
+            if "subtests" in test_group:
+                print_colored(f"\n📌 Running {test_group['name']}...", "cyan")
+                group_passed = 0
+                group_total = len(test_group["subtests"])
+                
+                for test_name, test_func in test_group["subtests"]:
+                    print_colored(f"  ➤ Testing {test_name}...", "cyan")
+                    if test_func():
+                        group_passed += 1
+                        total_passed += 1
+                
+                print_colored(f"  Results: {group_passed}/{group_total} {test_group['name']} passed", "bold")
+                total_tests += group_total
+            
+            elif "tests" in test_group:
+                print_colored(f"\n📌 Running {test_group['name']}...", "cyan")
+                
+                # This test function already counts its own tests and returns success/failure
+                test_result = test_group["tests"]()
+                
+                # Count as a single test for the overall total (actual count is handled in the test runner)
+                total_tests += 1
+                if test_result:
+                    total_passed += 1
         
-        if test_module_simulations():
-            tests_passed += 1
+        # Print overall results
+        print_colored(f"\n📊 Overall Test Results: {total_passed}/{total_tests} tests passed", "bold")
         
-        print_colored(f"\nTest Results: {tests_passed}/{total_tests} tests passed", "bold")
-        
-        if tests_passed == total_tests:
-            print_colored("✓ All tests passed! The ensure_file_dir function is working correctly.", "green")
+        if total_passed == total_tests:
+            print_colored("✅ All tests passed! Sol-tools components are working correctly.", "green")
         else:
-            print_colored("✗ Some tests failed. Please check the output above for details.", "red")
+            print_colored(f"⚠️ {total_tests - total_passed} tests failed. Check the output above for details.", "yellow")
         
-        return tests_passed == total_tests
+        return total_passed == total_tests
     
     finally:
         # Always clean up the test directory

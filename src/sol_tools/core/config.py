@@ -76,7 +76,7 @@ def load_config() -> Dict[str, Any]:
     # List of all modules
     modules = ["dragon", "dune", "sharp", "solana", "gmgn", "ethereum"]
     
-    # Create data module directories with new organized structure
+    # Create data module directories with clean organized structure
     for module in modules:
         (INPUT_DATA_DIR / module).mkdir(parents=True, exist_ok=True)
         (OUTPUT_DATA_DIR / module).mkdir(parents=True, exist_ok=True)
@@ -132,12 +132,6 @@ def load_config() -> Dict[str, Any]:
             # Ensure parent directory exists before creating file
             ensure_file_dir(file_path)
             file_path.touch()
-    
-    # Remove any modules stored directly in data (legacy organization)
-    legacy_dirs = []
-    
-    for module in modules:
-        legacy_dirs.append(DATA_DIR / module)
     
     # Load environment variables
     load_dotenv(ENV_FILE)

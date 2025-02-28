@@ -582,6 +582,14 @@ def ensure_data_dir(module: str, subdir: Optional[str] = None, data_type: str = 
     else:  # Default to output for any other value
         base_dir = OUTPUT_DATA_DIR
     
+    # Handle a case where module might begin with "input-data/" or "output-data/" prefix
+    if module.startswith("input-data/"):
+        module = module.replace("input-data/", "")
+        base_dir = INPUT_DATA_DIR
+    elif module.startswith("output-data/"):
+        module = module.replace("output-data/", "")
+        base_dir = OUTPUT_DATA_DIR
+    
     if subdir:
         directory = base_dir / module / subdir
     else:

@@ -90,7 +90,7 @@ def solana_wallet_checker():
     print("🐲 Dragon Solana Wallet Checker")
     
     # Setup wallet directory
-    wallet_dir = ensure_data_dir("input-data/dragon", "Solana/BulkWallet")
+    wallet_dir = ensure_data_dir("dragon", "solana/wallet_lists", data_type="input")
     
     # Choose wallets file
     wallets_file = wallet_dir / "wallets.txt"
