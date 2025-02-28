@@ -288,41 +288,48 @@ class WorkflowResult:
                 # Create a new Excel writer
                 try:
                     with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
-                        # Summary sheet
-                        summary_rows = []
+                        # Get the primary data frame if available
+                        main_df = None
+                        if self.data_frames:
+                            # Use the first dataframe as the primary one
+                            main_key = list(self.data_frames.keys())[0]
+                            main_df = self.data_frames[main_key].copy()
                         
-                        # Add workflow info
-                        for key, value in summary["workflow"].items():
-                            if value is not None:  # Skip None values
-                                summary_rows.append({"Category": "Workflow", "Key": key, "Value": str(value)})
+                        # If no dataframes, create an empty one
+                        if main_df is None:
+                            main_df = pd.DataFrame()
                         
-                        # Add statistics
-                        for key, value in summary["statistics"].items():
-                            summary_rows.append({"Category": "Statistics", "Key": key, "Value": str(value)})
+                        # Add metadata as columns at the end
+                        if not main_df.empty:
+                            # Add workflow info
+                            for key, value in summary["workflow"].items():
+                                if value is not None:  # Skip None values
+                                    main_df[f"meta_{key}"] = str(value)
+                            
+                            # Add statistics 
+                            for key, value in summary["statistics"].items():
+                                main_df[f"stat_{key}"] = str(value)
+                                
+                            # Add file info (in a compact format)
+                            input_files_str = ", ".join([f"{k}: {v}" for k, v in summary["input_files"].items()])
+                            output_files_str = ", ".join([f"{k}: {v}" for k, v in summary["output_files"].items()])
+                            
+                            if input_files_str:
+                                main_df["meta_input_files"] = input_files_str
+                            if output_files_str:
+                                main_df["meta_output_files"] = output_files_str
+                        else:
+                            # If dataframe is empty, create rows with metadata
+                            metadata_dict = {
+                                **{f"workflow_{k}": str(v) for k, v in summary["workflow"].items() if v is not None},
+                                **{f"stat_{k}": str(v) for k, v in summary["statistics"].items()},
+                                "input_files": ", ".join([f"{k}: {v}" for k, v in summary["input_files"].items()]),
+                                "output_files": ", ".join([f"{k}: {v}" for k, v in summary["output_files"].items()])
+                            }
+                            main_df = pd.DataFrame([metadata_dict])
                         
-                        # Convert to DataFrame and save to sheet
-                        summary_df = pd.DataFrame(summary_rows)
-                        summary_df.to_excel(writer, sheet_name='Summary', index=False)
-                        
-                        # Files sheet
-                        files_rows = []
-                        
-                        # Add input files
-                        for key, value in summary["input_files"].items():
-                            files_rows.append({"Type": "Input", "Name": key, "Path": value})
-                        
-                        # Add output files
-                        for key, value in summary["output_files"].items():
-                            files_rows.append({"Type": "Output", "Name": key, "Path": value})
-                        
-                        # Convert to DataFrame and save to sheet
-                        files_df = pd.DataFrame(files_rows)
-                        files_df.to_excel(writer, sheet_name='Files', index=False)
-                        
-                        # Add actual data sheets if available
-                        for key, df in self.data_frames.items():
-                            sheet_name = key[:31]  # Excel sheet names limited to 31 chars
-                            df.to_excel(writer, sheet_name=sheet_name, index=False)
+                        # Write to a single sheet
+                        main_df.to_excel(writer, sheet_name='Results', index=False)
                 except ImportError:
                     console.print("[yellow]Warning: Excel export requires openpyxl. Falling back to CSV export.[/yellow]")
                     # Fall back to CSV if openpyxl is not available

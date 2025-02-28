@@ -76,87 +76,87 @@ def create_main_menu(handlers: Dict[str, Callable]) -> List[MenuOption]:
     # Solana Tools (including Dragon Solana tools)
     solana_menu = [
         # Core Solana tools
-        MenuOption("Token Monitor", handlers.get('solana_token_monitor'), 
+        MenuOption("Token Watcher", handlers.get('solana_token_monitor'), 
                   description="Monitors token transactions. Saves to data/solana/monitor/."),
-        MenuOption("Wallet Monitor", handlers.get('solana_wallet_monitor'),
+        MenuOption("Wallet Watcher", handlers.get('solana_wallet_monitor'),
                   description="Tracks wallet activity. Uses data/solana/wallets/monitor-wallets.txt."),
-        MenuOption("Telegram Scraper", handlers.get('solana_telegram_scraper'),
+        MenuOption("TG Data Extractor", handlers.get('solana_telegram_scraper'),
                   description="Extracts data from Telegram. Saves to data/solana/telegram/."),
         
         # Dragon Solana tools
-        MenuOption("Bundle Checker - Dragon", handlers.get('dragon_solana_bundle'),
+        MenuOption("Bundle Tracker - Dragon", handlers.get('dragon_solana_bundle'),
                   description="Finds bundled buys. Input: contract address."),
-        MenuOption("Bulk Wallet Checker - Dragon", handlers.get('dragon_solana_wallet'),
+        MenuOption("Wallet Profiler - Dragon", handlers.get('dragon_solana_wallet'),
                   description="PnL analysis from wallet list. Uses data/dragon/Solana/BulkWallet/."),
-        MenuOption("Top Traders - Dragon", handlers.get('dragon_solana_traders'),
+        MenuOption("Top Trader Finder - Dragon", handlers.get('dragon_solana_traders'),
                   description="Finds best traders by token. Output: data/dragon/Solana/TopTraders/."),
-        MenuOption("Scan Transactions - Dragon", handlers.get('dragon_solana_scan'),
+        MenuOption("TX Scanner - Dragon", handlers.get('dragon_solana_scan'),
                   description="Gets all token transactions. Output: data/dragon/Solana/ScanTx/."),
-        MenuOption("Copy Wallet Finder - Dragon", handlers.get('dragon_solana_copy'),
+        MenuOption("Copycat Finder - Dragon", handlers.get('dragon_solana_copy'),
                   description="Finds copycat wallets. Input: wallet address to analyze."),
-        MenuOption("Top Holders - Dragon", handlers.get('dragon_solana_holders'),
+        MenuOption("Whale Tracker - Dragon", handlers.get('dragon_solana_holders'),
                   description="Lists major token holders. Output: data/dragon/Solana/TopHolders/."),
-        MenuOption("Early Buyers - Dragon", handlers.get('dragon_solana_buyers'),
+        MenuOption("Early Investor Finder - Dragon", handlers.get('dragon_solana_buyers'),
                   description="Finds first buyers for token. Input: contract address."),
         
         MenuOption("Back", None)
     ]
     
     # Sharp wallet and CSV tools
-    wallet_checker_submenu = [
+    wallet_analyzer_submenu = [
         MenuOption("Standard (No Export)", handlers.get('sharp_wallet_checker'),
-                  description="Basic wallet check with no export file."),
+                  description="Basic wallet analysis with no export file."),
         MenuOption("Export as JSON", handlers.get('sharp_wallet_checker_json'),
-                  description="Wallet check with JSON export of results."),
+                  description="Wallet analysis with JSON export of results."),
         MenuOption("Export as CSV", handlers.get('sharp_wallet_checker_csv'),
-                  description="Wallet check with CSV export of results."),
+                  description="Wallet analysis with CSV export of results."),
         MenuOption("Export as Excel", handlers.get('sharp_wallet_checker_excel'),
-                  description="Wallet check with Excel workbook export of results."),
+                  description="Wallet analysis with Excel workbook export of results."),
         MenuOption("Back", None)
     ]
     
-    wallet_splitter_submenu = [
+    address_splitter_submenu = [
         MenuOption("Standard (No Export)", handlers.get('sharp_wallet_splitter'),
-                  description="Standard wallet splitting with no export."),
+                  description="Standard address splitting with no export."),
         MenuOption("Export as JSON", handlers.get('sharp_wallet_splitter_json'),
-                  description="Wallet splitting with JSON export of results."),
+                  description="Address splitting with JSON export of results."),
         MenuOption("Export as CSV", handlers.get('sharp_wallet_splitter_csv'),
-                  description="Wallet splitting with CSV export of results."),
+                  description="Address splitting with CSV export of results."),
         MenuOption("Export as Excel", handlers.get('sharp_wallet_splitter_excel'),
-                  description="Wallet splitting with Excel workbook export."),
+                  description="Address splitting with Excel workbook export."),
         MenuOption("Back", None)
     ]
     
-    csv_merger_submenu = [
+    csv_combiner_submenu = [
         MenuOption("Standard (No Export)", handlers.get('sharp_csv_merger'),
-                  description="Standard CSV merging with no export."),
+                  description="Standard CSV combining with no export."),
         MenuOption("Export as JSON", handlers.get('sharp_csv_merger_json'),
-                  description="CSV merging with JSON export of results."),
+                  description="CSV combining with JSON export of results."),
         MenuOption("Export as CSV", handlers.get('sharp_csv_merger_csv'),
-                  description="CSV merging with CSV export of results."),
+                  description="CSV combining with CSV export of results."),
         MenuOption("Export as Excel", handlers.get('sharp_csv_merger_excel'),
-                  description="CSV merging with Excel workbook export."),
+                  description="CSV combining with Excel workbook export."),
         MenuOption("Back", None)
     ]
     
     sharp_menu = [
-        MenuOption("Wallet Checker", children=wallet_checker_submenu,
-                  description="Checks wallet data via BullX API with enhanced progress tracking."),
-        MenuOption("Wallet Splitter", children=wallet_splitter_submenu,
-                  description="Splits wallet lists to 25k chunks with progress tracking."),
-        MenuOption("CSV Merger", children=csv_merger_submenu,
-                  description="Combines CSV files with progress tracking and metadata."),
-        MenuOption("PnL CSV Checker", handlers.get('sharp_pnl_checker'),
-                  description="Filters CSV by profit metrics. Uses data/sharp/pnl/."),
+        MenuOption("Wallet Analyzer", children=wallet_analyzer_submenu,
+                  description="Analyzes wallet data via BullX API with enhanced progress tracking."),
+        MenuOption("Address Splitter", children=address_splitter_submenu,
+                  description="Splits address lists to 25k chunks with validation and tracking."),
+        MenuOption("CSV Combiner", children=csv_combiner_submenu,
+                  description="Combines CSV files with advanced options and detailed reporting."),
+        MenuOption("Profit Filter", handlers.get('sharp_pnl_checker'),
+                  description="Filters CSV data by profit metrics. Uses data/sharp/pnl/."),
         MenuOption("Back", None)
     ]
     
     # API Tools (with Dune API and GMGN subsections)
     # Dune Analytics tools
     dune_menu = [
-        MenuOption("Run Query", handlers.get('dune_query'),
+        MenuOption("Query Runner", handlers.get('dune_query'),
                   description="Runs Dune queries by ID. Output: data/dune/csv/."),
-        MenuOption("Parse Results", handlers.get('dune_parse'),
+        MenuOption("Address Extractor", handlers.get('dune_parse'),
                   description="Extracts addresses from CSV. Input: data/dune/csv/, output: parsed/."),
         MenuOption("Back", None)
     ]
@@ -184,13 +184,13 @@ def create_main_menu(handlers: Dict[str, Callable]) -> List[MenuOption]:
     
     # Ethereum Tools
     eth_menu = [
-        MenuOption("Bulk Wallet Checker - Dragon", handlers.get('dragon_eth_wallet'),
+        MenuOption("Wallet Profiler - Dragon", handlers.get('dragon_eth_wallet'),
                   description="Analyzes ETH wallet performance. Uses data/dragon/Ethereum/."),
-        MenuOption("Top Traders - Dragon", handlers.get('dragon_eth_traders'),
+        MenuOption("Top Trader Finder - Dragon", handlers.get('dragon_eth_traders'),
                   description="Finds ETH top traders. Output: data/dragon/Ethereum/TopTraders/."),
-        MenuOption("Scan Transactions - Dragon", handlers.get('dragon_eth_scan'),
+        MenuOption("TX Scanner - Dragon", handlers.get('dragon_eth_scan'),
                   description="Gets ETH token transactions. Output: data/dragon/Ethereum/ScanTx/."),
-        MenuOption("Timestamp Finder - Dragon", handlers.get('dragon_eth_timestamp'),
+        MenuOption("Time-Based TX Finder - Dragon", handlers.get('dragon_eth_timestamp'),
                   description="Finds ETH txs by time range. Output: data/dragon/Ethereum/Timestamp/."),
         MenuOption("Back", None)
     ]
