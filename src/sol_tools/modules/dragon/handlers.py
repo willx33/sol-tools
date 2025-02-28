@@ -21,8 +21,8 @@ def solana_bundle_checker():
     clear_terminal()
     print("🐲 Dragon Solana Bundle Checker")
     
-    # Import NoTruncationText for better display
-    from ...utils.common import NoTruncationText
+    # Import NoTruncationText and prompt_user for better display and paste handling
+    from ...utils.common import NoTruncationText, prompt_user
     
     # Prompt for contract address(es)
     questions = [
@@ -32,7 +32,7 @@ def solana_bundle_checker():
             validate=lambda _, x: all(len(addr.strip()) in [43, 44] for addr in x.split()) if x else False
         )
     ]
-    answers = inquirer.prompt(questions)
+    answers = prompt_user(questions)
     contract_address = answers["contract_address"]
     
     # Use the adapter

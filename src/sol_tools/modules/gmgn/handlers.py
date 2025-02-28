@@ -26,6 +26,9 @@ async def fetch_mcap_data_handler():
     input_dir = ensure_data_dir("gmgn", data_type="input")
     output_dir = ensure_data_dir("gmgn", data_type="output")
     
+    # Import our custom prompt function for better paste handling
+    from ...utils.common import prompt_user
+    
     # First, allow the user to choose whether to use saved input or enter new data
     input_selection = [
         List('input_method',
@@ -38,7 +41,7 @@ async def fetch_mcap_data_handler():
              default='new')
     ]
     
-    input_method = prompt(input_selection)['input_method']
+    input_method = prompt_user(input_selection)['input_method']
     
     if input_method == 'saved':
         # Use our new list_saved_data function to get a nice display of saved configurations
@@ -74,7 +77,7 @@ async def fetch_mcap_data_handler():
             ]
             
             # Get the selected file path
-            selected_file = prompt(input_select)['saved_input']
+            selected_file = prompt_user(input_select)['saved_input']
             
             # Load the selected file
             config_data = load_unified_data(selected_file)
@@ -118,7 +121,7 @@ async def fetch_mcap_data_handler():
                 message=f"Enter token address (space-separated for multiple, leave empty for default BONK token)",
                 default="")
         ]
-        token_answer = prompt(token_questions)
+        token_answer = prompt_user(token_questions)
         
         # Parse token addresses
         from sol_tools.utils.common import parse_input_addresses
@@ -144,14 +147,14 @@ async def fetch_mcap_data_handler():
                  ],
                  default='1')
         ]
-        time_answer = prompt(time_questions)
+        time_answer = prompt_user(time_questions)
         
         days = time_answer['time_period']
         if days == 'custom':
             custom_days = [
                 Text('custom_days', message="Enter number of days:", default="1")
             ]
-            custom_answer = prompt(custom_days)
+            custom_answer = prompt_user(custom_days)
             try:
                 days = int(custom_answer['custom_days'])
             except ValueError:
@@ -168,7 +171,7 @@ async def fetch_mcap_data_handler():
                  default='yes')
         ]
         
-        if prompt(save_input)['save'] == 'yes':
+        if prompt_user(save_input)['save'] == 'yes':
             # Import the unified data saving function
             from ...utils.common import save_unified_data
             
@@ -251,7 +254,7 @@ async def fetch_mcap_data_handler():
                  ],
                  default='no')
         ]
-        view_answer = prompt(view_questions)
+        view_answer = prompt_user(view_questions)
         
         if view_answer['view_data'] in ['sample', 'all']:
             for token, candles in results.items():
@@ -268,6 +271,6 @@ async def fetch_mcap_data_handler():
     else:
         print("No data was successfully fetched for any token.")
     
-    input("\nPress Enter to return to menu...")
+    # Note: No input() prompt needed here - the menu system will handle it
 
 # We don't need menu functions since the menu is already defined in core/menu.py

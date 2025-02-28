@@ -29,8 +29,8 @@ def token_monitor():
         print("Please set them in the .env file before using this feature.")
         return
     
-    # Import custom NoTruncationText for better display
-    from ...utils.common import NoTruncationText
+    # Import custom NoTruncationText and prompt function for better paste handling
+    from ...utils.common import NoTruncationText, prompt_user
     
     # Input for token address
     questions = [
@@ -45,7 +45,7 @@ def token_monitor():
             default="1000"
         ),
     ]
-    answers = inquirer.prompt(questions)
+    answers = prompt_user(questions)
     
     # Parse token addresses
     from ...utils.common import parse_input_addresses

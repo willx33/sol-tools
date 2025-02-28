@@ -22,93 +22,100 @@ console = Console()
 # Import inquirer classes
 try:
     from inquirer import Text as InquirerText
-    
+    from inquirer.render.console import ConsoleRender
+    import inquirer
+    import readchar
     import time
+    import sys
+    from blessed import Terminal
     
-    # Create a custom Text class that doesn't truncate long messages and fixes paste issues
+    # Create a simple but effective direct input implementation
     class NoTruncationText(InquirerText):
         """
-        Custom text input that doesn't truncate prompts.
-        Use this instead of inquirer.Text to prevent ellipsis (...) truncation.
-        Also fixes paste issues by preventing render flickering during paste.
+        A simplified Text input that properly handles paste operations.
+        
+        This implementation bypasses the inquirer rendering engine completely
+        and directly manages terminal input to prevent duplicate prompts during paste.
         """
         def __init__(self, *args, **kwargs):
             # Initialize parent class
             super().__init__(*args, **kwargs)
             
-            # Paste detection and throttling
-            self._last_input = None
-            self._last_render_time = 0
-            self._input_change_count = 0
-            self._in_paste_mode = False
-            self._paste_start_time = 0
-            self._render_delay = 0.1  # seconds between renders during paste
-        
+            # Set up validation
+            self._validate_func = kwargs.get('validate')
+
+        def execute(self):
+            """
+            Simple direct input method that completely avoids the paste issue
+            by handling input directly without using the inquirer rendering engine.
+            """
+            # Get the prompt message (no truncation)
+            message = self.message
+            
+            # Get the default value
+            default = self.default or ""
+            default_display = f" [{default}]" if default else ""
+            
+            # Display the prompt once and directly capture input
+            user_input = input(f"{message}{default_display}: ")
+            
+            # Apply default if user didn't enter anything
+            if not user_input and default:
+                user_input = default
+                
+            # Run validation if provided
+            if self._validate_func and callable(self._validate_func):
+                # Only attempt validation if we have a value
+                if user_input:
+                    try:
+                        is_valid = self._validate_func(None, user_input)
+                        if not is_valid:
+                            print(f"Invalid input. Please try again.")
+                            return self.execute()  # Recursive call to retry
+                    except Exception as e:
+                        print(f"Validation error: {e}")
+                        return self.execute()  # Recursive call to retry
+                
+            # Store the value and return
+            self.current_value = user_input
+            return user_input
+            
         def get_message(self):
-            # Get the original message without truncation
-            message = super().get_message()
-            return message
+            """Get the prompt message without truncation"""
+            return self.message
+
+    # Create a function to prompt the user, bypassing inquirer's rendering
+    def prompt_user(questions):
+        """
+        Alternative to inquirer.prompt that prevents the paste issues.
+        Use this instead of inquirer.prompt when working with text inputs.
+        """
+        result = {}
         
-        def _detect_paste_operation(self, current_input):
-            """Detect if we're in the middle of a paste operation"""
-            current_time = time.time()
-            
-            # If input changed, track it
-            if current_input != self._last_input:
-                self._last_input = current_input
-                
-                # Count rapid changes as potential paste operation
-                if current_time - self._last_render_time < 0.05:  # Changes faster than 50ms
-                    self._input_change_count += 1
-                else:
-                    self._input_change_count = 0
-                
-                # If we see multiple rapid changes, enter paste mode
-                if self._input_change_count >= 2 and not self._in_paste_mode:
-                    self._in_paste_mode = True
-                    self._paste_start_time = current_time
-                    
-            # Exit paste mode after a delay with no changes
-            elif self._in_paste_mode and (current_time - self._last_render_time > 0.3):
-                self._in_paste_mode = False
-            
-            return self._in_paste_mode
-            
-        def render(self, render_input=None):
-            """
-            Override render to completely prevent render flicker during paste operations
-            """
-            current_time = time.time()
-            
-            # Update timing tracking for paste detection
-            elapsed = current_time - self._last_render_time
-            
-            # Detect paste operations
-            in_paste = self._detect_paste_operation(render_input)
-            
-            # During paste, throttle rendering to prevent screen flicker
-            if in_paste:
-                # During paste, only render occasionally
-                if elapsed < self._render_delay:
-                    # Skip most renders during paste
-                    return ""
-            
-            # Update timing for next call
-            self._last_render_time = current_time
-            
-            # For non-paste, delegate to normal rendering
-            return super().render(render_input)
+        for question in questions:
+            if isinstance(question, NoTruncationText):
+                # Handle our custom text input directly
+                result[question.name] = question.execute()
+            else:
+                # Pass other question types to inquirer
+                temp_result = inquirer.prompt([question])
+                if temp_result:
+                    result.update(temp_result)
         
-        def render_final_message(self, value, **kwargs):
-            """Show the final message after input is complete"""
-            message = self.get_message()
-            return message + ': ' + value
+        return result
         
 except ImportError:
     # Fallback if inquirer isn't available
     class NoTruncationText:
         """Fallback if inquirer isn't available."""
         pass
+        
+    def prompt_user(questions):
+        """Fallback prompt function if inquirer isn't available."""
+        result = {}
+        for question in questions:
+            result[question.name] = input(f"{question.message}: ")
+        return result
 
 
 def parse_input_addresses(input_value: str) -> List[str]:
