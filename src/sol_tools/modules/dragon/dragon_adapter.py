@@ -2,73 +2,505 @@
 
 import os
 import sys
+import logging
+import json
+import time
+import random
+import asyncio
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Any, Optional, Callable, Union
+from concurrent.futures import ThreadPoolExecutor
 
-# Create a path reference to the original Dragon code
-# This assumes the Dragon modules are in a specific location
-# We'll need to adapt this to the actual location in the final structure
+# Import necessary libraries
+import tls_client
+import httpx
+from fake_useragent import UserAgent
+
+# Set up logging
+logger = logging.getLogger(__name__)
+
+# Set up thread pools for concurrent operations
+_gmgn_threadpool = ThreadPoolExecutor(max_workers=20)
+_wallet_threadpool = ThreadPoolExecutor(max_workers=40)
+
+# Create directories for logs and data
+LOGS_DIR = Path(__file__).parent.parent.parent.parent.parent / "logs" / "dragon"
+LOGS_DIR.mkdir(parents=True, exist_ok=True)
+
+# Fallback paths for original Dragon modules
 DRAGON_PATH = Path(__file__).parents[4] / "Dragon"
 if str(DRAGON_PATH) not in sys.path:
     sys.path.append(str(DRAGON_PATH))
 
-# Import Dragon modules, with fallback for missing modules
+# Try to import Dragon modules, but implement our own if they fail
 try:
     from Dragon import (
         utils, BundleFinder, ScanAllTx, BulkWalletChecker, TopTraders,
         TimestampTransactions, purgeFiles, CopyTradeWalletFinder, TopHolders,
         EarlyBuyers, checkProxyFile, EthBulkWalletChecker, EthTopTraders,
-        EthTimestampTransactions, EthScanAllTx, gmgnTools, GMGN
+        EthTimestampTransactions, EthScanAllTx, GMGN
     )
     DRAGON_IMPORTS_SUCCESS = True
 except ImportError as e:
-    print(f"Warning: Could not import Dragon modules: {e}")
+    logger.warning(f"Could not import Dragon modules: {e}")
     DRAGON_IMPORTS_SUCCESS = False
+
+
+def save_dragon_log(category: str, data_key: str, response_data: Dict[str, Any], error: Optional[str] = None):
+    """Save API response data to log files for debugging and analysis."""
+    try:
+        timestamp = int(time.time())
+        log_data = {
+            "timestamp": timestamp,
+            "key": data_key,
+            "response": response_data,
+            "error": error
+        }
+        
+        # Create category directory
+        category_dir = LOGS_DIR / category
+        category_dir.mkdir(exist_ok=True)
+        
+        # Save to log file
+        safe_key = data_key.replace("/", "_").replace("\\", "_")
+        log_file = category_dir / f"{category}_{safe_key}_{timestamp}.json"
+        
+        with open(log_file, 'w', encoding='utf-8') as f:
+            json.dump(log_data, f, indent=2, ensure_ascii=False)
+        logger.debug(f"Saved {category} log to {log_file}")
+        
+    except Exception as e:
+        logger.error(f"Error saving {category} log: {e}")
+
+
+class GMGN_Client:
+    """Improved GMGN client with proper browser fingerprinting avoidance."""
+    
+    BASE_URL = "https://gmgn.ai/defi/quotation"
+    
+    def __init__(self, use_proxies: bool = False):
+        """Initialize GMGN client with browser fingerprinting evasion."""
+        self.use_proxies = use_proxies
+        self.proxy_position = 0
+        self.max_retries = 5
+        self.timeout_sec = 10.0
+        self.randomize_session()
+    
+    def randomize_session(self):
+        """Create a new TLS session with randomized browser fingerprint."""
+        # Choose only modern browsers for better compatibility
+        identifier_options = [
+            br for br in tls_client.settings.ClientIdentifiers.__args__
+            if br.startswith(('chrome', 'safari', 'firefox', 'opera'))
+        ]
+        
+        # Select random browser
+        self.identifier = random.choice(identifier_options)
+        self.session = tls_client.Session(
+            random_tls_extension_order=True,
+            client_identifier=self.identifier
+        )
+        
+        # Parse browser and OS from identifier
+        parts = self.identifier.split('_')
+        if len(parts) >= 2:
+            browser_id, os_hint = parts[0], parts[1]
+        else:
+            browser_id, os_hint = parts[0], "windows"
+        
+        # Normalize browser ID for UserAgent
+        if browser_id == "opera":
+            browser_id = "chrome"
+            
+        # Determine OS for UserAgent
+        if os_hint.lower() == "ios":
+            real_os = "ios"
+        else:
+            real_os = "windows"
+        
+        # Generate convincing User Agent
+        self.user_agent = UserAgent(browsers=[browser_id], os=[real_os]).random
+        
+        # Set headers to mimic browser
+        self.headers = {
+            'Host': 'gmgn.ai',
+            'accept': 'application/json, text/plain, */*',
+            'accept-language': 'en-US,en;q=0.9',
+            'dnt': '1',
+            'priority': 'u=1, i',
+            'referer': 'https://gmgn.ai/?chain=sol',
+            'user-agent': self.user_agent,
+        }
+    
+    def load_proxies(self) -> List[Dict[str, str]]:
+        """Load proxies from the proxies.txt file."""
+        from ...core.config import INPUT_DATA_DIR
+        proxies_file = INPUT_DATA_DIR / "dragon" / "proxies" / "proxies.txt"
+        
+        if not proxies_file.exists():
+            return []
+        
+        try:
+            with open(proxies_file, 'r') as file:
+                proxy_lines = file.read().splitlines()
+            
+            formatted_proxies = []
+            for proxy in proxy_lines:
+                if not proxy or proxy.startswith('#'):
+                    continue
+                    
+                if ':' in proxy:  
+                    parts = proxy.split(':')
+                    if len(parts) == 4:  # ip:port:username:password
+                        ip, port, username, password = parts
+                        formatted_proxies.append({
+                            'http': f"http://{username}:{password}@{ip}:{port}",
+                            'https': f"http://{username}:{password}@{ip}:{port}"
+                        })
+                    elif len(parts) == 2:  # ip:port
+                        ip, port = parts
+                        formatted_proxies.append({
+                            'http': f"http://{ip}:{port}",
+                            'https': f"http://{ip}:{port}"
+                        })
+                else:
+                    formatted_proxies.append({
+                        'http': f"http://{proxy}",
+                        'https': f"http://{proxy}"
+                    })
+                    
+            return formatted_proxies
+        except Exception as e:
+            logger.error(f"Error loading proxies: {e}")
+            return []
+    
+    def get_next_proxy(self) -> Optional[Dict[str, str]]:
+        """Get the next proxy from the rotation."""
+        proxies = self.load_proxies()
+        if not proxies:
+            return None
+            
+        proxy = proxies[self.proxy_position % len(proxies)]
+        self.proxy_position += 1
+        return proxy
+    
+    def configure_proxy(self):
+        """Configure session with the next proxy if enabled."""
+        if not self.use_proxies:
+            self.session.proxies = None
+            return
+            
+        proxy = self.get_next_proxy()
+        if not proxy:
+            self.session.proxies = None
+            return
+            
+        if isinstance(proxy, dict):
+            self.session.proxies = {
+                'http': proxy.get('http'),
+                'https': proxy.get('https')
+            }
+        elif isinstance(proxy, str):
+            self.session.proxies = {
+                'http': proxy,
+                'https': proxy
+            }
+    
+    def getTokenInfo(self, contract_addr: str) -> Dict[str, Any]:
+        """Get token information from GMGN."""
+        if not contract_addr:
+            error_response = {"error": "No contract address provided"}
+            save_dragon_log("gmgn", contract_addr, {}, "No contract address provided")
+            return error_response
+        
+        # Refresh session and proxy
+        self.randomize_session()
+        self.configure_proxy()
+        
+        url = f"{self.BASE_URL}/v1/tokens/sol/{contract_addr}"
+        
+        try:
+            resp = self.session.get(url, headers=self.headers)
+            
+            if resp.status_code != 200:
+                error_msg = f"HTTP {resp.status_code}"
+                error_response = {"error": error_msg, "body": resp.text}
+                save_dragon_log("gmgn", contract_addr, error_response, error_msg)
+                return error_response
+            
+            data = resp.json()
+            
+            price = float(data.get('price', 0))
+            mcap = float(data.get('market_cap', 0))
+            liq = float(data.get('liquidity', 0))
+            vol24 = float(data.get('volume_24h', 0))
+            p24 = float(data.get('price_24h', 0))
+            holders = int(data.get('holder_count', 0))
+            sym = data.get('symbol', '')
+            nm = data.get('name', '')
+            
+            price_change_24h = 0.0
+            if p24 > 0:
+                price_change_24h = ((price - p24) / p24) * 100
+            
+            response_data = {
+                "priceUsd": price,
+                "marketCap": mcap,
+                "liquidityUsd": liq,
+                "volume24h": vol24,
+                "priceChange24h": price_change_24h,
+                "holders": holders,
+                "symbol": sym,
+                "name": nm
+            }
+            
+            save_dragon_log("gmgn", contract_addr, response_data)
+            return response_data
+            
+        except Exception as e:
+            error_msg = str(e)
+            error_response = {"error": error_msg}
+            save_dragon_log("gmgn", contract_addr, {}, error_msg)
+            return error_response
+    
+    def _get_token_url(self, token_type: str, site_choice: str = "Pump.Fun") -> str:
+        """Get the appropriate URL for different token queries."""
+        base = "https://gmgn.ai/defi/quotation/v1"
+        
+        if token_type == "new":
+            if site_choice == "Pump.Fun":
+                return f"{base}/rank/sol/pump/1h?limit=100&orderby=created_timestamp&direction=desc&new_creation=true"
+            else:
+                return f"{base}/rank/sol/moonshot/1h?limit=100&orderby=created_timestamp&direction=desc&new_creation=true"
+        
+        elif token_type == "completing":
+            if site_choice == "Pump.Fun":
+                return f"{base}/rank/sol/pump/1h?limit=100&orderby=progress&direction=desc&pump=true"
+            else:
+                return f"{base}/rank/sol/moonshot/1h?limit=100&orderby=progress&direction=desc&moonshot=true"
+        
+        elif token_type == "soaring":
+            if site_choice == "Pump.Fun":
+                return f"{base}/rank/sol/pump/1h?limit=100&orderby=market_cap_5m&direction=desc&soaring=true"
+            else:
+                return f"{base}/rank/sol/moonshot/1h?limit=100&orderby=market_cap_5m&direction=desc&soaring=true"
+        
+        elif token_type == "bonded":
+            if site_choice == "Pump.Fun":
+                return f"{base}/pairs/sol/new_pairs/1h?limit=100&orderby=market_cap&direction=desc&launchpad=pump&period=1h&filters[]=not_honeypot&filters[]=pump"
+            else:
+                return f"{base}/pairs/sol/new_pairs/1h?limit=100&orderby=open_timestamp&direction=desc&launchpad=moonshot&period=1h&filters[]=not_honeypot&filters[]=moonshot"
+        
+        return ""
+    
+    def _fetch_tokens(self, token_type: str, site_choice: str = "Pump.Fun") -> List[Dict[str, Any]]:
+        """Fetch tokens of a specific type from GMGN."""
+        url = self._get_token_url(token_type, site_choice)
+        if not url:
+            return []
+        
+        # Refresh session and proxy
+        self.randomize_session()
+        self.configure_proxy()
+        
+        max_attempts = 3
+        tokens = []
+        
+        for attempt in range(max_attempts):
+            try:
+                response = self.session.get(url, headers=self.headers)
+                
+                if response.status_code != 200:
+                    logger.warning(f"Error {response.status_code} fetching {token_type} tokens, attempt {attempt+1}/{max_attempts}")
+                    time.sleep(random.uniform(1, 2))
+                    continue
+                
+                data = response.json()
+                
+                # Process based on token type
+                if token_type == "bonded":
+                    items = data.get('data', {}).get('pairs', [])
+                    for item in items:
+                        if not item.get('base_address'):
+                            continue
+                        tokens.append({
+                            'address': item.get('base_address'),
+                            'name': item.get('base_name', ''),
+                            'symbol': item.get('base_symbol', ''),
+                            'price': item.get('price', 0),
+                            'market_cap': item.get('market_cap', 0),
+                            'liquidity': item.get('liquidity', 0)
+                        })
+                else:
+                    items = data.get('data', {}).get('rank', [])
+                    for item in items:
+                        if not item.get('address'):
+                            continue
+                        tokens.append({
+                            'address': item.get('address'),
+                            'name': item.get('name', ''),
+                            'symbol': item.get('symbol', ''),
+                            'price': item.get('price', 0),
+                            'market_cap': item.get('market_cap', 0),
+                            'liquidity': item.get('liquidity', 0)
+                        })
+                
+                return tokens
+                
+            except Exception as e:
+                logger.error(f"Error fetching {token_type} tokens, attempt {attempt+1}/{max_attempts}: {e}")
+                time.sleep(random.uniform(1, 3))
+        
+        return tokens
+    
+    def getNewTokens(self) -> List[Dict[str, Any]]:
+        """Get new token listings."""
+        return self._fetch_tokens("new")
+    
+    def getCompletingTokens(self) -> List[Dict[str, Any]]:
+        """Get completing token listings."""
+        return self._fetch_tokens("completing")
+    
+    def getSoaringTokens(self) -> List[Dict[str, Any]]:
+        """Get soaring token listings."""
+        return self._fetch_tokens("soaring")
+    
+    def getBondedTokens(self) -> List[Dict[str, Any]]:
+        """Get bonded token listings."""
+        return self._fetch_tokens("bonded")
+
+
+class TokenDataHandler:
+    """Handler for token data with retry logic and caching."""
+    
+    def __init__(self, use_proxies: bool = False):
+        """Initialize the token data handler."""
+        self.gmgn = GMGN_Client(use_proxies=use_proxies)
+        self.max_retries = 5
+        self.timeout_sec = 10.0
+    
+    def _get_token_info_sync(self, address: str) -> Dict[str, Any]:
+        """Get token info with retries and timeout."""
+        start_time = time.time()
+        fail_count = 0
+        last_err = None
+        
+        while fail_count < self.max_retries:
+            elapsed = time.time() - start_time
+            if elapsed > self.timeout_sec:
+                error_msg = f"Could not get data from GMGN in {self.timeout_sec}s"
+                save_dragon_log("gmgn", address, {}, error_msg)
+                return {"error": error_msg}
+            
+            try:
+                token_data = self.gmgn.getTokenInfo(address)
+                
+                if not token_data:
+                    last_err = "Empty response"
+                    fail_count += 1
+                    time.sleep(random.uniform(0.5, 1.0))
+                    continue
+                    
+                if "error" in token_data:
+                    last_err = token_data
+                    fail_count += 1
+                    time.sleep(random.uniform(0.5, 1.0))
+                    continue
+                
+                return token_data
+                
+            except Exception as e:
+                last_err = str(e)
+                fail_count += 1
+                time.sleep(random.uniform(0.5, 1.3))
+        
+        error_response = {
+            "error": f"GMGN getTokenInfo failed after {fail_count} retries: {last_err}"
+        }
+        save_dragon_log("gmgn", address, error_response)
+        return error_response
+    
+    async def get_token_data(self, address: str) -> Dict[str, Any]:
+        """Get token data asynchronously."""
+        loop = asyncio.get_running_loop()
+        start_time = time.time()
+        result = await loop.run_in_executor(_gmgn_threadpool, self._get_token_info_sync, address)
+        result["fetch_time"] = time.time() - start_time
+        save_dragon_log("gmgn", address, result)
+        return result
 
 
 class DragonAdapter:
     """Adapter for Dragon functionality to work within Sol Tools framework."""
     
-    def __init__(self, data_dir: Union[str, Path]):
+    def __init__(self, data_dir: Union[str, Path] = None):
         """
         Initialize the Dragon adapter.
         
         Args:
             data_dir: Path to the data directory for storing Dragon outputs
         """
-        from ...core.config import OUTPUT_DATA_DIR
-        self.data_dir = Path(data_dir) if data_dir else OUTPUT_DATA_DIR
-        self.dragon_data_dir = self.data_dir / "dragon"
+        from ...core.config import INPUT_DATA_DIR, OUTPUT_DATA_DIR
         
-        # Create necessary subdirectories
-        for chain in ["Solana", "Ethereum", "GMGN"]:
-            for subdir in ["TopTraders", "TopHolders", "EarlyBuyers", "BulkWallet"]:
-                (self.dragon_data_dir / chain / subdir).mkdir(parents=True, exist_ok=True)
+        # Setup input and output directories
+        self.input_data_dir = INPUT_DATA_DIR / "dragon"
+        self.output_data_dir = OUTPUT_DATA_DIR / "dragon"
         
-        # Proxies directory
-        (self.dragon_data_dir / "Proxies").mkdir(parents=True, exist_ok=True)
+        # Define the new directory structure
+        self.ethereum_input_dir = self.input_data_dir / "ethereum" / "wallet_lists"
+        self.solana_input_dir = self.input_data_dir / "solana" / "wallet_lists"
+        self.proxies_dir = self.input_data_dir / "proxies"
         
-        # Initialize components only if imports succeeded
+        self.ethereum_output_dirs = {
+            "wallet_analysis": self.output_data_dir / "ethereum" / "wallet_analysis",
+            "top_traders": self.output_data_dir / "ethereum" / "top_traders",
+            "top_holders": self.output_data_dir / "ethereum" / "top_holders",
+            "early_buyers": self.output_data_dir / "ethereum" / "early_buyers"
+        }
+        
+        self.solana_output_dirs = {
+            "wallet_analysis": self.output_data_dir / "solana" / "wallet_analysis",
+            "top_traders": self.output_data_dir / "solana" / "top_traders",
+            "top_holders": self.output_data_dir / "solana" / "top_holders",
+            "early_buyers": self.output_data_dir / "solana" / "early_buyers"
+        }
+        
+        self.token_info_dir = self.output_data_dir / "token_info"
+        
+        # Set up threading defaults
+        self.default_threads = 40
+        self.max_threads = 100
+        
+        # Set up async clients
+        self.gmgn_client = GMGN_Client()
+        self.token_handler = TokenDataHandler()
+        
+        # Initialize components from the original Dragon library if available
+        self._init_dragon_components()
+    
+    def _init_dragon_components(self):
+        """Initialize components from original Dragon modules if available."""
         if DRAGON_IMPORTS_SUCCESS:
             # Solana components
-            self.bundle = BundleFinder()
-            self.scan = ScanAllTx()
-            self.wallet_checker = BulkWalletChecker()
-            self.top_traders = TopTraders()
-            self.timestamp = TimestampTransactions()
-            self.copy_wallet = CopyTradeWalletFinder()
-            self.top_holders = TopHolders()
-            self.early_buyers = EarlyBuyers()
-            
-            # Ethereum components
-            self.eth_wallet = EthBulkWalletChecker()
-            self.eth_traders = EthTopTraders()
-            self.eth_timestamp = EthTimestampTransactions()
-            self.eth_scan = EthScanAllTx()
-            
-            # GMGN component
-            self.gmgn = GMGN()
-        
+            try:
+                self.bundle = BundleFinder()
+                self.scan = ScanAllTx()
+                self.wallet_checker = BulkWalletChecker()
+                self.top_traders = TopTraders()
+                self.timestamp = TimestampTransactions()
+                self.copy_wallet = CopyTradeWalletFinder()
+                self.top_holders = TopHolders()
+                self.early_buyers = EarlyBuyers()
+                
+                # Ethereum components
+                self.eth_wallet = EthBulkWalletChecker()
+                self.eth_traders = EthTopTraders()
+                self.eth_timestamp = EthTimestampTransactions()
+                self.eth_scan = EthScanAllTx()
+            except Exception as e:
+                logger.error(f"Error initializing Dragon components: {e}")
+    
     def ensure_dragon_paths(self):
         """Create and return paths to match Dragon's expected directory structure."""
         # Make sure the Dragon module can find its data directories
@@ -78,24 +510,41 @@ class DragonAdapter:
         if not os.path.exists(original_dragon_data):
             os.makedirs(original_dragon_data, exist_ok=True)
             
-            # Create symbolic links to our data directory
-            # Note: on Windows, this might require administrator privileges
-            for chain in ["Solana", "Ethereum", "GMGN", "Proxies"]:
-                src = self.dragon_data_dir / chain
+            # Create the necessary directory structure for Dragon
+            chains = {
+                "Solana": {
+                    "input": self.solana_input_dir,
+                    "output": self.solana_output_dirs
+                },
+                "Ethereum": {
+                    "input": self.ethereum_input_dir,
+                    "output": self.ethereum_output_dirs
+                },
+                "Proxies": {
+                    "input": self.proxies_dir,
+                    "output": None
+                }
+            }
+            
+            # Create the destination directories and try to link them
+            for chain, paths in chains.items():
                 dst = original_dragon_data / chain
                 
-                # Create the chain directory if it doesn't exist
+                # Create the destination chain directory if it doesn't exist
                 if not os.path.exists(dst):
-                    if os.path.exists(src):
-                        # Try symbolic link first
-                        try:
-                            os.symlink(src, dst)
-                        except (OSError, NotImplementedError):
-                            # Fall back to just creating the directory
-                            os.makedirs(dst, exist_ok=True)
-                    else:
-                        os.makedirs(src, exist_ok=True)
-                        os.makedirs(dst, exist_ok=True)
+                    # Make sure directories exist
+                    os.makedirs(dst, exist_ok=True)
+                    
+                    # Try to create symlinks for input directory
+                    if paths["input"] and os.path.exists(paths["input"]):
+                        for subdir in paths["input"].glob("*"):
+                            try:
+                                dst_subdir = dst / subdir.name
+                                if not os.path.exists(dst_subdir):
+                                    os.symlink(subdir, dst_subdir)
+                            except (OSError, NotImplementedError):
+                                # Fall back to just creating the directory
+                                pass
 
     def check_proxy_file(self, create_if_missing: bool = True) -> bool:
         """
@@ -107,7 +556,7 @@ class DragonAdapter:
         Returns:
             True if proxies are available, False otherwise
         """
-        proxy_path = self.dragon_data_dir / "Proxies" / "proxies.txt"
+        proxy_path = self.proxies_dir / "proxies.txt"
         
         if not os.path.exists(proxy_path) and create_if_missing:
             # Create the directory and empty file
@@ -134,12 +583,12 @@ class DragonAdapter:
             Normalized thread count (40 by default, capped at 100)
         """
         try:
-            threads = int(threads or 40)
-            if threads > 100:
-                return 40
+            threads = int(threads or self.default_threads)
+            if threads > self.max_threads:
+                return self.default_threads
             return threads
         except (ValueError, TypeError):
-            return 40
+            return self.default_threads
             
     def validate_solana_address(self, address: str) -> bool:
         """
@@ -151,7 +600,9 @@ class DragonAdapter:
         Returns:
             True if the address format is valid, False otherwise
         """
-        return len(address) in [43, 44]
+        if not address:
+            return False
+        return len(address) in [43, 44] and address[0] in "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
     
     def validate_ethereum_address(self, address: str) -> bool:
         """
@@ -163,7 +614,52 @@ class DragonAdapter:
         Returns:
             True if the address format is valid, False otherwise
         """
-        return len(address) in [40, 41, 42]
+        if not address:
+            return False
+        if address.startswith("0x"):
+            return len(address) == 42 and all(c in "0123456789abcdefABCDEF" for c in address[2:])
+        return len(address) == 40 and all(c in "0123456789abcdefABCDEF" for c in address)
+    
+    # GMGN Implementation
+    async def get_token_info(self, contract_address: str) -> Dict[str, Any]:
+        """
+        Get token information from GMGN.
+        
+        Args:
+            contract_address: Token contract address
+            
+        Returns:
+            Token information
+        """
+        return await self.token_handler.get_token_data(contract_address)
+    
+    def get_token_info_sync(self, contract_address: str) -> Dict[str, Any]:
+        """
+        Synchronous version of get_token_info.
+        
+        Args:
+            contract_address: Token contract address
+            
+        Returns:
+            Token information
+        """
+        return self.token_handler._get_token_info_sync(contract_address)
+    
+    def get_new_tokens(self) -> List[Dict[str, Any]]:
+        """Get new token listings."""
+        return self.gmgn_client.getNewTokens()
+    
+    def get_completing_tokens(self) -> List[Dict[str, Any]]:
+        """Get completing token listings."""
+        return self.gmgn_client.getCompletingTokens()
+    
+    def get_soaring_tokens(self) -> List[Dict[str, Any]]:
+        """Get soaring token listings."""
+        return self.gmgn_client.getSoaringTokens()
+    
+    def get_bonded_tokens(self) -> List[Dict[str, Any]]:
+        """Get bonded token listings."""
+        return self.gmgn_client.getBondedTokens()
     
     # Solana implementations
     def solana_bundle_checker(self, contract_address: Union[str, List[str]]) -> Dict[str, Any]:
@@ -299,5 +795,3 @@ class DragonAdapter:
             return {"success": True, "data": data}
         except Exception as e:
             return {"success": False, "error": str(e)}
-    
-    # Add similar implementations for other Dragon functionality

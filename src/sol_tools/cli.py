@@ -49,6 +49,7 @@ def create_handlers() -> Dict[str, Callable[[], Any]]:
         'dragon_eth_scan': dragon_handlers.eth_scan_tx,
         'dragon_eth_timestamp': dragon_handlers.eth_timestamp,
         
+        'dragon_gmgn_info': dragon_handlers.gmgn_token_info,
         'dragon_gmgn_new': dragon_handlers.gmgn_new_tokens,
         'dragon_gmgn_completing': dragon_handlers.gmgn_completing_tokens,
         'dragon_gmgn_soaring': dragon_handlers.gmgn_soaring_tokens,

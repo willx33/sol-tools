@@ -2,8 +2,11 @@
 
 import os
 import sys
+import json
+import asyncio
 import inquirer
 from typing import List, Dict, Any, Optional
+from datetime import datetime
 
 from ...utils.common import clear_terminal, ensure_data_dir, check_proxy_file
 from ...core.config import check_env_vars
@@ -87,7 +90,7 @@ def solana_wallet_checker():
     print("🐲 Dragon Solana Wallet Checker")
     
     # Setup wallet directory
-    wallet_dir = ensure_data_dir("dragon", "Solana/BulkWallet")
+    wallet_dir = ensure_data_dir("input-data/dragon", "Solana/BulkWallet")
     
     # Choose wallets file
     wallets_file = wallet_dir / "wallets.txt"
@@ -256,8 +259,38 @@ def gmgn_new_tokens():
     clear_terminal()
     print("🐲 Dragon GMGN New Tokens")
     
-    # Stub implementation for GMGN new tokens
-    print("This feature will scrape new token contracts from GMGN")
+    # Set up data directories
+    output_dir = ensure_data_dir("output-data/dragon", "GMGN")
+    
+    print("Fetching new tokens from GMGN...")
+    try:
+        # Use the adapter to get new tokens
+        adapter = _get_dragon_adapter()
+        tokens = adapter.get_new_tokens()
+        
+        # Process and save the results
+        if tokens:
+            output_file = output_dir / f"new_tokens_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+            with open(output_file, 'w') as f:
+                json.dump(tokens, f, indent=2)
+            
+            # Display results
+            print(f"\n✅ Successfully fetched {len(tokens)} new tokens")
+            print(f"Results saved to {output_file}")
+            
+            # Show sample of the data
+            print("\nSample token data:")
+            for token in tokens[:3]:
+                print(f"- {token.get('name', 'Unknown')} ({token.get('symbol', 'Unknown')}): {token.get('address', 'Unknown')}")
+            if len(tokens) > 3:
+                print(f"...and {len(tokens) - 3} more tokens")
+        else:
+            print("⚠️ No new tokens found")
+            
+    except Exception as e:
+        print(f"❌ Error fetching new tokens: {e}")
+    
+    input("\nPress Enter to continue...")
 
 
 def gmgn_completing_tokens():
@@ -265,8 +298,38 @@ def gmgn_completing_tokens():
     clear_terminal()
     print("🐲 Dragon GMGN Completing Tokens")
     
-    # Stub implementation for GMGN completing tokens
-    print("This feature will scrape completing token contracts from GMGN")
+    # Set up data directories
+    output_dir = ensure_data_dir("output-data/dragon", "GMGN")
+    
+    print("Fetching completing tokens from GMGN...")
+    try:
+        # Use the adapter to get completing tokens
+        adapter = _get_dragon_adapter()
+        tokens = adapter.get_completing_tokens()
+        
+        # Process and save the results
+        if tokens:
+            output_file = output_dir / f"completing_tokens_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+            with open(output_file, 'w') as f:
+                json.dump(tokens, f, indent=2)
+            
+            # Display results
+            print(f"\n✅ Successfully fetched {len(tokens)} completing tokens")
+            print(f"Results saved to {output_file}")
+            
+            # Show sample of the data
+            print("\nSample token data:")
+            for token in tokens[:3]:
+                print(f"- {token.get('name', 'Unknown')} ({token.get('symbol', 'Unknown')}): {token.get('address', 'Unknown')}")
+            if len(tokens) > 3:
+                print(f"...and {len(tokens) - 3} more tokens")
+        else:
+            print("⚠️ No completing tokens found")
+            
+    except Exception as e:
+        print(f"❌ Error fetching completing tokens: {e}")
+    
+    input("\nPress Enter to continue...")
 
 
 def gmgn_soaring_tokens():
@@ -274,8 +337,38 @@ def gmgn_soaring_tokens():
     clear_terminal()
     print("🐲 Dragon GMGN Soaring Tokens")
     
-    # Stub implementation for GMGN soaring tokens
-    print("This feature will scrape soaring token contracts from GMGN")
+    # Set up data directories
+    output_dir = ensure_data_dir("output-data/dragon", "GMGN")
+    
+    print("Fetching soaring tokens from GMGN...")
+    try:
+        # Use the adapter to get soaring tokens
+        adapter = _get_dragon_adapter()
+        tokens = adapter.get_soaring_tokens()
+        
+        # Process and save the results
+        if tokens:
+            output_file = output_dir / f"soaring_tokens_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+            with open(output_file, 'w') as f:
+                json.dump(tokens, f, indent=2)
+            
+            # Display results
+            print(f"\n✅ Successfully fetched {len(tokens)} soaring tokens")
+            print(f"Results saved to {output_file}")
+            
+            # Show sample of the data
+            print("\nSample token data:")
+            for token in tokens[:3]:
+                print(f"- {token.get('name', 'Unknown')} ({token.get('symbol', 'Unknown')}): {token.get('address', 'Unknown')}")
+            if len(tokens) > 3:
+                print(f"...and {len(tokens) - 3} more tokens")
+        else:
+            print("⚠️ No soaring tokens found")
+            
+    except Exception as e:
+        print(f"❌ Error fetching soaring tokens: {e}")
+    
+    input("\nPress Enter to continue...")
 
 
 def gmgn_bonded_tokens():
@@ -283,5 +376,92 @@ def gmgn_bonded_tokens():
     clear_terminal()
     print("🐲 Dragon GMGN Bonded Tokens")
     
-    # Stub implementation for GMGN bonded tokens
-    print("This feature will scrape bonded token contracts from GMGN")
+    # Set up data directories
+    output_dir = ensure_data_dir("output-data/dragon", "GMGN")
+    
+    print("Fetching bonded tokens from GMGN...")
+    try:
+        # Use the adapter to get bonded tokens
+        adapter = _get_dragon_adapter()
+        tokens = adapter.get_bonded_tokens()
+        
+        # Process and save the results
+        if tokens:
+            output_file = output_dir / f"bonded_tokens_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+            with open(output_file, 'w') as f:
+                json.dump(tokens, f, indent=2)
+            
+            # Display results
+            print(f"\n✅ Successfully fetched {len(tokens)} bonded tokens")
+            print(f"Results saved to {output_file}")
+            
+            # Show sample of the data
+            print("\nSample token data:")
+            for token in tokens[:3]:
+                print(f"- {token.get('name', 'Unknown')} ({token.get('symbol', 'Unknown')}): {token.get('address', 'Unknown')}")
+            if len(tokens) > 3:
+                print(f"...and {len(tokens) - 3} more tokens")
+        else:
+            print("⚠️ No bonded tokens found")
+            
+    except Exception as e:
+        print(f"❌ Error fetching bonded tokens: {e}")
+    
+    input("\nPress Enter to continue...")
+
+
+def gmgn_token_info():
+    """Get detailed information for a specific token."""
+    clear_terminal()
+    print("🐲 Dragon GMGN Token Information")
+    
+    # Import NoTruncationText and prompt_user for better display and paste handling
+    from ...utils.common import NoTruncationText, prompt_user
+    
+    # Prompt for token address
+    questions = [
+        NoTruncationText(
+            "token_address",
+            message="Enter token address to get information",
+            validate=lambda _, x: len(x.strip()) in [43, 44] if x else False
+        )
+    ]
+    answers = prompt_user(questions)
+    token_address = answers["token_address"].strip()
+    
+    # Set up data directories
+    output_dir = ensure_data_dir("output-data/dragon", "GMGN")
+    
+    print(f"Fetching information for token {token_address}...")
+    try:
+        # Use the adapter to get token information
+        adapter = _get_dragon_adapter()
+        token_info = adapter.get_token_info_sync(token_address)
+        
+        if "error" not in token_info:
+            # Save token info to file
+            output_file = output_dir / f"token_info_{token_address}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+            with open(output_file, 'w') as f:
+                json.dump(token_info, f, indent=2)
+            
+            # Display results
+            print("\n✅ Successfully fetched token information")
+            print(f"Results saved to {output_file}")
+            
+            # Format and display token info
+            print("\n📊 Token Information:")
+            print(f"Name:             {token_info.get('name', 'Unknown')}")
+            print(f"Symbol:           {token_info.get('symbol', 'Unknown')}")
+            print(f"Price:            ${token_info.get('priceUsd', 0):.8f}")
+            print(f"Market Cap:       ${token_info.get('marketCap', 0):,.2f}")
+            print(f"Liquidity:        ${token_info.get('liquidityUsd', 0):,.2f}")
+            print(f"24h Volume:       ${token_info.get('volume24h', 0):,.2f}")
+            print(f"24h Change:       {token_info.get('priceChange24h', 0):.2f}%")
+            print(f"Holders:          {token_info.get('holders', 0):,}")
+        else:
+            print(f"\n❌ Failed to get token information: {token_info.get('error', 'Unknown error')}")
+            
+    except Exception as e:
+        print(f"❌ Error fetching token information: {e}")
+    
+    input("\nPress Enter to continue...")

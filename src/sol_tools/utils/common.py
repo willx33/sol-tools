@@ -831,13 +831,14 @@ def check_proxy_file(proxy_path: Optional[str] = None) -> List[str]:
     Check if proxy file exists and get proxies.
     
     Args:
-        proxy_path: Optional path to proxy file, defaults to data/proxies.txt
+        proxy_path: Optional path to proxy file, defaults to input-data/dragon/proxies/proxies.txt
         
     Returns:
         List of proxy strings or empty list if no proxies
     """
     if proxy_path is None:
-        proxy_path = DATA_DIR / "proxies.txt"
+        from ..core.config import INPUT_DATA_DIR
+        proxy_path = INPUT_DATA_DIR / "dragon" / "proxies" / "proxies.txt"
         
     try:
         if os.path.exists(proxy_path):

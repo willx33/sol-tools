@@ -10,8 +10,8 @@ from dotenv import load_dotenv, set_key
 # Base paths
 ROOT_DIR = Path(__file__).parents[3]
 DATA_DIR = ROOT_DIR / "data"
-INPUT_DATA_DIR = DATA_DIR / "input-data"
-OUTPUT_DATA_DIR = DATA_DIR / "output-data"
+INPUT_DATA_DIR = DATA_DIR / "input-data-new"
+OUTPUT_DATA_DIR = DATA_DIR / "output-data-new"
 CONFIG_DIR = ROOT_DIR / "config"
 CACHE_DIR = ROOT_DIR / "cache"
 LOG_DIR = ROOT_DIR / "logs"
@@ -57,7 +57,7 @@ REQUIRED_ENV_VARS = {
 # Default configuration
 DEFAULT_CONFIG = {
     "proxy_enabled": False,
-    "proxy_file": str(DATA_DIR / "proxies.txt"),
+    "proxy_file": str(INPUT_DATA_DIR / "dragon" / "proxies" / "proxies.txt"),
     "data_dir": str(DATA_DIR),
     "input_data_dir": str(INPUT_DATA_DIR),
     "output_data_dir": str(OUTPUT_DATA_DIR),
@@ -81,26 +81,61 @@ def load_config() -> Dict[str, Any]:
         (INPUT_DATA_DIR / module).mkdir(parents=True, exist_ok=True)
         (OUTPUT_DATA_DIR / module).mkdir(parents=True, exist_ok=True)
         
+    # Create specific subdirectories for each module
+    # Dragon module
+    (INPUT_DATA_DIR / "dragon" / "ethereum" / "wallet_lists").mkdir(parents=True, exist_ok=True)
+    (INPUT_DATA_DIR / "dragon" / "solana" / "wallet_lists").mkdir(parents=True, exist_ok=True)
+    (INPUT_DATA_DIR / "dragon" / "proxies").mkdir(parents=True, exist_ok=True)
+    
+    (OUTPUT_DATA_DIR / "dragon" / "ethereum" / "wallet_analysis").mkdir(parents=True, exist_ok=True)
+    (OUTPUT_DATA_DIR / "dragon" / "ethereum" / "top_traders").mkdir(parents=True, exist_ok=True)
+    (OUTPUT_DATA_DIR / "dragon" / "ethereum" / "top_holders").mkdir(parents=True, exist_ok=True)
+    (OUTPUT_DATA_DIR / "dragon" / "ethereum" / "early_buyers").mkdir(parents=True, exist_ok=True)
+    
+    (OUTPUT_DATA_DIR / "dragon" / "solana" / "wallet_analysis").mkdir(parents=True, exist_ok=True)
+    (OUTPUT_DATA_DIR / "dragon" / "solana" / "top_traders").mkdir(parents=True, exist_ok=True)
+    (OUTPUT_DATA_DIR / "dragon" / "solana" / "top_holders").mkdir(parents=True, exist_ok=True)
+    (OUTPUT_DATA_DIR / "dragon" / "solana" / "early_buyers").mkdir(parents=True, exist_ok=True)
+    
+    (OUTPUT_DATA_DIR / "dragon" / "token_info").mkdir(parents=True, exist_ok=True)
+    
+    # GMGN module
+    (INPUT_DATA_DIR / "gmgn" / "token_lists").mkdir(parents=True, exist_ok=True)
+    (OUTPUT_DATA_DIR / "gmgn" / "token_listings").mkdir(parents=True, exist_ok=True)
+    (OUTPUT_DATA_DIR / "gmgn" / "market_cap_data").mkdir(parents=True, exist_ok=True)
+    (OUTPUT_DATA_DIR / "gmgn" / "token_info").mkdir(parents=True, exist_ok=True)
+    
+    # Dune module
+    (INPUT_DATA_DIR / "dune" / "query_configs").mkdir(parents=True, exist_ok=True)
+    (OUTPUT_DATA_DIR / "dune" / "csv").mkdir(parents=True, exist_ok=True)
+    (OUTPUT_DATA_DIR / "dune" / "parsed").mkdir(parents=True, exist_ok=True)
+    
+    # Solana module
+    (INPUT_DATA_DIR / "solana" / "wallet_lists").mkdir(parents=True, exist_ok=True)
+    (OUTPUT_DATA_DIR / "solana" / "transaction_data").mkdir(parents=True, exist_ok=True)
+    (OUTPUT_DATA_DIR / "solana" / "wallet_data").mkdir(parents=True, exist_ok=True)
+    
+    # Ensure placeholder files exist
+    placeholder_files = [
+        (INPUT_DATA_DIR / "dragon" / "ethereum" / "wallet_lists" / "wallets.txt"),
+        (INPUT_DATA_DIR / "dragon" / "solana" / "wallet_lists" / "wallets.txt"),
+        (INPUT_DATA_DIR / "dragon" / "proxies" / "proxies.txt"),
+        (INPUT_DATA_DIR / "gmgn" / "token_lists" / "token_addresses.txt"),
+        (INPUT_DATA_DIR / "solana" / "wallet_lists" / "wallets.txt")
+    ]
+    
+    for file_path in placeholder_files:
+        if not file_path.exists():
+            file_path.touch()
+    
     # Remove any leftover legacy directories
+    legacy_dirs = [
+        DATA_DIR / "input-data",
+        DATA_DIR / "output-data"
+    ]
+    
     for module in modules:
-        legacy_dir = DATA_DIR / module
-        if legacy_dir.exists():
-            import shutil
-            try:
-                # Just in case there's any data left, move it to output
-                output_dir = OUTPUT_DATA_DIR / module
-                
-                # This is commented out because we don't need it anymore
-                # for item in legacy_dir.glob("*"):
-                #     if item.is_file():
-                #         shutil.copy2(item, output_dir / item.name) 
-                #     elif item.is_dir():
-                #         shutil.copytree(item, output_dir / item.name, dirs_exist_ok=True)
-                
-                # Remove the legacy directory
-                shutil.rmtree(legacy_dir)
-            except Exception as e:
-                print(f"Warning: Could not remove legacy directory {legacy_dir}: {e}")
+        legacy_dirs.append(DATA_DIR / module)
     
     # Load environment variables
     load_dotenv(ENV_FILE)
