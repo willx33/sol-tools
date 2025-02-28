@@ -36,6 +36,7 @@ setup(
     entry_points={
         "console_scripts": [
             "sol-tools=sol_tools.cli:main",
+            "start=sol_tools.cli:main",
         ],
     },
     install_requires=[

@@ -111,6 +111,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Sol Tools - Ultimate blockchain and crypto analysis toolkit")
     parser.add_argument('--version', action='version', version=f'Sol Tools {__version__}')
     parser.add_argument('--text-menu', action='store_true', help='Use text-based menu (inquirer) instead of curses')
+    parser.add_argument('--test', action='store_true', help='Run file system tests')
     
     return parser.parse_args()
 
@@ -118,6 +119,11 @@ def parse_args():
 def main():
     """Main entry point for the CLI."""
     args = parse_args()
+    
+    # Check if the test flag is set
+    if args.test:
+        from .utils.test_file_ops import run_all_tests
+        sys.exit(0 if run_all_tests() else 1)
     
     # Check if required directories exist
     check_requirements()
