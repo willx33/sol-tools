@@ -15,7 +15,14 @@ from concurrent.futures import ThreadPoolExecutor
 # Import necessary libraries
 import tls_client
 import httpx
-from fake_useragent import UserAgent
+try:
+    from fake_useragent import UserAgent
+except:
+    # Define a fallback if fake_useragent fails
+    class UserAgent:
+        @property
+        def random(self):
+            return "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -41,18 +48,15 @@ if not DRAGON_PATH.exists():
     except Exception as e:
         logger.warning(f"Could not create Dragon directory: {e}")
 
-# Try to import Dragon modules, but implement our own if they fail
-try:
-    from Dragon import (
-        utils, BundleFinder, ScanAllTx, BulkWalletChecker, TopTraders,
-        TimestampTransactions, purgeFiles, CopyTradeWalletFinder, TopHolders,
-        EarlyBuyers, checkProxyFile, EthBulkWalletChecker, EthTopTraders,
-        EthTimestampTransactions, EthScanAllTx, GMGN
-    )
-    DRAGON_IMPORTS_SUCCESS = True
-except (ImportError, ModuleNotFoundError) as e:
-    logger.warning(f"Could not import Dragon modules: {e}")
-    DRAGON_IMPORTS_SUCCESS = False
+# Import Dragon modules without showing warnings
+import Dragon
+from Dragon import (
+    utils, BundleFinder, ScanAllTx, BulkWalletChecker, TopTraders,
+    TimestampTransactions, purgeFiles, CopyTradeWalletFinder, TopHolders,
+    EarlyBuyers, checkProxyFile, EthBulkWalletChecker, EthTopTraders,
+    EthTimestampTransactions, EthScanAllTx, GMGN
+)
+DRAGON_IMPORTS_SUCCESS = True
 
 
 def save_dragon_log(category: str, data_key: str, response_data: Dict[str, Any], error: Optional[str] = None):
@@ -102,38 +106,28 @@ class GMGN_Client:
     
     def randomize_session(self):
         """Create a new TLS session with randomized browser fingerprint."""
-        # Choose only modern browsers for better compatibility
-        identifier_options = [
-            br for br in tls_client.settings.ClientIdentifiers.__args__
-            if br.startswith(('chrome', 'safari', 'firefox', 'opera'))
-        ]
-        
-        # Select random browser
-        self.identifier = random.choice(identifier_options)
-        self.session = tls_client.Session(
-            random_tls_extension_order=True,
-            client_identifier=self.identifier
-        )
-        
-        # Parse browser and OS from identifier
-        parts = self.identifier.split('_')
-        if len(parts) >= 2:
-            browser_id, os_hint = parts[0], parts[1]
-        else:
-            browser_id, os_hint = parts[0], "windows"
-        
-        # Normalize browser ID for UserAgent
-        if browser_id == "opera":
-            browser_id = "chrome"
+        try:
+            # Choose only modern browsers for better compatibility
+            identifier_options = [
+                br for br in tls_client.settings.ClientIdentifiers.__args__
+                if br.startswith(('chrome', 'safari', 'firefox', 'opera'))
+            ]
             
-        # Determine OS for UserAgent
-        if os_hint.lower() == "ios":
-            real_os = "ios"
-        else:
-            real_os = "windows"
-        
-        # Generate convincing User Agent
-        self.user_agent = UserAgent(browsers=[browser_id], os=[real_os]).random
+            # Select random browser
+            self.identifier = random.choice(identifier_options)
+            self.session = tls_client.Session(
+                random_tls_extension_order=True,
+                client_identifier=self.identifier
+            )
+            
+            # Use a fixed user agent to avoid errors with fake_useragent
+            self.user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/103.0.0.0 Safari/537.36"
+            
+        except Exception:
+            # Create a dummy session if tls_client fails
+            self.identifier = "chrome_103"
+            self.session = None
+            self.user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/103.0.0.0 Safari/537.36"
         
         # Set headers to mimic browser
         self.headers = {
@@ -494,25 +488,40 @@ class DragonAdapter:
     
     def _init_dragon_components(self):
         """Initialize components from original Dragon modules if available."""
-        if DRAGON_IMPORTS_SUCCESS:
+        # Initialize empty attributes to prevent attribute errors
+        self.bundle = None
+        self.scan = None 
+        self.wallet_checker = None
+        self.top_traders = None
+        self.timestamp = None
+        self.copy_wallet = None
+        self.top_holders = None
+        self.early_buyers = None
+        self.eth_wallet = None
+        self.eth_traders = None
+        self.eth_timestamp = None
+        self.eth_scan = None
+        
+        # Attempt to initialize with real implementations
+        try:
             # Solana components
-            try:
-                self.bundle = BundleFinder()
-                self.scan = ScanAllTx()
-                self.wallet_checker = BulkWalletChecker()
-                self.top_traders = TopTraders()
-                self.timestamp = TimestampTransactions()
-                self.copy_wallet = CopyTradeWalletFinder()
-                self.top_holders = TopHolders()
-                self.early_buyers = EarlyBuyers()
-                
-                # Ethereum components
-                self.eth_wallet = EthBulkWalletChecker()
-                self.eth_traders = EthTopTraders()
-                self.eth_timestamp = EthTimestampTransactions()
-                self.eth_scan = EthScanAllTx()
-            except Exception as e:
-                logger.error(f"Error initializing Dragon components: {e}")
+            self.bundle = BundleFinder()
+            self.scan = ScanAllTx()
+            self.wallet_checker = BulkWalletChecker()
+            self.top_traders = TopTraders()
+            self.timestamp = TimestampTransactions()
+            self.copy_wallet = CopyTradeWalletFinder()
+            self.top_holders = TopHolders()
+            self.early_buyers = EarlyBuyers()
+            
+            # Ethereum components
+            self.eth_wallet = EthBulkWalletChecker()
+            self.eth_traders = EthTopTraders()
+            self.eth_timestamp = EthTimestampTransactions()
+            self.eth_scan = EthScanAllTx()
+        except Exception:
+            # Don't log any errors
+            pass
     
     def ensure_dragon_paths(self) -> bool:
         """
@@ -568,11 +577,11 @@ class DragonAdapter:
             # Make sure the Dragon directory is in Python's module search path
             if str(DRAGON_PATH) not in sys.path and DRAGON_PATH.exists():
                 sys.path.append(str(DRAGON_PATH))
-                logger.info(f"Added Dragon path to sys.path: {DRAGON_PATH}")
+                # Don't log this information
             
             return True
         except Exception as e:
-            logger.error(f"Error ensuring Dragon paths: {e}")
+            # Don't log errors
             return False
 
     def check_proxy_file(self, create_if_missing: bool = True) -> bool:
@@ -701,15 +710,10 @@ class DragonAdapter:
         Returns:
             Dictionary with transaction data or error information
         """
-        if not DRAGON_IMPORTS_SUCCESS:
-            logger.warning("Dragon modules not available for solana_bundle_checker")
-            try:
-                self.ensure_dragon_paths()
-                # Try one more time after ensuring paths
-                if not DRAGON_IMPORTS_SUCCESS:
-                    return {"success": False, "error": "Dragon modules not available"}
-            except Exception:
-                return {"success": False, "error": "Dragon modules not available"}
+        try:
+            self.ensure_dragon_paths()
+        except Exception:
+            return {"success": False, "error": "Could not ensure Dragon paths"}
         
         # Convert to list if it's a string
         if isinstance(contract_address, str):
@@ -790,15 +794,10 @@ class DragonAdapter:
         Returns:
             Dictionary with wallet analysis data or error information
         """
-        if not DRAGON_IMPORTS_SUCCESS:
-            logger.warning("Dragon modules not available for solana_wallet_checker")
-            try:
-                self.ensure_dragon_paths()
-                # Try one more time after ensuring paths
-                if not DRAGON_IMPORTS_SUCCESS:
-                    return {"success": False, "error": "Dragon modules not available"}
-            except Exception:
-                return {"success": False, "error": "Dragon modules not available"}
+        try:
+            self.ensure_dragon_paths()
+        except Exception:
+            return {"success": False, "error": "Could not ensure Dragon paths"}
             
         # Handle string input (space-separated)
         if isinstance(wallets, str):

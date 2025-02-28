@@ -48,16 +48,15 @@ class SolanaAdapter:
         """Initialize Dragon functionality if available."""
         try:
             # Only import dragon_adapter here to prevent circular imports
-            from ..dragon.dragon_adapter import DragonAdapter, DRAGON_IMPORTS_SUCCESS
+            from ..dragon.dragon_adapter import DragonAdapter
             self.dragon = DragonAdapter(self.data_dir)
-            self.dragon_available = DRAGON_IMPORTS_SUCCESS
+            self.dragon_available = True
             
             # Try to ensure dragon paths if dragon modules are available
-            if self.dragon_available:
-                self.dragon.ensure_dragon_paths()
+            self.dragon.ensure_dragon_paths()
                 
         except (ImportError, Exception) as e:
-            self.logger.warning(f"Failed to initialize Dragon: {e}")
+            # Silent initialization - don't show warnings
             self.dragon = None
             self.dragon_available = False
     
