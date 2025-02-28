@@ -53,6 +53,9 @@ def wallet_checker(export_format: str = None):
     sharp_dir = ensure_data_dir("sharp")
     wallet_dir = ensure_data_dir("sharp", "wallets")
     
+    # Import custom text input for better display
+    from ...utils.common import NoTruncationText
+    
     # Input method selection
     input_options = [
         "Load from file",
@@ -100,7 +103,7 @@ def wallet_checker(export_format: str = None):
             
             if file_choice == "Other file (specify path)":
                 questions = [
-                    inquirer.Text(
+                    NoTruncationText(
                         "input_file",
                         message="Enter path to file with wallet addresses:",
                         default=default_file
@@ -113,7 +116,7 @@ def wallet_checker(export_format: str = None):
         else:
             console.print("[yellow]No existing wallet files found.[/yellow]")
             questions = [
-                inquirer.Text(
+                NoTruncationText(
                     "input_file",
                     message="Enter path to file with wallet addresses:",
                     default=default_file
@@ -133,26 +136,35 @@ def wallet_checker(export_format: str = None):
                 pass
                 
             # Ask user to input some addresses now
-            console.print("\n[bold]Enter wallet addresses to check (one per line)[/bold]")
+            from ...utils.common import parse_input_addresses, validate_addresses
+            
+            console.print("\n[bold]Enter wallet addresses to check (space-separated or one per line)[/bold]")
             console.print("Press Enter on an empty line when finished")
             
-            manual_wallets = []
+            wallet_input = ""
             while True:
                 line = input("> ").strip()
                 if not line:
                     break
-                if len(line) >= 30:  # Simple validation for wallet address length
-                    manual_wallets.append(line)
-                else:
-                    console.print(f"[yellow]Warning: '{line}' doesn't look like a valid wallet address[/yellow]")
+                wallet_input += line + "\n"
             
-            if manual_wallets:
+            # Parse and validate addresses
+            raw_wallets = parse_input_addresses(wallet_input)
+            valid_wallets, invalid_wallets = validate_addresses(
+                raw_wallets, 
+                lambda addr: len(addr) >= 30  # Simple validation for wallet address length
+            )
+            
+            if invalid_wallets:
+                console.print(f"[yellow]Warning: {len(invalid_wallets)} invalid addresses were ignored[/yellow]")
+            
+            if valid_wallets:
                 # Save to the newly created file
                 with open(input_file, "w", encoding="utf-8") as f:
-                    for wallet in manual_wallets:
+                    for wallet in valid_wallets:
                         f.write(wallet + "\n")
-                console.print(f"[green]✓[/green] Saved {len(manual_wallets)} addresses to {input_file}")
-                wallets = manual_wallets
+                console.print(f"[green]✓[/green] Saved {len(valid_wallets)} addresses to {input_file}")
+                wallets = valid_wallets
             else:
                 console.print("[yellow]No addresses provided. Please add wallet addresses to the file and run again.[/yellow]")
                 return
@@ -166,20 +178,32 @@ def wallet_checker(export_format: str = None):
                 return
     
     elif input_method == "Enter addresses manually":
-        console.print("\n[bold]Enter wallet addresses to check (one per line)[/bold]")
+        from ...utils.common import parse_input_addresses, validate_addresses
+        
+        console.print("\n[bold]Enter wallet addresses to check (space-separated or one per line)[/bold]")
         console.print("Press Enter on an empty line when finished")
         
+        wallet_input = ""
         while True:
             line = input("> ").strip()
             if not line:
                 break
-            if len(line) >= 30:  # Simple validation for wallet address length
-                wallets.append(line)
-            else:
-                console.print(f"[yellow]Warning: '{line}' doesn't look like a valid wallet address[/yellow]")
+            wallet_input += line + "\n"
+        
+        # Parse and validate addresses
+        raw_wallets = parse_input_addresses(wallet_input)
+        valid_wallets, invalid_wallets = validate_addresses(
+            raw_wallets, 
+            lambda addr: len(addr) >= 30  # Simple validation for wallet address length
+        )
+        
+        wallets = valid_wallets
+        
+        if invalid_wallets:
+            console.print(f"[yellow]Warning: {len(invalid_wallets)} invalid addresses were ignored[/yellow]")
         
         if not wallets:
-            console.print("[yellow]No addresses provided.[/yellow]")
+            console.print("[yellow]No valid addresses provided.[/yellow]")
             return
             
         # Ask if user wants to save these for future use
@@ -203,6 +227,7 @@ def wallet_checker(export_format: str = None):
             input_file = str(save_file)
     
     elif input_method == "Import from clipboard":
+        from ...utils.common import parse_input_addresses, validate_addresses
         import pyperclip
         try:
             clipboard_text = pyperclip.paste()
@@ -211,20 +236,23 @@ def wallet_checker(export_format: str = None):
                 console.print("[yellow]Clipboard is empty.[/yellow]")
                 return
                 
-            # Extract wallet addresses from clipboard (one per line)
-            clipboard_wallets = [line.strip() for line in clipboard_text.split('\n') if line.strip()]
+            # Extract wallet addresses from clipboard (space-separated or line-separated)
+            raw_wallets = parse_input_addresses(clipboard_text)
             
             # Validate addresses
-            valid_wallets = []
-            for wallet in clipboard_wallets:
-                if len(wallet) >= 30:  # Simple validation for wallet address length
-                    valid_wallets.append(wallet)
+            valid_wallets, invalid_wallets = validate_addresses(
+                raw_wallets,
+                lambda addr: len(addr) >= 30  # Simple validation for wallet address length
+            )
             
             if not valid_wallets:
                 console.print("[yellow]No valid wallet addresses found in clipboard.[/yellow]")
                 return
+            
+            if invalid_wallets:
+                console.print(f"[yellow]Warning: {len(invalid_wallets)} invalid addresses were ignored[/yellow]")
                 
-            console.print(f"Found {len(valid_wallets)} wallet addresses in clipboard.")
+            console.print(f"Found {len(valid_wallets)} valid wallet addresses in clipboard.")
             wallets = valid_wallets
             
             # Ask if user wants to save these for future use

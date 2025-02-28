@@ -76,14 +76,31 @@ def load_config() -> Dict[str, Any]:
     # List of all modules
     modules = ["dragon", "dune", "sharp", "solana", "gmgn", "ethereum"]
     
-    # Create data module directories with input and output subdirectories
+    # Create data module directories with new organized structure
     for module in modules:
-        # Legacy support for old directory structure
-        (DATA_DIR / module).mkdir(parents=True, exist_ok=True)
-        
-        # New organized directory structure
         (INPUT_DATA_DIR / module).mkdir(parents=True, exist_ok=True)
         (OUTPUT_DATA_DIR / module).mkdir(parents=True, exist_ok=True)
+        
+    # Remove any leftover legacy directories
+    for module in modules:
+        legacy_dir = DATA_DIR / module
+        if legacy_dir.exists():
+            import shutil
+            try:
+                # Just in case there's any data left, move it to output
+                output_dir = OUTPUT_DATA_DIR / module
+                
+                # This is commented out because we don't need it anymore
+                # for item in legacy_dir.glob("*"):
+                #     if item.is_file():
+                #         shutil.copy2(item, output_dir / item.name) 
+                #     elif item.is_dir():
+                #         shutil.copytree(item, output_dir / item.name, dirs_exist_ok=True)
+                
+                # Remove the legacy directory
+                shutil.rmtree(legacy_dir)
+            except Exception as e:
+                print(f"Warning: Could not remove legacy directory {legacy_dir}: {e}")
     
     # Load environment variables
     load_dotenv(ENV_FILE)

@@ -21,12 +21,15 @@ def solana_bundle_checker():
     clear_terminal()
     print("🐲 Dragon Solana Bundle Checker")
     
-    # Prompt for contract address
+    # Import NoTruncationText for better display
+    from ...utils.common import NoTruncationText
+    
+    # Prompt for contract address(es)
     questions = [
-        inquirer.Text(
+        NoTruncationText(
             "contract_address",
-            message="Enter Solana contract address",
-            validate=lambda _, x: len(x) in [43, 44] if x else False
+            message="Enter Solana contract address(es) (space-separated for multiple)",
+            validate=lambda _, x: all(len(addr.strip()) in [43, 44] for addr in x.split()) if x else False
         )
     ]
     answers = inquirer.prompt(questions)
@@ -37,8 +40,43 @@ def solana_bundle_checker():
     result = adapter.solana_bundle_checker(contract_address)
     
     if result.get("success", False):
-        print(f"\n✅ Bundle checking completed for {contract_address}")
-        print(result.get("data", "No data returned"))
+        # Get formatted data for multiple tokens
+        formatted_data = result.get("data", [])
+        success_count = result.get("success_count", 0)
+        error_count = result.get("error_count", 0)
+        
+        print(f"\n✅ Bundle checking completed for {success_count} contract(s)")
+        if error_count > 0:
+            print(f"⚠️ {error_count} contract(s) had errors")
+            
+        # Show formatted data for each successful address
+        for item in formatted_data:
+            address = item.get("address", "Unknown")
+            formatted = item.get("formatted", "No data returned")
+            
+            print(f"\n📊 Results for {address}:")
+            print(formatted)
+            print("-" * 40)
+        
+        # Save all bundle check results to a unified file
+        if formatted_data:
+            from ...utils.common import save_unified_data
+            
+            output_path = save_unified_data(
+                module="dragon",
+                data_items=formatted_data,
+                filename_prefix="bundle_check",
+                data_type="output"
+            )
+            
+            print(f"\nAll bundle check results saved to: {output_path}")
+        
+        # Show errors, if any
+        errors = result.get("errors", [])
+        if errors:
+            print("\n⚠️ Errors encountered:")
+            for error in errors:
+                print(f"  - {error}")
     else:
         print(f"\n❌ Bundle checking failed: {result.get('error', 'Unknown error')}")
 

@@ -37,28 +37,45 @@ def run_query():
     adapter = _get_dune_adapter()
     
     # Get query IDs from user
-    query_ids = []
+    print("Enter query IDs (space-separated or one per line, leave empty to stop)")
+    
+    query_input = ""
     while True:
-        user_input = input("Enter a query ID (leave empty to stop): ").strip()
+        user_input = input("> ").strip()
         if user_input == "":
             break
-        elif user_input.isdigit():
-            query_ids.append(int(user_input))
-        else:
-            print("Invalid query ID. Must be a number.")
+        query_input += user_input + "\n"
+    
+    # Parse and validate query IDs
+    query_ids = []
+    if query_input.strip():
+        # Split by spaces and newlines
+        parts = []
+        for line in query_input.strip().split('\n'):
+            parts.extend(line.strip().split())
+            
+        # Convert to integers and validate
+        for part in parts:
+            if part.isdigit():
+                query_ids.append(int(part))
+            else:
+                print(f"Invalid query ID skipped: {part} (must be a number)")
     
     if not query_ids:
-        print("No query IDs entered. Exiting.")
+        print("No valid query IDs entered. Exiting.")
         return
+    
+    # Import NoTruncationText for better display
+    from ...utils.common import NoTruncationText
     
     # Get batch parameters
     questions = [
-        inquirer.Text(
+        NoTruncationText(
             "batch_size",
             message="Number of queries to run in each batch",
             default="3"
         ),
-        inquirer.Text(
+        NoTruncationText(
             "batch_delay",
             message="Delay between batches (seconds)",
             default="30"
@@ -126,8 +143,10 @@ def parse_csv():
             break
         
         # Choose column for token addresses
+        from ...utils.common import NoTruncationText
+        
         column_question = [
-            inquirer.Text(
+            NoTruncationText(
                 "column_index",
                 message="Column index to extract (default 2 for token_address)",
                 default="2"

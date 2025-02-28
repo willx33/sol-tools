@@ -165,7 +165,7 @@ class SolanaAdapter:
         if not self._validate_solana_address(token_address):
             return {
                 "success": False,
-                "error": "Invalid Solana token address"
+                "error": f"Invalid Solana token address: {token_address}"
             }
             
         # This is a stub implementation - in a real implementation,
@@ -175,11 +175,23 @@ class SolanaAdapter:
         self.logger.info(f"Alert threshold: ${min_amount:.2f}")
         
         # Simulated events for demonstration
-        events = [
-            {"timestamp": datetime.now().strftime("%H:%M:%S"), "amount": 1500.0},
-            {"timestamp": datetime.now().strftime("%H:%M:%S"), "amount": 800.0},
-            {"timestamp": datetime.now().strftime("%H:%M:%S"), "amount": 2500.0},
-        ]
+        # Generate different events based on the token address to show variety for multiple tokens
+        import hashlib
+        
+        # Use hash of token address to deterministically generate different events
+        token_hash = int(hashlib.md5(token_address.encode()).hexdigest(), 16) % 10000
+        base_amount = 500.0 + (token_hash % 2000)
+        num_events = 1 + (token_hash % 4)  # 1-4 events
+        
+        events = []
+        for i in range(num_events):
+            # Create a transaction amount based on token hash
+            amount = base_amount * (1 + (i * 0.2)) 
+            events.append({
+                "timestamp": datetime.now().strftime("%H:%M:%S"),
+                "amount": amount,
+                "token": token_address
+            })
         
         return {
             "success": True,

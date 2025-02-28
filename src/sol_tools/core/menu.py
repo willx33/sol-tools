@@ -77,25 +77,25 @@ def create_main_menu(handlers: Dict[str, Callable]) -> List[MenuOption]:
     solana_menu = [
         # Core Solana tools
         MenuOption("Token Watcher", handlers.get('solana_token_monitor'), 
-                  description="Monitors token transactions. Saves to data/solana/monitor/."),
+                  description="Monitors token transactions. Saves to data/output-data/solana/monitor/."),
         MenuOption("Wallet Watcher", handlers.get('solana_wallet_monitor'),
-                  description="Tracks wallet activity. Uses data/solana/wallets/monitor-wallets.txt."),
+                  description="Tracks wallet activity. Uses data/input-data/solana/wallets/monitor-wallets.txt."),
         MenuOption("TG Data Extractor", handlers.get('solana_telegram_scraper'),
-                  description="Extracts data from Telegram. Saves to data/solana/telegram/."),
+                  description="Extracts data from Telegram. Saves to data/output-data/solana/telegram/."),
         
         # Dragon Solana tools
         MenuOption("Bundle Tracker - Dragon", handlers.get('dragon_solana_bundle'),
                   description="Finds bundled buys. Input: contract address."),
         MenuOption("Wallet Profiler - Dragon", handlers.get('dragon_solana_wallet'),
-                  description="PnL analysis from wallet list. Uses data/dragon/Solana/BulkWallet/."),
+                  description="PnL analysis from wallet list. Uses data/input-data/dragon/Solana/BulkWallet/."),
         MenuOption("Top Trader Finder - Dragon", handlers.get('dragon_solana_traders'),
-                  description="Finds best traders by token. Output: data/dragon/Solana/TopTraders/."),
+                  description="Finds best traders by token. Output: data/output-data/dragon/Solana/TopTraders/."),
         MenuOption("TX Scanner - Dragon", handlers.get('dragon_solana_scan'),
-                  description="Gets all token transactions. Output: data/dragon/Solana/ScanTx/."),
+                  description="Gets all token transactions. Output: data/output-data/dragon/Solana/ScanTx/."),
         MenuOption("Copycat Finder - Dragon", handlers.get('dragon_solana_copy'),
                   description="Finds copycat wallets. Input: wallet address to analyze."),
         MenuOption("Whale Tracker - Dragon", handlers.get('dragon_solana_holders'),
-                  description="Lists major token holders. Output: data/dragon/Solana/TopHolders/."),
+                  description="Lists major token holders. Output: data/output-data/dragon/Solana/TopHolders/."),
         MenuOption("Early Investor Finder - Dragon", handlers.get('dragon_solana_buyers'),
                   description="Finds first buyers for token. Input: contract address."),
         
@@ -147,7 +147,7 @@ def create_main_menu(handlers: Dict[str, Callable]) -> List[MenuOption]:
         MenuOption("CSV Combiner", children=csv_combiner_submenu,
                   description="Combines CSV files with advanced options and detailed reporting."),
         MenuOption("Profit Filter", handlers.get('sharp_pnl_checker'),
-                  description="Filters CSV data by profit metrics. Uses data/sharp/pnl/."),
+                  description="Filters CSV data by profit metrics. Uses data/input-data/sharp/pnl/."),
         MenuOption("Back", None)
     ]
     
@@ -155,22 +155,22 @@ def create_main_menu(handlers: Dict[str, Callable]) -> List[MenuOption]:
     # Dune Analytics tools
     dune_menu = [
         MenuOption("Query Runner", handlers.get('dune_query'),
-                  description="Runs Dune queries by ID. Output: data/dune/csv/."),
+                  description="Runs Dune queries by ID. Output: data/output-data/dune/csv/."),
         MenuOption("Address Extractor", handlers.get('dune_parse'),
-                  description="Extracts addresses from CSV. Input: data/dune/csv/, output: parsed/."),
+                  description="Extracts addresses from CSV. Input: data/input-data/dune/csv/, output: output-data/dune/parsed/."),
         MenuOption("Back", None)
     ]
     
     # GMGN tools
     gmgn_menu = [
         MenuOption("New Tokens", handlers.get('dragon_gmgn_new'),
-                  description="Gets new listings from GMGN. Output: data/dragon/GMGN/."),
+                  description="Gets new listings from GMGN. Output: data/output-data/dragon/GMGN/."),
         MenuOption("Completing Tokens", handlers.get('dragon_gmgn_completing'),
-                  description="Gets completing tokens from GMGN. Output: data/dragon/GMGN/."),
+                  description="Gets completing tokens from GMGN. Output: data/output-data/dragon/GMGN/."),
         MenuOption("Soaring Tokens", handlers.get('dragon_gmgn_soaring'),
-                  description="Gets trending tokens from GMGN. Output: data/dragon/GMGN/."),
+                  description="Gets trending tokens from GMGN. Output: data/output-data/dragon/GMGN/."),
         MenuOption("Bonded Tokens", handlers.get('dragon_gmgn_bonded'),
-                  description="Gets bonded tokens from GMGN. Output: data/dragon/GMGN/."),
+                  description="Gets bonded tokens from GMGN. Output: data/output-data/dragon/GMGN/."),
         MenuOption("Market Cap Data", handlers.get('gmgn_mcap_data'),
                   description="Fetches market cap data for Solana tokens. Output: data/output-data/gmgn/."),
         MenuOption("Back", None)
@@ -187,13 +187,13 @@ def create_main_menu(handlers: Dict[str, Callable]) -> List[MenuOption]:
     # Ethereum Tools
     eth_menu = [
         MenuOption("Wallet Profiler - Dragon", handlers.get('dragon_eth_wallet'),
-                  description="Analyzes ETH wallet performance. Uses data/dragon/Ethereum/."),
+                  description="Analyzes ETH wallet performance. Uses data/input-data/dragon/Ethereum/."),
         MenuOption("Top Trader Finder - Dragon", handlers.get('dragon_eth_traders'),
-                  description="Finds ETH top traders. Output: data/dragon/Ethereum/TopTraders/."),
+                  description="Finds ETH top traders. Output: data/output-data/dragon/Ethereum/TopTraders/."),
         MenuOption("TX Scanner - Dragon", handlers.get('dragon_eth_scan'),
-                  description="Gets ETH token transactions. Output: data/dragon/Ethereum/ScanTx/."),
+                  description="Gets ETH token transactions. Output: data/output-data/dragon/Ethereum/ScanTx/."),
         MenuOption("Time-Based TX Finder - Dragon", handlers.get('dragon_eth_timestamp'),
-                  description="Finds ETH txs by time range. Output: data/dragon/Ethereum/Timestamp/."),
+                  description="Finds ETH txs by time range. Output: data/output-data/dragon/Ethereum/Timestamp/."),
         MenuOption("Back", None)
     ]
     
@@ -209,7 +209,7 @@ def create_main_menu(handlers: Dict[str, Callable]) -> List[MenuOption]:
         MenuOption("Edit Environment Variables", edit_env_variables,
                   description="Sets API keys in .env file at project root."),
         MenuOption("Clear Cache", handlers.get('utils_clear_cache'),
-                  description="Cleans cache directory at data/cache/."),
+                  description="Cleans cache directory."),
         MenuOption("Test Telegram", handlers.get('utils_test_telegram'),
                   description="Verifies Telegram API connection with test message."),
         MenuOption("Back", None)

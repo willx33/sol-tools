@@ -29,14 +29,17 @@ def token_monitor():
         print("Please set them in the .env file before using this feature.")
         return
     
+    # Import custom NoTruncationText for better display
+    from ...utils.common import NoTruncationText
+    
     # Input for token address
     questions = [
-        inquirer.Text(
+        NoTruncationText(
             "token_address",
-            message="Enter Solana token address to monitor",
-            validate=lambda _, x: len(x) == 44 if x else False
+            message="Enter Solana token address to monitor (space-separated for multiple)",
+            validate=lambda _, x: all(len(addr.strip()) == 44 for addr in x.split()) if x else False
         ),
-        inquirer.Text(
+        NoTruncationText(
             "min_amount",
             message="Minimum transaction amount to alert (in USD)",
             default="1000"
@@ -44,7 +47,10 @@ def token_monitor():
     ]
     answers = inquirer.prompt(questions)
     
-    token_address = answers["token_address"]
+    # Parse token addresses
+    from ...utils.common import parse_input_addresses
+    token_addresses = parse_input_addresses(answers["token_address"])
+        
     try:
         min_amount = float(answers["min_amount"])
     except ValueError:
@@ -56,23 +62,72 @@ def token_monitor():
     adapter = SolanaAdapter(data_dir)
     
     # Start monitoring
-    print(f"\n🔎 Monitoring transactions for token: {token_address}")
+    print(f"\n🔎 Monitoring transactions for {len(token_addresses)} tokens")
     print(f"🔔 Will alert for transactions >= ${min_amount:.2f}")
     print("\nPress Ctrl+C to stop monitoring...\n")
     
     try:
-        # Use the adapter to monitor the token
-        result = adapter.token_monitor(token_address, min_amount)
+        # Use the new process_multiple_inputs utility
+        from ...utils.common import process_multiple_inputs
         
-        if result.get("success", False):
-            events = result.get("events", [])
-            for event in events:
-                print(f"⚡ New transaction detected: ${event['amount']:.2f} at {event['timestamp']}")
+        # Define a processor function that will be called for each token
+        def process_token(token_address):
+            return adapter.token_monitor(token_address, min_amount)
+        
+        # Process all tokens
+        results = process_multiple_inputs(
+            token_addresses,
+            process_token,
+            description="token",
+            show_progress=True
+        )
+        
+        # Display summary and transaction details
+        all_results = results.get("all_results", [])
+        total_events = 0
+        processed_results = []
+        
+        # Count and display all events above threshold
+        for result in all_results:
+            if result.get("success", False):
+                events = result.get("events", [])
+                total_events += len(events)
+                
+                token = result.get("token_address", "Unknown token")
+                for event in events:
+                    print(f"⚡ Token {token}: ${event['amount']:.2f} at {event['timestamp']}")
+                
+                # Add this result to our list for saving
+                processed_results.append({
+                    "token_address": token,
+                    "threshold": min_amount,
+                    "timestamp": datetime.now().isoformat(),
+                    "events": events
+                })
+        
+        # Save all results to a unified file
+        if processed_results:
+            from ...utils.common import save_unified_data
             
-            print(f"\n✅ Monitoring complete. Detected {len(events)} transactions above threshold.")
-        else:
-            print(f"\n❌ Monitoring failed: {result.get('error', 'Unknown error')}")
+            output_path = save_unified_data(
+                module="solana",
+                data_items=processed_results,
+                filename_prefix="token_monitoring",
+                data_type="output"
+            )
+            
+            print(f"\nAll monitoring results saved to: {output_path}")
         
+        # Summary
+        print(f"\n✅ Monitoring complete. Successfully processed {results['success_count']}/{results['total_processed']} tokens.")
+        print(f"Detected {total_events} transactions above threshold.")
+        
+        # Show any errors
+        if results.get("errors"):
+            print("\n⚠️ Errors encountered:")
+            for error in results["errors"]:
+                print(f"  - {error}")
+            
     except KeyboardInterrupt:
         print("\n✅ Monitoring stopped by user")
 
@@ -127,16 +182,28 @@ def wallet_monitor():
     
     # If no wallets from file or user chose not to use them
     if not wallets:
-        wallets = []
-        print("\nEnter wallet addresses to monitor (one per line, empty line to finish):")
+        from ...utils.common import parse_input_addresses, validate_addresses
+        
+        # Ask for wallet addresses
+        print("\nEnter wallet addresses to monitor (space-separated or one per line, empty line to finish):")
+        wallet_input = ""
         while True:
-            wallet = input("> ").strip()
-            if not wallet:
+            line = input("> ").strip()
+            if not line:
                 break
-            if len(wallet) == 44:
-                wallets.append(wallet)
-            else:
-                print("❌ Invalid Solana wallet address (should be 44 characters)")
+            wallet_input += line + "\n"
+        
+        # Parse and validate addresses
+        raw_wallets = parse_input_addresses(wallet_input)
+        valid_wallets, invalid_wallets = validate_addresses(
+            raw_wallets, 
+            lambda x: len(x) == 44
+        )
+        
+        if invalid_wallets:
+            print(f"❌ Ignored {len(invalid_wallets)} invalid wallet addresses")
+        
+        wallets = valid_wallets
         
         # Save wallets to file
         with open(wallet_dir / "monitor-wallets.txt", "w") as f:

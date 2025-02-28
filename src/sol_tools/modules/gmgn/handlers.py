@@ -41,56 +41,94 @@ async def fetch_mcap_data_handler():
     input_method = prompt(input_selection)['input_method']
     
     if input_method == 'saved':
-        # Look for saved input files
-        saved_inputs = list(Path(input_dir).glob("*.json"))
+        # Use our new list_saved_data function to get a nice display of saved configurations
+        from ...utils.common import list_saved_data, load_unified_data
         
-        if not saved_inputs:
+        saved_configs = list_saved_data(
+            module="gmgn", 
+            data_type="input",
+            pattern="token_configs_*.json"
+        )
+        
+        if not saved_configs:
             print("No saved inputs found. You'll need to enter new token details.")
             input_method = 'new'
         else:
-            # Sort by modification time (newest first)
-            saved_inputs.sort(key=lambda x: x.stat().st_mtime, reverse=True)
+            # Create formatted choices for display
+            choices = []
+            for config in saved_configs:
+                # Format the display string with item count and date
+                item_count = config.get("item_count", 0)
+                modified = datetime.fromisoformat(config.get("modified", "")).strftime("%Y-%m-%d %H:%M")
+                name = config.get("name", "").replace(".json", "")
+                
+                # Add item count and date to the display
+                display = f"{name} ({item_count} tokens, {modified})"
+                choices.append((display, config.get("path")))
             
-            input_choices = [f.stem for f in saved_inputs]
+            # Prompt for selection
             input_select = [
                 List('saved_input',
                      message="Select a saved input configuration:",
-                     choices=input_choices)
+                     choices=choices)
             ]
             
-            selected_input = prompt(input_select)['saved_input']
+            # Get the selected file path
+            selected_file = prompt(input_select)['saved_input']
             
-            # Load the selected input file
-            selected_file = next((f for f in saved_inputs if f.stem == selected_input), None)
-            if selected_file:
-                with open(selected_file, 'r') as f:
-                    input_data = json.load(f)
-                    token_address = input_data.get('token_address')
-                    days = input_data.get('days', 1)
+            # Load the selected file
+            config_data = load_unified_data(selected_file)
+            
+            if config_data.get("success", False):
+                # Get token addresses from the items
+                config_items = config_data.get("items", [])
+                token_addresses = [item.get('token_address') for item in config_items if item.get('token_address')]
+                
+                # Get days from the first item
+                days = config_items[0].get('days', 1) if config_items else 1
+                
+                # Format output for display
+                plural = 's' if len(token_addresses) > 1 else ''
+                token_list = ', '.join(token_addresses[:3])
+                if len(token_addresses) > 3:
+                    token_list += f" and {len(token_addresses) - 3} more"
                     
-                print(f"Loaded configuration: {token_address} for {days} day(s)")
+                print(f"Loaded configuration: {len(token_addresses)} token{plural} ({token_list}) for {days} day(s)")
             else:
+                print(f"Error loading configuration: {config_data.get('error', 'Unknown error')}")
                 # Fallback to new input if something went wrong
                 input_method = 'new'
     
     if input_method == 'default':
         # Use BONK token with 1 day as default
         token_address = "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263"  # BONK token on Solana
+        token_addresses = [token_address]
         days = 1
         print(f"Using default: BONK token ({token_address}) for 1 day")
     
     if input_method == 'new':
         # Get token address input
         default_token = "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263"  # BONK token on Solana
+        # Import centralized NoTruncationText for better display
+        from sol_tools.utils.common import NoTruncationText
+        
         token_questions = [
-            Text('token_address', 
-                 message=f"Enter token address (leave empty for default BONK token - {default_token})",
-                 default="")
+            NoTruncationText(
+                'token_address', 
+                message=f"Enter token address (space-separated for multiple, leave empty for default BONK token)",
+                default="")
         ]
         token_answer = prompt(token_questions)
         
-        token_address = token_answer['token_address'].strip() or default_token
-        print(f"Using token address: {token_address}")
+        # Parse token addresses
+        from sol_tools.utils.common import parse_input_addresses
+        token_addresses = parse_input_addresses(token_answer['token_address'])
+        
+        if not token_addresses:
+            token_addresses = [default_token]
+            print(f"Using default token address: {default_token}")
+        else:
+            print(f"Using {len(token_addresses)} token addresses")
         
         # Get time period input
         time_questions = [
@@ -131,67 +169,104 @@ async def fetch_mcap_data_handler():
         ]
         
         if prompt(save_input)['save'] == 'yes':
-            # Create a readable name for the file
-            token_short = token_address[:8] if len(token_address) > 8 else token_address
-            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-            input_filename = f"{token_short}_{days}days_{timestamp}.json"
-            input_path = os.path.join(input_dir, input_filename)
+            # Import the unified data saving function
+            from ...utils.common import save_unified_data
             
-            # Save the input configuration
-            with open(input_path, 'w') as f:
-                json.dump({
-                    'token_address': token_address,
-                    'days': days,
-                    'timestamp': timestamp
-                }, f, indent=2)
-                
+            # Create a list of input configurations
+            input_configs = [
+                {
+                    'token_address': token,
+                    'days': days
+                } for token in token_addresses
+            ]
+            
+            # Save all token configurations in a single file
+            input_path = save_unified_data(
+                module="gmgn",
+                data_items=input_configs,
+                filename_prefix=f"token_configs_{days}days",
+                data_type="input"
+            )
+            
             print(f"Input configuration saved to: {input_path}")
     
-    print(f"\nFetching market cap data for the past {days} day(s)...")
+    print(f"\nFetching market cap data for the past {days} day(s) for {len(token_addresses)} tokens...")
     
     start_timestamp = datetime.now() - timedelta(days=days)
+    results = {}
     
-    # Fetch data
-    try:
-        candles = await fetch_token_mcaps_async(token_address, start_timestamp)
+    # Fetch data for each token
+    all_results = []
+    for idx, token_address in enumerate(token_addresses):
+        print(f"\nProcessing token {idx+1}/{len(token_addresses)}: {token_address}")
         
-        # Save results to JSON file
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        token_short = token_address[:8] if len(token_address) > 8 else token_address
-        output_filename = f"{token_short}_{days}days_{timestamp}.json"
-        output_path = os.path.join(output_dir, output_filename)
+        try:
+            # Fetch data for this token
+            candles = await fetch_token_mcaps_async(token_address, start_timestamp)
+            results[token_address] = candles
+            
+            # Create a structured result object
+            result_item = {
+                "token_address": token_address,
+                "days": days,
+                "timestamp": datetime.now().isoformat(),
+                "candle_count": len(candles),
+                "data": candles
+            }
+            all_results.append(result_item)
+            
+            print(f"✅ Successfully fetched {len(candles)} candles")
+            
+        except Exception as e:
+            logger.error(f"Error fetching market cap data for {token_address}: {e}")
+            print(f"❌ Error processing {token_address}: {e}")
+    
+    # Save unified output data if we have results
+    if all_results:
+        from ...utils.common import save_unified_data
         
-        with open(output_path, 'w') as f:
-            json.dump(candles, f, indent=2)
+        # Save all the results in a single file
+        output_path = save_unified_data(
+            module="gmgn",
+            data_items=all_results,
+            filename_prefix=f"mcap_data_{days}days",
+            data_type="output"
+        )
         
-        print(f"\nSuccessfully fetched {len(candles)} candles")
-        print(f"Data saved to: {output_path}")
-        
+        print(f"\nData for all tokens saved to: {output_path}")
+    
+    # Overall summary
+    print(f"\n✨ Finished processing {len(results)}/{len(token_addresses)} tokens successfully.")
+    
+    # Only show sample data if at least one token was processed successfully
+    if results:
         # Ask if user wants to see the data
         view_questions = [
             List('view_data',
                  message="Do you want to see a sample of the data?",
                  choices=[
                      ('No', 'no'),
-                     ('Yes (first 5 records)', 'sample'),
+                     ('Yes (for each token)', 'sample'),
                      ('Yes (all records)', 'all')
                  ],
                  default='no')
         ]
         view_answer = prompt(view_questions)
         
-        if view_answer['view_data'] == 'sample':
-            print("\nSample of fetched data (first 5 records):")
-            for candle in candles[:5]:
-                print(json.dumps(candle, indent=2))
-        elif view_answer['view_data'] == 'all':
-            print("\nAll fetched data:")
-            for candle in candles:
-                print(json.dumps(candle, indent=2))
-    
-    except Exception as e:
-        logger.error(f"Error fetching market cap data: {e}")
-        print(f"Error: {e}")
+        if view_answer['view_data'] in ['sample', 'all']:
+            for token, candles in results.items():
+                print(f"\n📊 Data for token: {token}")
+                if view_answer['view_data'] == 'sample':
+                    sample_size = min(5, len(candles))
+                    print(f"Sample of fetched data (first {sample_size} records):")
+                    for candle in candles[:sample_size]:
+                        print(json.dumps(candle, indent=2))
+                else:  # 'all'
+                    print("All fetched data:")
+                    for candle in candles:
+                        print(json.dumps(candle, indent=2))
+    else:
+        print("No data was successfully fetched for any token.")
     
     input("\nPress Enter to return to menu...")
 

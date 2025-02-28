@@ -19,6 +19,142 @@ from ..core.config import get_env_var, ROOT_DIR, DATA_DIR, CACHE_DIR
 
 console = Console()
 
+# Import inquirer classes
+try:
+    from inquirer import Text as InquirerText
+    
+    import time
+    
+    # Create a custom Text class that doesn't truncate long messages and fixes paste issues
+    class NoTruncationText(InquirerText):
+        """
+        Custom text input that doesn't truncate prompts.
+        Use this instead of inquirer.Text to prevent ellipsis (...) truncation.
+        Also fixes paste issues by preventing render flickering during paste.
+        """
+        def __init__(self, *args, **kwargs):
+            # Initialize parent class
+            super().__init__(*args, **kwargs)
+            
+            # Paste detection and throttling
+            self._last_input = None
+            self._last_render_time = 0
+            self._input_change_count = 0
+            self._in_paste_mode = False
+            self._paste_start_time = 0
+            self._render_delay = 0.1  # seconds between renders during paste
+        
+        def get_message(self):
+            # Get the original message without truncation
+            message = super().get_message()
+            return message
+        
+        def _detect_paste_operation(self, current_input):
+            """Detect if we're in the middle of a paste operation"""
+            current_time = time.time()
+            
+            # If input changed, track it
+            if current_input != self._last_input:
+                self._last_input = current_input
+                
+                # Count rapid changes as potential paste operation
+                if current_time - self._last_render_time < 0.05:  # Changes faster than 50ms
+                    self._input_change_count += 1
+                else:
+                    self._input_change_count = 0
+                
+                # If we see multiple rapid changes, enter paste mode
+                if self._input_change_count >= 2 and not self._in_paste_mode:
+                    self._in_paste_mode = True
+                    self._paste_start_time = current_time
+                    
+            # Exit paste mode after a delay with no changes
+            elif self._in_paste_mode and (current_time - self._last_render_time > 0.3):
+                self._in_paste_mode = False
+            
+            return self._in_paste_mode
+            
+        def render(self, render_input=None):
+            """
+            Override render to completely prevent render flicker during paste operations
+            """
+            current_time = time.time()
+            
+            # Update timing tracking for paste detection
+            elapsed = current_time - self._last_render_time
+            
+            # Detect paste operations
+            in_paste = self._detect_paste_operation(render_input)
+            
+            # During paste, throttle rendering to prevent screen flicker
+            if in_paste:
+                # During paste, only render occasionally
+                if elapsed < self._render_delay:
+                    # Skip most renders during paste
+                    return ""
+            
+            # Update timing for next call
+            self._last_render_time = current_time
+            
+            # For non-paste, delegate to normal rendering
+            return super().render(render_input)
+        
+        def render_final_message(self, value, **kwargs):
+            """Show the final message after input is complete"""
+            message = self.get_message()
+            return message + ': ' + value
+        
+except ImportError:
+    # Fallback if inquirer isn't available
+    class NoTruncationText:
+        """Fallback if inquirer isn't available."""
+        pass
+
+
+def parse_input_addresses(input_value: str) -> List[str]:
+    """
+    Parse space-separated or line-separated addresses into a list.
+    
+    Args:
+        input_value: String containing addresses separated by spaces or newlines
+        
+    Returns:
+        List of individual addresses
+    """
+    if not input_value:
+        return []
+    
+    # Handle both space-separated and newline-separated inputs
+    # First split by newlines, then by spaces, and flatten the result
+    addresses = []
+    for line in input_value.strip().split('\n'):
+        addresses.extend(line.strip().split())
+    
+    return [addr.strip() for addr in addresses if addr.strip()]
+
+
+def validate_addresses(addresses: List[str], validator_func: Callable[[str], bool]) -> Tuple[List[str], List[str]]:
+    """
+    Validate a list of addresses using the provided validator function.
+    
+    Args:
+        addresses: List of addresses to validate
+        validator_func: Function that validates a single address
+        
+    Returns:
+        Tuple of (valid_addresses, invalid_addresses)
+    """
+    valid = []
+    invalid = []
+    
+    for addr in addresses:
+        if validator_func(addr):
+            valid.append(addr)
+        else:
+            invalid.append(addr)
+            
+    return valid, invalid
+
 
 class ProgressManager:
     """Enhanced progress tracking system with ETA support."""
@@ -417,26 +553,24 @@ def test_telegram():
         console.print(f"[red]❌ Error sending Telegram message: {e}[/red]")
 
 
-def ensure_data_dir(module: str, subdir: Optional[str] = None, data_type: str = "legacy") -> Path:
+def ensure_data_dir(module: str, subdir: Optional[str] = None, data_type: str = "output") -> Path:
     """
     Ensure that a data directory exists for a module and return its path.
     
     Args:
         module: The module name (dragon, dune, sharp, solana, gmgn)
         subdir: Optional subdirectory within the module
-        data_type: Type of data directory ("input", "output", or "legacy")
+        data_type: Type of data directory ("input" or "output")
         
     Returns:
         Path object to the directory
     """
-    from ..core.config import DATA_DIR, INPUT_DATA_DIR, OUTPUT_DATA_DIR
+    from ..core.config import INPUT_DATA_DIR, OUTPUT_DATA_DIR
     
     if data_type.lower() == "input":
         base_dir = INPUT_DATA_DIR
-    elif data_type.lower() == "output":
+    else:  # Default to output for any other value
         base_dir = OUTPUT_DATA_DIR
-    else:  # legacy or any other value will use the old structure
-        base_dir = DATA_DIR
     
     if subdir:
         directory = base_dir / module / subdir
@@ -445,6 +579,244 @@ def ensure_data_dir(module: str, subdir: Optional[str] = None, data_type: str = 
         
     directory.mkdir(parents=True, exist_ok=True)
     return directory
+
+
+def save_unified_data(module: str, 
+                    data_items: List[Dict[str, Any]], 
+                    filename_prefix: str,
+                    data_type: str = "output",
+                    subdir: Optional[str] = None,
+                    include_timestamp: bool = True,
+                    pretty_print: bool = True) -> str:
+    """
+    Save multiple data items into a single unified JSON file.
+    
+    Args:
+        module: The module name (dragon, dune, sharp, solana, gmgn)
+        data_items: List of data items to save
+        filename_prefix: Prefix for the output filename
+        data_type: Type of data ("input" or "output")
+        subdir: Optional subdirectory within the module
+        include_timestamp: Whether to include timestamp in the filename
+        pretty_print: Whether to format the JSON with indentation
+        
+    Returns:
+        Path to the saved file
+    """
+    # Get the directory
+    directory = ensure_data_dir(module, subdir, data_type)
+    
+    # Create a filename with timestamp if requested
+    if include_timestamp:
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        filename = f"{filename_prefix}_{timestamp}.json"
+    else:
+        filename = f"{filename_prefix}.json"
+    
+    # Full path to the output file
+    output_path = directory / filename
+    
+    # The structure to save
+    data_bundle = {
+        "metadata": {
+            "module": module,
+            "created_at": datetime.now().isoformat(),
+            "item_count": len(data_items),
+            "type": data_type
+        },
+        "items": data_items
+    }
+    
+    # Save the data
+    with open(output_path, 'w') as f:
+        indent = 2 if pretty_print else None
+        json.dump(data_bundle, f, indent=indent)
+    
+    return str(output_path)
+
+
+def load_unified_data(file_path: Union[str, Path]) -> Dict[str, Any]:
+    """
+    Load data from a unified JSON file.
+    
+    Args:
+        file_path: Path to the JSON file
+        
+    Returns:
+        Dictionary with the loaded data
+    """
+    file_path = Path(file_path)
+    
+    try:
+        if not file_path.exists():
+            return {
+                "success": False,
+                "error": f"File not found: {file_path}"
+            }
+            
+        with open(file_path, 'r') as f:
+            data = json.load(f)
+            
+        # Check if this is a unified format file
+        if 'metadata' in data and 'items' in data:
+            return {
+                "success": True,
+                "metadata": data['metadata'],
+                "items": data['items'],
+                "item_count": len(data['items'])
+            }
+        else:
+            # Handle older format files
+            return {
+                "success": True,
+                "metadata": {
+                    "created_at": datetime.now().isoformat(),
+                    "item_count": 1,
+                    "type": "legacy"
+                },
+                "items": [data],  # Wrap the data in a list
+                "item_count": 1
+            }
+            
+    except json.JSONDecodeError:
+        return {
+            "success": False,
+            "error": f"Invalid JSON in file: {file_path}"
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": f"Error loading file: {e}"
+        }
+
+
+def list_saved_data(module: str, 
+                    data_type: str = "output", 
+                    subdir: Optional[str] = None, 
+                    pattern: str = "*.json") -> List[Dict[str, Any]]:
+    """
+    List all saved data files for a module.
+    
+    Args:
+        module: The module name (dragon, dune, sharp, solana, gmgn)
+        data_type: Type of data directory ("input" or "output")
+        subdir: Optional subdirectory within the module
+        pattern: File pattern to match
+        
+    Returns:
+        List of dictionaries with file information
+    """
+    # Get the directory
+    directory = ensure_data_dir(module, subdir, data_type)
+    
+    # Find all matching files
+    files = list(directory.glob(pattern))
+    
+    # Sort by modification time (newest first)
+    files.sort(key=lambda x: x.stat().st_mtime, reverse=True)
+    
+    # Create file information
+    file_info = []
+    for file in files:
+        # Try to load metadata
+        try:
+            with open(file, 'r') as f:
+                data = json.load(f)
+                
+            if 'metadata' in data:
+                metadata = data['metadata']
+                item_count = metadata.get('item_count', 0)
+            else:
+                metadata = {"type": "legacy"}
+                item_count = 1
+                
+            file_info.append({
+                "path": str(file),
+                "name": file.name,
+                "stem": file.stem,
+                "size": file.stat().st_size,
+                "modified": datetime.fromtimestamp(file.stat().st_mtime).isoformat(),
+                "metadata": metadata,
+                "item_count": item_count
+            })
+        except Exception:
+            # If we can't load metadata, just include basic file info
+            file_info.append({
+                "path": str(file),
+                "name": file.name,
+                "stem": file.stem,
+                "size": file.stat().st_size,
+                "modified": datetime.fromtimestamp(file.stat().st_mtime).isoformat(),
+                "metadata": {"type": "unknown"}
+            })
+    
+    return file_info
+
+
+
+
+def process_multiple_inputs(inputs: List[str], 
+                        processor_func: Callable[[str], Dict[str, Any]], 
+                        description: str = "item",
+                        show_progress: bool = True) -> Dict[str, Any]:
+    """
+    Process multiple inputs using the provided processor function.
+    This function handles iterating over inputs, tracking progress, and aggregating results.
+    
+    Args:
+        inputs: List of input strings to process
+        processor_func: Function that processes a single input and returns a dict
+        description: Description of the items being processed (for progress display)
+        show_progress: Whether to show progress information
+        
+    Returns:
+        Dictionary with aggregated results and statistics
+    """
+    if not inputs:
+        return {
+            "success": False,
+            "error": f"No {description} inputs provided"
+        }
+    
+    all_results = []
+    errors = []
+    success_count = 0
+    
+    if show_progress:
+        console.print(f"\nProcessing {len(inputs)} {description}(s)...\n")
+    
+    for idx, input_value in enumerate(inputs):
+        if show_progress:
+            console.print(f"[bold cyan]Processing {description} {idx+1}/{len(inputs)}: {input_value}[/bold cyan]")
+        
+        try:
+            result = processor_func(input_value)
+            all_results.append(result)
+            
+            if result.get("success", False):
+                success_count += 1
+                if show_progress:
+                    console.print(f"[green]✓ Successfully processed {description}[/green]")
+            else:
+                error_msg = result.get("error", f"Unknown error processing {description}")
+                errors.append(f"Error processing {input_value}: {error_msg}")
+                if show_progress:
+                    console.print(f"[red]✗ Failed to process {description}: {error_msg}[/red]")
+        
+        except Exception as e:
+            errors.append(f"Exception processing {input_value}: {str(e)}")
+            if show_progress:
+                console.print(f"[red]✗ Exception during processing: {str(e)}[/red]")
+    
+    # Compile final results
+    return {
+        "success": success_count > 0,
+        "all_results": all_results,
+        "success_count": success_count,
+        "error_count": len(inputs) - success_count,
+        "errors": errors if errors else None,
+        "total_processed": len(inputs)
+    }
 
 
 def check_proxy_file(proxy_path: Optional[str] = None) -> List[str]:

@@ -36,7 +36,8 @@ class DragonAdapter:
         Args:
             data_dir: Path to the data directory for storing Dragon outputs
         """
-        self.data_dir = Path(data_dir)
+        from ...core.config import OUTPUT_DATA_DIR
+        self.data_dir = Path(data_dir) if data_dir else OUTPUT_DATA_DIR
         self.dragon_data_dir = self.data_dir / "dragon"
         
         # Create necessary subdirectories
@@ -165,33 +166,83 @@ class DragonAdapter:
         return len(address) in [40, 41, 42]
     
     # Solana implementations
-    def solana_bundle_checker(self, contract_address: str) -> Dict[str, Any]:
+    def solana_bundle_checker(self, contract_address: Union[str, List[str]]) -> Dict[str, Any]:
         """
         Check for bundled transactions (multiple buys in one tx).
         
         Args:
-            contract_address: Solana token contract address
+            contract_address: Solana token contract address or list of addresses
             
         Returns:
             Dictionary with transaction data or error information
         """
         if not DRAGON_IMPORTS_SUCCESS:
             return {"success": False, "error": "Dragon modules not available"}
+        
+        # Convert to list if it's a string
+        if isinstance(contract_address, str):
+            # Support space-separated addresses in a single string
+            from ...utils.common import parse_input_addresses
+            addresses = parse_input_addresses(contract_address)
+        else:
+            addresses = contract_address
             
-        if not self.validate_solana_address(contract_address):
-            return {"success": False, "error": "Invalid Solana contract address"}
+        if not addresses:
+            return {"success": False, "error": "No valid contract address provided"}
             
-        try:
-            self.ensure_dragon_paths()
-            tx_hashes = self.bundle.teamTrades(contract_address)
-            data = self.bundle.checkBundle(tx_hashes[0], tx_hashes[1])
-            formatted = self.bundle.prettyPrint(data, contract_address)
-            return {"success": True, "data": formatted}
-        except Exception as e:
-            return {"success": False, "error": str(e)}
+        # Import and use the new process_multiple_inputs utility for consistent handling
+        from ...utils.common import process_multiple_inputs
+        
+        # Define a processor function for each address
+        def process_contract(address):
+            if not self.validate_solana_address(address):
+                return {
+                    "success": False,
+                    "error": f"Invalid Solana contract address: {address}"
+                }
+                
+            try:
+                self.ensure_dragon_paths()
+                tx_hashes = self.bundle.teamTrades(address)
+                data = self.bundle.checkBundle(tx_hashes[0], tx_hashes[1])
+                formatted = self.bundle.prettyPrint(data, address)
+                return {
+                    "success": True,
+                    "address": address,
+                    "data": data,
+                    "formatted": formatted
+                }
+            except Exception as e:
+                return {
+                    "success": False,
+                    "error": str(e),
+                    "address": address
+                }
+                
+        # Process all addresses with the utility
+        results = process_multiple_inputs(
+            addresses,
+            process_contract,
+            description="contract",
+            show_progress=False  # Don't show progress here; handlers will do this
+        )
+        
+        # Format the return value
+        all_formatted = []
+        for result in results.get("all_results", []):
+            if result.get("success", False):
+                all_formatted.append({
+                    "address": result.get("address", "Unknown"),
+                    "formatted": result.get("formatted", "No data")
+                })
+        
+        # Add the formatted data to the results
+        results["data"] = all_formatted
+        
+        return results
     
     def solana_wallet_checker(self, 
-                             wallets: List[str], 
+                             wallets: Union[str, List[str]], 
                              threads: Optional[int] = None,
                              skip_wallets: bool = False, 
                              use_proxies: bool = False) -> Dict[str, Any]:
@@ -199,7 +250,7 @@ class DragonAdapter:
         Analyze PnL and win rates for multiple wallets.
         
         Args:
-            wallets: List of wallet addresses to check
+            wallets: List of wallet addresses or space-separated string of addresses
             threads: Number of threads to use for processing
             skip_wallets: Skip wallets with no buys in last 30 days
             use_proxies: Use proxies for API requests
@@ -210,8 +261,26 @@ class DragonAdapter:
         if not DRAGON_IMPORTS_SUCCESS:
             return {"success": False, "error": "Dragon modules not available"}
             
-        if not wallets:
+        # Handle string input (space-separated)
+        if isinstance(wallets, str):
+            from ...utils.common import parse_input_addresses
+            wallet_list = parse_input_addresses(wallets)
+        else:
+            wallet_list = wallets
+            
+        if not wallet_list:
             return {"success": False, "error": "No wallet addresses provided"}
+            
+        # Validate all wallets
+        from ...utils.common import validate_addresses
+        valid_wallets, invalid_wallets = validate_addresses(wallet_list, self.validate_solana_address)
+        
+        if invalid_wallets:
+            return {
+                "success": False, 
+                "error": f"Invalid wallet addresses provided: {', '.join(invalid_wallets[:5])}" + 
+                         (f" and {len(invalid_wallets) - 5} more" if len(invalid_wallets) > 5 else "")
+            }
             
         try:
             self.ensure_dragon_paths()
@@ -222,7 +291,7 @@ class DragonAdapter:
                 return {"success": False, "error": "Proxy file empty or not found"}
                 
             data = self.wallet_checker.fetchWalletData(
-                wallets, 
+                valid_wallets, 
                 threads=threads,
                 skipWallets=skip_wallets,
                 useProxies=use_proxies
