@@ -33,6 +33,14 @@ DRAGON_PATH = Path(__file__).parents[4] / "Dragon"
 if str(DRAGON_PATH) not in sys.path:
     sys.path.append(str(DRAGON_PATH))
 
+# Create a directory if it doesn't exist to help with fallback operations
+if not DRAGON_PATH.exists():
+    try:
+        DRAGON_PATH.mkdir(parents=True, exist_ok=True)
+        logger.info(f"Created Dragon directory: {DRAGON_PATH}")
+    except Exception as e:
+        logger.warning(f"Could not create Dragon directory: {e}")
+
 # Try to import Dragon modules, but implement our own if they fail
 try:
     from Dragon import (
@@ -42,7 +50,7 @@ try:
         EthTimestampTransactions, EthScanAllTx, GMGN
     )
     DRAGON_IMPORTS_SUCCESS = True
-except ImportError as e:
+except (ImportError, ModuleNotFoundError) as e:
     logger.warning(f"Could not import Dragon modules: {e}")
     DRAGON_IMPORTS_SUCCESS = False
 
@@ -506,50 +514,66 @@ class DragonAdapter:
             except Exception as e:
                 logger.error(f"Error initializing Dragon components: {e}")
     
-    def ensure_dragon_paths(self):
-        """Create and return paths to match Dragon's expected directory structure."""
-        # Make sure the Dragon module can find its data directories
-        original_dragon_data = Path("Dragon/data")
+    def ensure_dragon_paths(self) -> bool:
+        """
+        Create and return paths to match Dragon's expected directory structure.
         
-        # Use symbolic links or copy directory structure as needed
-        if not os.path.exists(original_dragon_data):
-            os.makedirs(original_dragon_data, exist_ok=True)
+        Returns:
+            True if paths were successfully created, False otherwise
+        """
+        try:
+            # Make sure the Dragon module can find its data directories
+            original_dragon_data = DRAGON_PATH / "data"
             
-            # Create the necessary directory structure for Dragon
-            chains = {
-                "Solana": {
-                    "input": self.solana_input_dir,
-                    "output": self.solana_output_dirs
-                },
-                "Ethereum": {
-                    "input": self.ethereum_input_dir,
-                    "output": self.ethereum_output_dirs
-                },
-                "Proxies": {
-                    "input": self.proxies_dir,
-                    "output": None
-                }
-            }
-            
-            # Create the destination directories and try to link them
-            for chain, paths in chains.items():
-                dst = original_dragon_data / chain
+            # Use symbolic links or copy directory structure as needed
+            if not os.path.exists(original_dragon_data):
+                os.makedirs(original_dragon_data, exist_ok=True)
                 
-                # Create the destination chain directory if it doesn't exist
-                if not os.path.exists(dst):
-                    # Make sure directories exist
-                    os.makedirs(dst, exist_ok=True)
+                # Create the necessary directory structure for Dragon
+                chains = {
+                    "Solana": {
+                        "input": self.solana_input_dir,
+                        "output": self.solana_output_dirs
+                    },
+                    "Ethereum": {
+                        "input": self.ethereum_input_dir,
+                        "output": self.ethereum_output_dirs
+                    },
+                    "Proxies": {
+                        "input": self.proxies_dir,
+                        "output": None
+                    }
+                }
+                
+                # Create the destination directories and try to link them
+                for chain, paths in chains.items():
+                    dst = original_dragon_data / chain
                     
-                    # Try to create symlinks for input directory
-                    if paths["input"] and os.path.exists(paths["input"]):
-                        for subdir in paths["input"].glob("*"):
-                            try:
-                                dst_subdir = dst / subdir.name
-                                if not os.path.exists(dst_subdir):
-                                    os.symlink(subdir, dst_subdir)
-                            except (OSError, NotImplementedError):
-                                # Fall back to just creating the directory
-                                pass
+                    # Create the destination chain directory if it doesn't exist
+                    if not os.path.exists(dst):
+                        # Make sure directories exist
+                        os.makedirs(dst, exist_ok=True)
+                        
+                        # Try to create symlinks for input directory
+                        if paths["input"] and os.path.exists(paths["input"]):
+                            for subdir in paths["input"].glob("*"):
+                                try:
+                                    dst_subdir = dst / subdir.name
+                                    if not os.path.exists(dst_subdir):
+                                        os.symlink(subdir, dst_subdir)
+                                except (OSError, NotImplementedError):
+                                    # Fall back to just creating the directory
+                                    pass
+            
+            # Make sure the Dragon directory is in Python's module search path
+            if str(DRAGON_PATH) not in sys.path and DRAGON_PATH.exists():
+                sys.path.append(str(DRAGON_PATH))
+                logger.info(f"Added Dragon path to sys.path: {DRAGON_PATH}")
+            
+            return True
+        except Exception as e:
+            logger.error(f"Error ensuring Dragon paths: {e}")
+            return False
 
     def check_proxy_file(self, create_if_missing: bool = True) -> bool:
         """
@@ -678,7 +702,14 @@ class DragonAdapter:
             Dictionary with transaction data or error information
         """
         if not DRAGON_IMPORTS_SUCCESS:
-            return {"success": False, "error": "Dragon modules not available"}
+            logger.warning("Dragon modules not available for solana_bundle_checker")
+            try:
+                self.ensure_dragon_paths()
+                # Try one more time after ensuring paths
+                if not DRAGON_IMPORTS_SUCCESS:
+                    return {"success": False, "error": "Dragon modules not available"}
+            except Exception:
+                return {"success": False, "error": "Dragon modules not available"}
         
         # Convert to list if it's a string
         if isinstance(contract_address, str):
@@ -760,7 +791,14 @@ class DragonAdapter:
             Dictionary with wallet analysis data or error information
         """
         if not DRAGON_IMPORTS_SUCCESS:
-            return {"success": False, "error": "Dragon modules not available"}
+            logger.warning("Dragon modules not available for solana_wallet_checker")
+            try:
+                self.ensure_dragon_paths()
+                # Try one more time after ensuring paths
+                if not DRAGON_IMPORTS_SUCCESS:
+                    return {"success": False, "error": "Dragon modules not available"}
+            except Exception:
+                return {"success": False, "error": "Dragon modules not available"}
             
         # Handle string input (space-separated)
         if isinstance(wallets, str):

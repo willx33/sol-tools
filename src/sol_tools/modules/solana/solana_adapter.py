@@ -5,6 +5,7 @@ import time
 import json
 import logging
 import asyncio
+import random
 from datetime import datetime
 from typing import List, Dict, Any, Optional, Union, Callable
 from pathlib import Path
@@ -39,6 +40,26 @@ class SolanaAdapter:
         # Initialize components conditionally based on environment variables
         self._init_telegram()
         self._init_websocket()
+        
+        # Attempt to initialize Dragon-related functionality
+        self._init_dragon()
+    
+    def _init_dragon(self):
+        """Initialize Dragon functionality if available."""
+        try:
+            # Only import dragon_adapter here to prevent circular imports
+            from ..dragon.dragon_adapter import DragonAdapter, DRAGON_IMPORTS_SUCCESS
+            self.dragon = DragonAdapter(self.data_dir)
+            self.dragon_available = DRAGON_IMPORTS_SUCCESS
+            
+            # Try to ensure dragon paths if dragon modules are available
+            if self.dragon_available:
+                self.dragon.ensure_dragon_paths()
+                
+        except (ImportError, Exception) as e:
+            self.logger.warning(f"Failed to initialize Dragon: {e}")
+            self.dragon = None
+            self.dragon_available = False
     
     def _init_telegram(self) -> bool:
         """
@@ -328,3 +349,67 @@ class SolanaAdapter:
         """
         # Simple length check - could be enhanced with more validation
         return len(address) in [43, 44]
+    
+    # -------------------------------------------------------------------------
+    # Dragon-related functionality - with fallback implementations
+    # -------------------------------------------------------------------------
+    
+    def check_dragon_availability(self) -> bool:
+        """
+        Check if Dragon functionality is available.
+        
+        Returns:
+            True if Dragon modules are available, False otherwise
+        """
+        # Re-check availability as it might change if library is installed during runtime
+        try:
+            if not hasattr(self, 'dragon_available') or not self.dragon_available:
+                self._init_dragon()
+            return self.dragon_available and self.dragon is not None
+        except Exception:
+            return False
+    
+    def solana_bundle_checker(self, contract_address: Union[str, List[str]]) -> Dict[str, Any]:
+        """
+        Check for bundled transactions (multiple buys in one tx).
+        
+        Args:
+            contract_address: Solana token contract address or list of addresses
+            
+        Returns:
+            Dictionary with transaction data or error information
+        """
+        if not self.check_dragon_availability():
+            return {"success": False, "error": "Dragon modules not available"}
+        
+        try:
+            return self.dragon.solana_bundle_checker(contract_address)
+        except Exception as e:
+            self.logger.error(f"Error in solana_bundle_checker: {e}")
+            return {"success": False, "error": f"Error: {str(e)}"}
+    
+    def solana_wallet_checker(self, 
+                              wallets: Union[str, List[str]], 
+                              threads: Optional[int] = None,
+                              skip_wallets: bool = False, 
+                              use_proxies: bool = False) -> Dict[str, Any]:
+        """
+        Analyze PnL and win rates for multiple wallets.
+        
+        Args:
+            wallets: List of wallet addresses or space-separated string of addresses
+            threads: Number of threads to use for processing
+            skip_wallets: Skip wallets with no buys in last 30 days
+            use_proxies: Use proxies for API requests
+            
+        Returns:
+            Dictionary with wallet analysis data or error information
+        """
+        if not self.check_dragon_availability():
+            return {"success": False, "error": "Dragon modules not available"}
+        
+        try:
+            return self.dragon.solana_wallet_checker(wallets, threads, skip_wallets, use_proxies)
+        except Exception as e:
+            self.logger.error(f"Error in solana_wallet_checker: {e}")
+            return {"success": False, "error": f"Error: {str(e)}"}

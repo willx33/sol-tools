@@ -35,7 +35,7 @@ def create_handlers() -> Dict[str, Callable[[], Any]]:
         # Exit function
         'exit_app': exit_app,
         
-        # Dragon module handlers
+        # Dragon module handlers - from dragon/handlers.py
         'dragon_solana_bundle': dragon_handlers.solana_bundle_checker,
         'dragon_solana_wallet': dragon_handlers.solana_wallet_checker, 
         'dragon_solana_traders': dragon_handlers.solana_top_traders,
@@ -43,6 +43,15 @@ def create_handlers() -> Dict[str, Callable[[], Any]]:
         'dragon_solana_copy': dragon_handlers.solana_copy_wallet_finder,
         'dragon_solana_holders': dragon_handlers.solana_top_holders,
         'dragon_solana_buyers': dragon_handlers.solana_early_buyers,
+        
+        # Alternative Dragon handlers from solana/handlers.py - these will be used by the menu
+        'solana_dragon_bundle': solana_handlers.dragon_solana_bundle,
+        'solana_dragon_wallet': solana_handlers.dragon_solana_wallet,
+        'solana_dragon_traders': solana_handlers.dragon_solana_traders,
+        'solana_dragon_scan': solana_handlers.dragon_solana_scan,
+        'solana_dragon_copy': solana_handlers.dragon_solana_copy,
+        'solana_dragon_holders': solana_handlers.dragon_solana_holders,
+        'solana_dragon_buyers': solana_handlers.dragon_solana_buyers,
         
         'dragon_eth_wallet': dragon_handlers.eth_wallet_checker,
         'dragon_eth_traders': dragon_handlers.eth_top_traders,

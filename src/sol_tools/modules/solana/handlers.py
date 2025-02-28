@@ -11,9 +11,11 @@ import threading
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 
-from ...utils.common import clear_terminal, ensure_data_dir
+from ...utils.common import clear_terminal, ensure_data_dir, check_proxy_file
 from ...core.config import check_env_vars, get_env_var
 from .solana_adapter import SolanaAdapter
+
+# We'll check for Dragon availability through the SolanaAdapter, not directly
 
 
 def token_monitor():
@@ -338,3 +340,308 @@ def test_telegram():
     else:
         print(f"❌ Test failed: {result.get('error', 'Unknown error')}")
         print("Please check your TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID in .env file.")
+
+
+# Dragon integration handlers
+
+def dragon_solana_bundle():
+    """Check for bundled transactions (multiple buys in one tx)."""
+    clear_terminal()
+    print("🐲 Dragon Solana Bundle Checker")
+    
+    # Initialize Solana adapter (which will also try to initialize Dragon)
+    data_dir = ensure_data_dir("").parent
+    adapter = SolanaAdapter(data_dir)
+    
+    # Check for Dragon modules via adapter
+    if not adapter.check_dragon_availability():
+        print("❌ Dragon modules not available")
+        print("This functionality requires the Dragon library.")
+        print("Please check that all dependencies are installed correctly.")
+        print("Contact the administrator for installation instructions.")
+        input("\nPress Enter to continue...")
+        return
+    
+    # Import NoTruncationText and prompt_user for better display and paste handling
+    from ...utils.common import NoTruncationText, prompt_user
+    
+    # Prompt for contract address(es)
+    questions = [
+        NoTruncationText(
+            "contract_address",
+            message="Enter Solana contract address(es) (space-separated for multiple)",
+            validate=lambda _, x: all(len(addr.strip()) in [43, 44] for addr in x.split()) if x else False
+        )
+    ]
+    answers = prompt_user(questions)
+    contract_address = answers["contract_address"]
+    
+    # Use the adapter
+    data_dir = ensure_data_dir("").parent
+    adapter = SolanaAdapter(data_dir)
+    result = adapter.solana_bundle_checker(contract_address)
+    
+    if result.get("success", False):
+        # Get formatted data for multiple tokens
+        formatted_data = result.get("data", [])
+        success_count = result.get("success_count", 0)
+        error_count = result.get("error_count", 0)
+        
+        print(f"\n✅ Bundle checking completed for {success_count} contract(s)")
+        if error_count > 0:
+            print(f"⚠️ {error_count} contract(s) had errors")
+            
+        # Show formatted data for each successful address
+        for item in formatted_data:
+            address = item.get("address", "Unknown")
+            formatted = item.get("formatted", "No data returned")
+            
+            print(f"\n📊 Results for {address}:")
+            print(formatted)
+            print("-" * 40)
+        
+        # Save all bundle check results to a unified file
+        if formatted_data:
+            from ...utils.common import save_unified_data
+            
+            output_path = save_unified_data(
+                module="dragon",
+                data_items=formatted_data,
+                filename_prefix="bundle_check",
+                data_type="output"
+            )
+            
+            print(f"\nAll bundle check results saved to: {output_path}")
+        
+        # Show errors, if any
+        errors = result.get("errors", [])
+        if errors:
+            print("\n⚠️ Errors encountered:")
+            for error in errors:
+                print(f"  - {error}")
+    else:
+        print(f"\n❌ Bundle checking failed: {result.get('error', 'Unknown error')}")
+    
+    input("\nPress Enter to continue...")
+
+
+def dragon_solana_wallet():
+    """Analyze PnL and win rates for multiple wallets."""
+    clear_terminal()
+    print("🐲 Dragon Solana Wallet Checker")
+    
+    # Initialize Solana adapter (which will also try to initialize Dragon)
+    data_dir = ensure_data_dir("").parent
+    adapter = SolanaAdapter(data_dir)
+    
+    # Check for Dragon modules via adapter
+    if not adapter.check_dragon_availability():
+        print("❌ Dragon modules not available")
+        print("This functionality requires the Dragon library.")
+        print("Please check that all dependencies are installed correctly.")
+        print("Contact the administrator for installation instructions.")
+        input("\nPress Enter to continue...")
+        return
+    
+    # Setup wallet directory
+    wallet_dir = ensure_data_dir("input-data/dragon", "solana/wallet_lists")
+    
+    # Choose wallets file
+    wallets_file = wallet_dir / "wallets.txt"
+    if not os.path.exists(wallets_file):
+        # Create example file if it doesn't exist
+        os.makedirs(os.path.dirname(wallets_file), exist_ok=True)
+        with open(wallets_file, 'w') as f:
+            f.write("# Add wallet addresses here (one per line)")
+        
+    # Prompt for file path
+    questions = [
+        inquirer.Text(
+            "wallets_file",
+            message="Path to wallets file",
+            default=str(wallets_file)
+        ),
+        inquirer.Text(
+            "threads",
+            message="Number of threads",
+            default="40"
+        ),
+        inquirer.Confirm(
+            "skip_wallets",
+            message="Skip wallets with no buys in 30d?",
+            default=False
+        ),
+        inquirer.Confirm(
+            "use_proxies",
+            message="Use proxies for API requests?",
+            default=False
+        )
+    ]
+    answers = inquirer.prompt(questions)
+    
+    # Load wallets from file
+    wallets_path = answers["wallets_file"]
+    try:
+        with open(wallets_path, 'r') as f:
+            wallets = [line.strip() for line in f if line.strip() and not line.startswith('#')]
+    except Exception as e:
+        print(f"❌ Error reading wallets file: {e}")
+        input("\nPress Enter to continue...")
+        return
+    
+    if not wallets:
+        print("❌ No wallet addresses found in file.")
+        input("\nPress Enter to continue...")
+        return
+    
+    print(f"ℹ️ Loaded {len(wallets)} wallet addresses")
+    
+    # Parse thread count
+    try:
+        threads = int(answers["threads"])
+    except ValueError:
+        print("⚠️ Invalid thread count, using default 40")
+        threads = 40
+    
+    # Check proxies if requested
+    if answers["use_proxies"]:
+        proxies = check_proxy_file()
+        if not proxies:
+            print("⚠️ No proxies found. Continuing without proxies.")
+            answers["use_proxies"] = False
+    
+    # Use the adapter
+    data_dir = ensure_data_dir("").parent
+    adapter = SolanaAdapter(data_dir)
+    result = adapter.solana_wallet_checker(
+        wallets, 
+        threads=threads,
+        skip_wallets=answers["skip_wallets"],
+        use_proxies=answers["use_proxies"]
+    )
+    
+    if result.get("success", False):
+        print(f"\n✅ Wallet analysis completed")
+        if "data" in result:
+            # Handle success response with data summary
+            # In a real implementation we would display summary stats
+            print(f"Processed {len(wallets)} wallets")
+    else:
+        print(f"\n❌ Wallet analysis failed: {result.get('error', 'Unknown error')}")
+    
+    input("\nPress Enter to continue...")
+
+
+def dragon_solana_traders():
+    """Find top performing traders for specific tokens."""
+    clear_terminal()
+    print("🐲 Dragon Solana Top Traders")
+    
+    # Initialize Solana adapter (which will also try to initialize Dragon)
+    data_dir = ensure_data_dir("").parent
+    adapter = SolanaAdapter(data_dir)
+    
+    # Check for Dragon modules via adapter
+    if not adapter.check_dragon_availability():
+        print("❌ Dragon modules not available")
+        print("This functionality requires the Dragon library.")
+        print("Please check that all dependencies are installed correctly.")
+        print("Contact the administrator for installation instructions.")
+        input("\nPress Enter to continue...")
+        return
+    
+    # Similar implementation to other handlers, but focused on traders
+    print("This feature will analyze top traders for Solana tokens")
+    input("\nPress Enter to continue...")
+
+
+def dragon_solana_scan():
+    """Retrieve all transactions for a specific token."""
+    clear_terminal()
+    print("🐲 Dragon Solana Scan Transactions")
+    
+    # Initialize Solana adapter (which will also try to initialize Dragon)
+    data_dir = ensure_data_dir("").parent
+    adapter = SolanaAdapter(data_dir)
+    
+    # Check for Dragon modules via adapter
+    if not adapter.check_dragon_availability():
+        print("❌ Dragon modules not available")
+        print("This functionality requires the Dragon library.")
+        print("Please check that all dependencies are installed correctly.")
+        print("Contact the administrator for installation instructions.")
+        input("\nPress Enter to continue...")
+        return
+    
+    # Stub implementation for scanning transactions
+    print("This feature will scan all transactions for a Solana token")
+    input("\nPress Enter to continue...")
+
+
+def dragon_solana_copy():
+    """Find wallets that copy other traders."""
+    clear_terminal()
+    print("🐲 Dragon Solana Copy Wallet Finder")
+    
+    # Initialize Solana adapter (which will also try to initialize Dragon)
+    data_dir = ensure_data_dir("").parent
+    adapter = SolanaAdapter(data_dir)
+    
+    # Check for Dragon modules via adapter
+    if not adapter.check_dragon_availability():
+        print("❌ Dragon modules not available")
+        print("This functionality requires the Dragon library.")
+        print("Please check that all dependencies are installed correctly.")
+        print("Contact the administrator for installation instructions.")
+        input("\nPress Enter to continue...")
+        return
+    
+    # Stub implementation for copy wallet finder
+    print("This feature will find wallets that copy specific traders")
+    input("\nPress Enter to continue...")
+
+
+def dragon_solana_holders():
+    """Analyze top token holders' performance."""
+    clear_terminal()
+    print("🐲 Dragon Solana Top Holders")
+    
+    # Initialize Solana adapter (which will also try to initialize Dragon)
+    data_dir = ensure_data_dir("").parent
+    adapter = SolanaAdapter(data_dir)
+    
+    # Check for Dragon modules via adapter
+    if not adapter.check_dragon_availability():
+        print("❌ Dragon modules not available")
+        print("This functionality requires the Dragon library.")
+        print("Please check that all dependencies are installed correctly.")
+        print("Contact the administrator for installation instructions.")
+        input("\nPress Enter to continue...")
+        return
+    
+    # Stub implementation for top holders
+    print("This feature will analyze top token holders' performance")
+    input("\nPress Enter to continue...")
+
+
+def dragon_solana_buyers():
+    """Find early token buyers and their performance."""
+    clear_terminal()
+    print("🐲 Dragon Solana Early Buyers")
+    
+    # Initialize Solana adapter (which will also try to initialize Dragon)
+    data_dir = ensure_data_dir("").parent
+    adapter = SolanaAdapter(data_dir)
+    
+    # Check for Dragon modules via adapter
+    if not adapter.check_dragon_availability():
+        print("❌ Dragon modules not available")
+        print("This functionality requires the Dragon library.")
+        print("Please check that all dependencies are installed correctly.")
+        print("Contact the administrator for installation instructions.")
+        input("\nPress Enter to continue...")
+        return
+    
+    # Stub implementation for early buyers
+    print("This feature will find early token buyers and analyze their performance")
+    input("\nPress Enter to continue...")
