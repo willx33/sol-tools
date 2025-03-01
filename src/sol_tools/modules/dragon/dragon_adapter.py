@@ -37,14 +37,31 @@ LOGS_DIR = CACHE_DIR / "logs" / "dragon"
 LOGS_DIR.mkdir(parents=True, exist_ok=True)
 
 # Import Dragon modules
-import Dragon
-from Dragon import (
-    utils, BundleFinder, ScanAllTx, BulkWalletChecker, TopTraders,
-    TimestampTransactions, purgeFiles, CopyTradeWalletFinder, TopHolders,
-    EarlyBuyers, checkProxyFile, EthBulkWalletChecker, EthTopTraders,
-    EthTimestampTransactions, EthScanAllTx, GMGN
-)
-DRAGON_IMPORTS_SUCCESS = True
+try:
+    import Dragon
+    from Dragon import (
+        utils, BundleFinder, ScanAllTx, BulkWalletChecker, TopTraders,
+        TimestampTransactions, purgeFiles, CopyTradeWalletFinder, TopHolders,
+        EarlyBuyers, checkProxyFile, EthBulkWalletChecker, EthTopTraders,
+        EthTimestampTransactions, EthScanAllTx, GMGN
+    )
+    DRAGON_IMPORTS_SUCCESS = True
+except ImportError:
+    # Create mock Dragon modules for graceful startup failure
+    DRAGON_IMPORTS_SUCCESS = False
+    class PlaceholderClass:
+        """Placeholder for missing Dragon components."""
+        def __init__(self, *args, **kwargs):
+            pass
+        def __call__(self, *args, **kwargs):
+            return {"success": False, "error": "Dragon module not installed"}
+    
+    # Create placeholder classes 
+    Dragon = PlaceholderClass()
+    utils = BundleFinder = ScanAllTx = BulkWalletChecker = TopTraders = PlaceholderClass()
+    TimestampTransactions = purgeFiles = CopyTradeWalletFinder = PlaceholderClass()
+    TopHolders = EarlyBuyers = checkProxyFile = EthBulkWalletChecker = PlaceholderClass()
+    EthTopTraders = EthTimestampTransactions = EthScanAllTx = GMGN = PlaceholderClass()
 
 
 def save_dragon_log(category: str, data_key: str, response_data: Dict[str, Any], error: Optional[str] = None):
@@ -433,29 +450,27 @@ class DragonAdapter:
         """Initialize the Dragon adapter."""
         from ...core.config import INPUT_DATA_DIR, OUTPUT_DATA_DIR
         
-        # Setup input and output directories
-        self.output_data_dir = OUTPUT_DATA_DIR / "dragon"
-        
         # Define the new directory structure based on blockchain
         self.ethereum_input_dir = INPUT_DATA_DIR / "ethereum" / "wallet-lists"
         self.solana_input_dir = INPUT_DATA_DIR / "solana" / "wallet-lists"
         self.proxies_dir = INPUT_DATA_DIR / "proxies"
         
+        # Update output paths based on the new directory structure
         self.ethereum_output_dirs = {
-            "wallet_analysis": self.output_data_dir / "ethereum" / "wallet-analysis",
-            "top_traders": self.output_data_dir / "ethereum" / "top-traders",
-            "top_holders": self.output_data_dir / "ethereum" / "top-holders",
-            "early_buyers": self.output_data_dir / "ethereum" / "early-buyers"
+            "wallet_analysis": OUTPUT_DATA_DIR / "ethereum" / "dragon" / "wallet-analysis",
+            "top_traders": OUTPUT_DATA_DIR / "ethereum" / "dragon" / "top-traders",
+            "top_holders": OUTPUT_DATA_DIR / "ethereum" / "dragon" / "top-holders",
+            "early_buyers": OUTPUT_DATA_DIR / "ethereum" / "dragon" / "early-buyers"
         }
         
         self.solana_output_dirs = {
-            "wallet_analysis": self.output_data_dir / "solana" / "wallet-analysis",
-            "top_traders": self.output_data_dir / "solana" / "top-traders",
-            "top_holders": self.output_data_dir / "solana" / "top-holders",
-            "early_buyers": self.output_data_dir / "solana" / "early-buyers"
+            "wallet_analysis": OUTPUT_DATA_DIR / "solana" / "dragon" / "wallet-analysis",
+            "top_traders": OUTPUT_DATA_DIR / "solana" / "dragon" / "top-traders",
+            "top_holders": OUTPUT_DATA_DIR / "solana" / "dragon" / "top-holders",
+            "early_buyers": OUTPUT_DATA_DIR / "solana" / "dragon" / "early-buyers"
         }
         
-        self.token_info_dir = self.output_data_dir / "token-info"
+        self.token_info_dir = OUTPUT_DATA_DIR / "solana" / "dragon" / "token-info"
         
         # Set up threading defaults
         self.default_threads = 40
@@ -470,6 +485,10 @@ class DragonAdapter:
     
     def _init_dragon_components(self):
         """Initialize components from Dragon modules."""
+        if not DRAGON_IMPORTS_SUCCESS:
+            logger.warning("Dragon modules not available, initializing with placeholders")
+            return False
+        
         # Initialize Dragon components
         # Solana components
         self.bundle = BundleFinder()
@@ -491,22 +510,26 @@ class DragonAdapter:
         """
         Ensure proper paths for Dragon operations within the input-data/output-data structure.
         """
-        # Make sure our output directory for Dragon exists
-        self.output_data_dir.mkdir(parents=True, exist_ok=True)
-        
-        # Make sure specific input directories exist
-        self.ethereum_input_dir.mkdir(parents=True, exist_ok=True)
-        self.solana_input_dir.mkdir(parents=True, exist_ok=True)
-        self.proxies_dir.mkdir(parents=True, exist_ok=True)
-        
-        # Create the output directories
-        for dir_path in self.ethereum_output_dirs.values():
-            dir_path.mkdir(parents=True, exist_ok=True)
+        try:
+            # Make sure specific input directories exist
+            self.ethereum_input_dir.mkdir(parents=True, exist_ok=True)
+            self.solana_input_dir.mkdir(parents=True, exist_ok=True)
+            self.proxies_dir.mkdir(parents=True, exist_ok=True)
             
-        for dir_path in self.solana_output_dirs.values():
-            dir_path.mkdir(parents=True, exist_ok=True)
+            # Create the output directories
+            for dir_path in self.ethereum_output_dirs.values():
+                dir_path.mkdir(parents=True, exist_ok=True)
+                
+            for dir_path in self.solana_output_dirs.values():
+                dir_path.mkdir(parents=True, exist_ok=True)
+                
+            self.token_info_dir.mkdir(parents=True, exist_ok=True)
             
-        self.token_info_dir.mkdir(parents=True, exist_ok=True)
+            # Add a log message to help with debugging
+            logger.info("Successfully created all Dragon directories")
+            
+        except Exception as e:
+            logger.error(f"Error creating Dragon directories: {e}")
 
     def check_proxy_file(self, create_if_missing: bool = True) -> bool:
         """

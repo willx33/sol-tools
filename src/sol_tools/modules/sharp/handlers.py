@@ -55,8 +55,8 @@ def wallet_checker(export_format: str = None):
         return
     
     # Setup directories
-    sharp_dir = ensure_data_dir("sharp")
-    wallet_dir = ensure_data_dir("sharp", "wallets")
+    sharp_dir = ensure_data_dir("sharp-tools")
+    wallet_dir = ensure_data_dir("sharp-tools", "wallets")
     
     # Import custom text input for better display
     from ...utils.common import NoTruncationText
@@ -834,8 +834,8 @@ def wallet_splitter(export_format: str = None):
     console.print("Split large wallet lists into smaller chunks for APIs with size limits\n")
     
     # Setup directories
-    wallet_dir = ensure_data_dir("sharp", "wallets")
-    output_dir = ensure_data_dir("sharp", "wallets/split")
+    wallet_dir = ensure_data_dir("sharp-tools", "wallets")
+    output_dir = ensure_data_dir("sharp-tools", "wallets/split")
     
     # Initialize workflow result tracking
     workflow_result = WorkflowResult()
@@ -1326,8 +1326,8 @@ def csv_merger(export_format: str = None):
     console.print("Merge multiple CSV files into a single consolidated file\n")
     
     # Setup directories
-    unmerged_dir = ensure_data_dir("sharp", "csv/unmerged")
-    merged_dir = ensure_data_dir("sharp", "csv/merged")
+    unmerged_dir = ensure_data_dir("sharp-tools", "csv/unmerged")
+    merged_dir = ensure_data_dir("sharp-tools", "csv/merged")
     
     # Initialize workflow result tracking
     workflow_result = WorkflowResult()
@@ -1763,8 +1763,8 @@ def pnl_checker():
     print("🚧 Sharp PnL CSV Checker 🚧")
     
     # Setup directories
-    unfiltered_dir = ensure_data_dir("sharp", "csv/unfiltered")
-    filtered_dir = ensure_data_dir("sharp", "csv/filtered")
+    unfiltered_dir = ensure_data_dir("sharp-tools", "csv/unfiltered")
+    filtered_dir = ensure_data_dir("sharp-tools", "csv/filtered")
     
     # Check for CSV files
     csv_files = glob.glob(os.path.join(unfiltered_dir, '*.csv'))
@@ -1787,7 +1787,7 @@ def pnl_checker():
     selected_file = os.path.join(unfiltered_dir, answers["csv_file"])
     
     # Load or create filter config
-    config_file = ensure_data_dir("sharp") / "pnl_filter_config.json"
+    config_file = ensure_data_dir("sharp-tools") / "pnl_filter_config.json"
     filter_config = {
         "min_pnl": 0,
         "min_win_rate": 0,

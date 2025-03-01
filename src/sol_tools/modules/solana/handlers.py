@@ -141,7 +141,7 @@ def wallet_monitor():
         return
     
     # Setup directory for wallets
-    wallet_dir = ensure_data_dir("solana", "wallets")
+    wallet_dir = ensure_data_dir("solana", "wallet-data")
     
     # Import the universal file selection utility
     from ...utils.common import select_input_file
@@ -452,10 +452,11 @@ def dragon_solana_bundle():
             from ...utils.common import save_unified_data
             
             output_path = save_unified_data(
-                module="dragon",
+                module="solana/dragon",
                 data_items=formatted_data,
                 filename_prefix="bundle_check",
-                data_type="output"
+                data_type="output",
+                subdir="transaction-data"
             )
             
             print(f"\nAll bundle check results saved to: {output_path}")
@@ -619,11 +620,11 @@ def dragon_solana_wallet():
             
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
             output_file = save_unified_data(
-                module="dragon",
+                module="solana/dragon",
                 data_items=wallet_data if isinstance(wallet_data, list) else [wallet_data],
                 filename_prefix=f"wallet_analysis_{timestamp}",
                 data_type="output",
-                subdir="solana/wallet_analysis"
+                subdir="wallet-analysis"
             )
             
             # Display summary stats

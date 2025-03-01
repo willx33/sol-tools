@@ -1,1 +1,0 @@
-# Add wallet addresses here (one per line)

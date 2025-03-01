@@ -28,8 +28,10 @@ async def fetch_mcap_data_handler():
     from sol_tools.utils.common import ensure_data_dir
     
     # Set up input and output directories
-    input_dir = ensure_data_dir("gmgn", data_type="input")
-    output_dir = ensure_data_dir("gmgn", data_type="output")
+    from ...core.config import INPUT_DATA_DIR, OUTPUT_DATA_DIR
+    input_dir = INPUT_DATA_DIR / "api" / "gmgn"
+    output_dir = OUTPUT_DATA_DIR / "api" / "gmgn" / "market-cap-data"
+    output_dir.mkdir(parents=True, exist_ok=True)
     
     # Import our custom prompt function for better paste handling
     from ...utils.common import prompt_user
@@ -169,7 +171,7 @@ async def fetch_mcap_data_handler():
             
             # Save all token configurations in a single file
             input_path = save_unified_data(
-                module="gmgn",
+                module="api/gmgn",
                 data_items=input_configs,
                 filename_prefix=f"token_configs_{days}days",
                 data_type="input"
@@ -214,10 +216,11 @@ async def fetch_mcap_data_handler():
         
         # Save all the results in a single file
         output_path = save_unified_data(
-            module="gmgn",
+            module="api/gmgn",
             data_items=all_results,
             filename_prefix=f"mcap_data_{days}days",
-            data_type="output"
+            data_type="output",
+            subdir="market-cap-data"
         )
         
         print(f"\nData for all tokens saved to: {output_path}")

@@ -96,14 +96,14 @@ def load_config() -> Dict[str, Any]:
     # API
     (INPUT_DATA_DIR / "api").mkdir(parents=True, exist_ok=True)
     (INPUT_DATA_DIR / "api" / "dune").mkdir(parents=True, exist_ok=True)
-    (INPUT_DATA_DIR / "api" / "dune" / "query_configs").mkdir(parents=True, exist_ok=True)
+    (INPUT_DATA_DIR / "api" / "dune" / "query-configs").mkdir(parents=True, exist_ok=True)
     (INPUT_DATA_DIR / "api" / "gmgn").mkdir(parents=True, exist_ok=True)
     (INPUT_DATA_DIR / "api" / "gmgn" / "token-lists").mkdir(parents=True, exist_ok=True)
     
     # Proxies
     (INPUT_DATA_DIR / "proxies").mkdir(parents=True, exist_ok=True)
     
-    # Solana
+    # Solana modules
     (OUTPUT_DATA_DIR / "solana").mkdir(parents=True, exist_ok=True)
     (OUTPUT_DATA_DIR / "solana" / "token-lists").mkdir(parents=True, exist_ok=True)
     (OUTPUT_DATA_DIR / "solana" / "wallet-lists").mkdir(parents=True, exist_ok=True)
@@ -111,17 +111,33 @@ def load_config() -> Dict[str, Any]:
     (OUTPUT_DATA_DIR / "solana" / "wallet-data").mkdir(parents=True, exist_ok=True)
     (OUTPUT_DATA_DIR / "solana" / "telegram").mkdir(parents=True, exist_ok=True)
     
-    # Ethereum
+    # Dragon module for Solana
+    (OUTPUT_DATA_DIR / "solana" / "dragon").mkdir(parents=True, exist_ok=True)
+    (OUTPUT_DATA_DIR / "solana" / "dragon" / "wallet-analysis").mkdir(parents=True, exist_ok=True)
+    (OUTPUT_DATA_DIR / "solana" / "dragon" / "top-traders").mkdir(parents=True, exist_ok=True)
+    (OUTPUT_DATA_DIR / "solana" / "dragon" / "top-holders").mkdir(parents=True, exist_ok=True)
+    (OUTPUT_DATA_DIR / "solana" / "dragon" / "early-buyers").mkdir(parents=True, exist_ok=True)
+    (OUTPUT_DATA_DIR / "solana" / "dragon" / "token-info").mkdir(parents=True, exist_ok=True)
+    
+    # Ethereum modules
     (OUTPUT_DATA_DIR / "ethereum").mkdir(parents=True, exist_ok=True)
     (OUTPUT_DATA_DIR / "ethereum" / "token-lists").mkdir(parents=True, exist_ok=True)
     (OUTPUT_DATA_DIR / "ethereum" / "wallet-lists").mkdir(parents=True, exist_ok=True)
     (OUTPUT_DATA_DIR / "ethereum" / "transaction-data").mkdir(parents=True, exist_ok=True)
     (OUTPUT_DATA_DIR / "ethereum" / "wallet-data").mkdir(parents=True, exist_ok=True)
     
-    # Sharp
-    (OUTPUT_DATA_DIR / "sharp").mkdir(parents=True, exist_ok=True)
+    # Dragon module for Ethereum
+    (OUTPUT_DATA_DIR / "ethereum" / "dragon").mkdir(parents=True, exist_ok=True)
+    (OUTPUT_DATA_DIR / "ethereum" / "dragon" / "wallet-analysis").mkdir(parents=True, exist_ok=True)
+    (OUTPUT_DATA_DIR / "ethereum" / "dragon" / "top-traders").mkdir(parents=True, exist_ok=True)
+    (OUTPUT_DATA_DIR / "ethereum" / "dragon" / "top-holders").mkdir(parents=True, exist_ok=True)
+    (OUTPUT_DATA_DIR / "ethereum" / "dragon" / "early-buyers").mkdir(parents=True, exist_ok=True)
     
-    # API
+    # Sharp modules
+    (OUTPUT_DATA_DIR / "sharp-tools").mkdir(parents=True, exist_ok=True)
+    (OUTPUT_DATA_DIR / "sharp-tools" / "data").mkdir(parents=True, exist_ok=True)
+    
+    # API modules
     (OUTPUT_DATA_DIR / "api").mkdir(parents=True, exist_ok=True)
     
     # API - Dune Analytics
@@ -135,17 +151,10 @@ def load_config() -> Dict[str, Any]:
     (OUTPUT_DATA_DIR / "api" / "gmgn" / "market-cap-data").mkdir(parents=True, exist_ok=True)
     (OUTPUT_DATA_DIR / "api" / "gmgn" / "token-info").mkdir(parents=True, exist_ok=True)
     
-    # Dragon data directories
-    (OUTPUT_DATA_DIR / "dragon").mkdir(parents=True, exist_ok=True)
-    (OUTPUT_DATA_DIR / "dragon" / "ethereum" / "wallet-analysis").mkdir(parents=True, exist_ok=True)
-    (OUTPUT_DATA_DIR / "dragon" / "ethereum" / "top-traders").mkdir(parents=True, exist_ok=True)
-    (OUTPUT_DATA_DIR / "dragon" / "ethereum" / "top-holders").mkdir(parents=True, exist_ok=True)
-    (OUTPUT_DATA_DIR / "dragon" / "ethereum" / "early-buyers").mkdir(parents=True, exist_ok=True)
-    (OUTPUT_DATA_DIR / "dragon" / "solana" / "wallet-analysis").mkdir(parents=True, exist_ok=True)
-    (OUTPUT_DATA_DIR / "dragon" / "solana" / "top-traders").mkdir(parents=True, exist_ok=True)
-    (OUTPUT_DATA_DIR / "dragon" / "solana" / "top-holders").mkdir(parents=True, exist_ok=True)
-    (OUTPUT_DATA_DIR / "dragon" / "solana" / "early-buyers").mkdir(parents=True, exist_ok=True)
-    (OUTPUT_DATA_DIR / "dragon" / "token-info").mkdir(parents=True, exist_ok=True)
+    # Remove old dragon directory if it exists in output-data
+    import shutil
+    if (OUTPUT_DATA_DIR / "dragon").exists():
+        shutil.rmtree(OUTPUT_DATA_DIR / "dragon")
     
     # Import ensure_file_dir from utils
     from ..utils.common import ensure_file_dir
@@ -158,6 +167,11 @@ def load_config() -> Dict[str, Any]:
         (INPUT_DATA_DIR / "api" / "gmgn" / "token-lists" / "token_addresses.txt"),
         (INPUT_DATA_DIR / "solana" / "token-lists" / "tokens.txt")
     ]
+    
+    # Remove old dragon directory if it exists
+    import shutil
+    if (INPUT_DATA_DIR / "dragon").exists():
+        shutil.rmtree(INPUT_DATA_DIR / "dragon")
     
     for file_path in placeholder_files:
         if not file_path.exists():

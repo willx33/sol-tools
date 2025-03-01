@@ -52,13 +52,18 @@ class SolanaAdapter:
     
     def _init_dragon(self):
         """Initialize Dragon functionality."""
-        # Import dragon_adapter here to prevent circular imports
-        from ..dragon.dragon_adapter import DragonAdapter
-        self.dragon = DragonAdapter()
-        self.dragon_available = True
-        
-        # Ensure dragon paths are created
-        self.dragon.ensure_dragon_paths()
+        try:
+            # Import dragon_adapter here to prevent circular imports
+            from ..dragon.dragon_adapter import DragonAdapter, DRAGON_IMPORTS_SUCCESS
+            self.dragon = DragonAdapter()
+            self.dragon_available = DRAGON_IMPORTS_SUCCESS
+            
+            # Ensure dragon paths are created
+            if self.dragon_available:
+                self.dragon.ensure_dragon_paths()
+        except Exception as e:
+            self.logger.error(f"Error initializing Dragon: {e}")
+            self.dragon_available = False
     
     def _init_telegram(self) -> bool:
         """

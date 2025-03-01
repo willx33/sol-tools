@@ -18,14 +18,18 @@ class DuneAdapter:
             data_dir: Path to the data directory
             api_key: Dune Analytics API key (optional, can be set later)
         """
+        from ...core.config import INPUT_DATA_DIR, OUTPUT_DATA_DIR
+        
         self.data_dir = Path(data_dir)
-        self.dune_data_dir = self.data_dir / "dune"
+        self.input_dir = INPUT_DATA_DIR / "api" / "dune"
+        self.output_dir = OUTPUT_DATA_DIR / "api" / "dune"
         self.api_key = api_key
         self.client = None
         
         # Create necessary directories
-        (self.dune_data_dir / "csv").mkdir(parents=True, exist_ok=True)
-        (self.dune_data_dir / "parsed").mkdir(parents=True, exist_ok=True)
+        (self.input_dir / "query-configs").mkdir(parents=True, exist_ok=True)
+        (self.output_dir / "csv").mkdir(parents=True, exist_ok=True)
+        (self.output_dir / "parsed").mkdir(parents=True, exist_ok=True)
         
     def _initialize_client(self) -> bool:
         """

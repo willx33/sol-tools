@@ -217,11 +217,11 @@ def solana_wallet_checker():
             
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
             output_file = save_unified_data(
-                module="dragon",
+                module="solana/dragon",
                 data_items=wallet_data if isinstance(wallet_data, list) else [wallet_data],
                 filename_prefix=f"wallet_analysis_{timestamp}",
                 data_type="output",
-                subdir="solana/wallet-analysis"
+                subdir="wallet-analysis"
             )
             
             # Display summary stats

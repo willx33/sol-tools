@@ -16,7 +16,7 @@ from .dune_adapter import DuneAdapter
 
 def _get_dune_adapter():
     """Get initialized Dune adapter."""
-    data_dir = ensure_data_dir("").parent
+    data_dir = ensure_data_dir("api/dune").parent
     api_key = get_env_var("DUNE_API_KEY")
     return DuneAdapter(data_dir, api_key)
 
