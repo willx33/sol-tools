@@ -24,20 +24,14 @@ MAIN_CONFIG = CONFIG_DIR / "config.json"
 # Required environment variables by module
 REQUIRED_ENV_VARS = {
     "dragon": [
-        "SOLSCAN_API_KEY", 
-        "ETHERSCAN_API_KEY"
     ],
     "dune": [
         "DUNE_API_KEY"
     ],
     "solana": [
-        "HELIUS_API_KEY", 
-        "SOLANA_RPC_URL", 
-        "SOLANA_WEBSOCKET_URL"
+        "HELIUS_API_KEY"
     ],
     "ethereum": [
-        "ETHEREUM_RPC_URL", 
-        "ETHERSCAN_API_KEY"
     ],
     "gmgn": [
     ],

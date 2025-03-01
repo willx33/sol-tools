@@ -70,10 +70,8 @@ The application uses environment variables for configuration. You can set these 
 
 Required environment variables by module:
 
-- **Dragon**: `SOLSCAN_API_KEY`, `ETHERSCAN_API_KEY`
-- **Solana**: `HELIUS_API_KEY`, `SOLANA_RPC_URL`, `SOLANA_WEBSOCKET_URL`
-- **Ethereum**: `ETHEREUM_RPC_URL`, `ETHERSCAN_API_KEY`
 - **Dune**: `DUNE_API_KEY`
+- **Solana**: `HELIUS_API_KEY`
 - **Telegram**: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`
 - **GMGN**: No API key required
 - **BullX**: No API key required
