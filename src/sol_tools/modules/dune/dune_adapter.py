@@ -145,8 +145,8 @@ class DuneAdapter:
         Returns:
             Dictionary with parsing results
         """
-        csv_dir = self.dune_data_dir / "csv"
-        parsed_dir = self.dune_data_dir / "parsed"
+        csv_dir = self.output_dir / "csv"
+        parsed_dir = self.output_dir / "parsed"
         
         csv_path = csv_dir / csv_filename
         if not csv_path.exists():
