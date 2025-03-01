@@ -33,3 +33,4 @@ blessed>=1.20.0
 pydantic>=2.4.0
 typing-extensions>=4.7.0
 cryptography>=41.0.4
+jsonschema>=4.17.3  # Required for config validation

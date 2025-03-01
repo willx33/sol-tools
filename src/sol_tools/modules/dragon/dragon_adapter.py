@@ -9,8 +9,11 @@ import random
 import asyncio
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Any, Optional, Callable, Union
+from typing import Dict, List, Any, Optional, Callable, Union, TYPE_CHECKING
 from concurrent.futures import ThreadPoolExecutor
+
+# Import BaseAdapter
+from ...core.base_adapter import BaseAdapter, ConfigError, OperationError, ResourceNotFoundError
 
 # Import necessary libraries
 import tls_client
@@ -37,6 +40,22 @@ LOGS_DIR = CACHE_DIR / "logs" / "dragon"
 LOGS_DIR.mkdir(parents=True, exist_ok=True)
 
 # Import Dragon modules
+from typing import TYPE_CHECKING
+
+# For type checking only
+if TYPE_CHECKING:
+    import Dragon  # type: ignore
+    from Dragon import (  # type: ignore
+        utils, BundleFinder, ScanAllTx, BulkWalletChecker, TopTraders,
+        TimestampTransactions, purgeFiles, CopyTradeWalletFinder, TopHolders,
+        EarlyBuyers, checkProxyFile, EthBulkWalletChecker, EthTopTraders,
+        EthTimestampTransactions, EthScanAllTx, GMGN
+    )
+
+# Flag to indicate if Dragon imports were successful
+DRAGON_IMPORTS_SUCCESS = False
+
+# At runtime, try to import the real Dragon module or use the mock
 try:
     import Dragon
     from Dragon import (
@@ -47,21 +66,16 @@ try:
     )
     DRAGON_IMPORTS_SUCCESS = True
 except ImportError:
-    # Create mock Dragon modules for graceful startup failure
+    # Use our mock implementation for development/testing
+    from . import dragon_mock as Dragon
+    from .dragon_mock import (
+        utils, BundleFinder, ScanAllTx, BulkWalletChecker, TopTraders,
+        TimestampTransactions, purgeFiles, CopyTradeWalletFinder, TopHolders,
+        EarlyBuyers, checkProxyFile, EthBulkWalletChecker, EthTopTraders,
+        EthTimestampTransactions, EthScanAllTx, GMGN
+    )
     DRAGON_IMPORTS_SUCCESS = False
-    class PlaceholderClass:
-        """Placeholder for missing Dragon components."""
-        def __init__(self, *args, **kwargs):
-            pass
-        def __call__(self, *args, **kwargs):
-            return {"success": False, "error": "Dragon module not installed"}
-    
-    # Create placeholder classes 
-    Dragon = PlaceholderClass()
-    utils = BundleFinder = ScanAllTx = BulkWalletChecker = TopTraders = PlaceholderClass()
-    TimestampTransactions = purgeFiles = CopyTradeWalletFinder = PlaceholderClass()
-    TopHolders = EarlyBuyers = checkProxyFile = EthBulkWalletChecker = PlaceholderClass()
-    EthTopTraders = EthTimestampTransactions = EthScanAllTx = GMGN = PlaceholderClass()
+    logger.warning("Using mock Dragon implementation - functionality will be limited")
 
 
 def save_dragon_log(category: str, data_key: str, response_data: Dict[str, Any], error: Optional[str] = None):
@@ -443,150 +457,212 @@ class TokenDataHandler:
         return result
 
 
-class DragonAdapter:
-    """Adapter for Dragon functionality to work within Sol Tools framework."""
+class DragonAdapter(BaseAdapter):
+    """Adapter for Dragon functionality within Sol Tools."""
     
-    def __init__(self, test_mode: bool = False):
+    def __init__(
+        self,
+        test_mode: bool = False,
+        data_dir: Optional[Path] = None,
+        config_override: Optional[Dict[str, Any]] = None,
+        verbose: bool = False
+    ):
         """
         Initialize the Dragon adapter.
         
         Args:
             test_mode: If True, operate in test mode without external API calls
+            data_dir: Custom data directory path (optional)
+            config_override: Override default configuration values (optional)
+            verbose: Enable verbose logging if True
         """
-        from ...core.config import INPUT_DATA_DIR, OUTPUT_DATA_DIR
+        # Initialize the base adapter
+        super().__init__(test_mode, data_dir, config_override, verbose)
         
-        # Set test mode flag
-        self.test_mode = test_mode
+        # Set up internal state
+        self.dragon_available = False
+        self.dragon_components = {}
+        self.proxy_list = []
+        self.gmgn_client = None
+        self.token_data_handler = None
         
-        # Define the input directory structure
-        self.ethereum_input_dir = INPUT_DATA_DIR / "ethereum" / "wallet-lists"
-        self.solana_input_dir = INPUT_DATA_DIR / "solana" / "wallet-lists"
-        self.proxies_dir = INPUT_DATA_DIR / "proxies"
+        # Paths will be set during initialization
+        self.wallets_dir = None
+        self.export_dir = None
+        self.proxy_file = None
         
-        # Define the output directory structure based on blockchain
-        self.ethereum_output_dirs = {
-            "wallet_analysis": OUTPUT_DATA_DIR / "ethereum" / "dragon" / "wallet-analysis",
-            "top_traders": OUTPUT_DATA_DIR / "ethereum" / "dragon" / "top-traders",
-            "top_holders": OUTPUT_DATA_DIR / "ethereum" / "dragon" / "top-holders",
-            "early_buyers": OUTPUT_DATA_DIR / "ethereum" / "dragon" / "early-buyers"
-        }
+        # Override default threads if specified in config
+        self.default_threads = 10
         
-        self.solana_output_dirs = {
-            "wallet_analysis": OUTPUT_DATA_DIR / "solana" / "dragon" / "wallet-analysis",
-            "top_traders": OUTPUT_DATA_DIR / "solana" / "dragon" / "top-traders",
-            "top_holders": OUTPUT_DATA_DIR / "solana" / "dragon" / "top-holders",
-            "early_buyers": OUTPUT_DATA_DIR / "solana" / "dragon" / "early-buyers"
-        }
+    async def initialize(self) -> bool:
+        """
+        Initialize the Dragon adapter.
         
-        # GMGN token info is part of API modules
-        self.token_info_dir = OUTPUT_DATA_DIR / "api" / "gmgn" / "token-info"
+        This method:
+        1. Loads configuration
+        2. Sets up directories
+        3. Initializes Dragon components
         
-        # Set up threading defaults
-        self.default_threads = 40
-        self.max_threads = 100
-        
-        # Initialize mock data for test mode
-        if self.test_mode:
-            from ...tests.test_data.mock_data import (
-                generate_solana_wallet_list,
-                generate_ethereum_wallet_list,
-                generate_solana_transaction_list,
-                generate_ethereum_transaction_list
-            )
-            # Initialize in-memory storage for test mode
-            self.solana_wallets = generate_solana_wallet_list(10)
-            self.ethereum_wallets = generate_ethereum_wallet_list(10)
-            self.solana_transactions = generate_solana_transaction_list(20)
-            self.ethereum_transactions = generate_ethereum_transaction_list(20)
-            self.logger = logging.getLogger("DragonAdapter_test")
-        
-        # Set up async clients (if not in test mode)
-        if not self.test_mode:
-            self.gmgn_client = GMGN_Client()
-            self.token_handler = TokenDataHandler()
-        
-        # Initialize components from the original Dragon library
-        # This needs to happen for both test and real modes
-        self._init_dragon_components()
-
-    def _init_dragon_components(self):
-        """Initialize components from Dragon modules."""
-        if not DRAGON_IMPORTS_SUCCESS:
-            logger.warning("Dragon modules not available, initializing with placeholders")
+        Returns:
+            True if initialization succeeded, False otherwise
+        """
+        try:
+            self.set_state(self.STATE_INITIALIZING)
+            self.logger.debug("Initializing Dragon adapter...")
+            
+            # Get module-specific configuration
+            module_config = self.get_module_config()
+            
+            # Apply configuration overrides for demonstration
+            if "default_threads" in module_config:
+                self.default_threads = module_config["default_threads"]
+                self.logger.debug(f"Using configured default_threads: {self.default_threads}")
+            
+            # Override from direct config_override if provided
+            if "default_threads" in self.config_override:
+                self.default_threads = self.config_override["default_threads"]
+                self.logger.debug(f"Using override default_threads: {self.default_threads}")
+            
+            # Set up directories
+            self.wallets_dir = self.get_module_data_dir("wallets")
+            self.export_dir = self.get_module_data_dir("export")
+            self.proxy_file = self.get_module_data_dir("input") / "proxies.txt"
+            
+            # Ensure directories exist
+            self.wallets_dir.mkdir(parents=True, exist_ok=True)
+            self.export_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Initialize Dragon components
+            self._init_dragon_components()
+            
+            # Initialize GMGN client with proxy setting from config
+            use_proxies = module_config.get("use_proxies", False)
+            self.gmgn_client = GMGN_Client(use_proxies=use_proxies)
+            self.token_data_handler = TokenDataHandler(use_proxies=use_proxies)
+            
+            # Validate required resources
+            if await self.validate():
+                self.set_state(self.STATE_READY)
+                self.logger.info("Dragon adapter initialized successfully")
+                return True
+            else:
+                self.set_state(self.STATE_ERROR, 
+                               ConfigError("Validation failed during initialization"))
+                return False
+            
+        except Exception as e:
+            self.set_state(self.STATE_ERROR, e)
+            self.logger.error(f"Failed to initialize Dragon adapter: {e}")
             return False
+    
+    async def validate(self) -> bool:
+        """
+        Validate that the adapter is properly configured and operational.
         
-        # Create mock BulkWalletChecker class with a run method if in test mode
-        if hasattr(self, 'test_mode') and self.test_mode:
-            # We need to define these as properties even in test mode
-            class MockDragonComponent:
-                """Mock component for Dragon modules in test mode."""
-                def __init__(self, component_name):
-                    self.component_name = component_name
-                
-                def run(self, *args, **kwargs):
-                    """Mock run method that returns success and empty file list."""
-                    return [0, []]  # Status code 0 = success
-                
-                def __call__(self, *args, **kwargs):
-                    """Allow the component to be called as a function."""
-                    return {"success": True, "test_mode": True, "component": self.component_name}
-            
-            # Create mock components
-            self.bundle = MockDragonComponent("BundleFinder")
-            self.scan = MockDragonComponent("ScanAllTx")
-            self.wallet_checker = MockDragonComponent("BulkWalletChecker")
-            self.top_traders = MockDragonComponent("TopTraders")
-            self.timestamp = MockDragonComponent("TimestampTransactions")
-            self.copy_wallet = MockDragonComponent("CopyTradeWalletFinder")
-            self.top_holders = MockDragonComponent("TopHolders")
-            self.early_buyers = MockDragonComponent("EarlyBuyers")
-            
-            # Ethereum components
-            self.eth_wallet = MockDragonComponent("EthBulkWalletChecker")
-            self.eth_traders = MockDragonComponent("EthTopTraders")
-            self.eth_timestamp = MockDragonComponent("EthTimestampTransactions")
-            self.eth_scan = MockDragonComponent("EthScanAllTx")
-            
-            # Add GMGN mock
-            self.gmgn = MockDragonComponent("GMGN")
-            
-            # The BulkWalletChecker needs special handling because it's used differently
-            class MockBulkWalletChecker:
-                def __init__(self, *args, **kwargs):
-                    self.output_dir = kwargs.get("output_dir", "")
-                    self.wallets = kwargs.get("wallets", [])
-                
-                def run(self):
-                    """Mock run method that returns success and created files."""
-                    # We'll pretend we created files for tracking
-                    return [0, [f"{wallet}.json" for wallet in self.wallets]]
-            
-            # Replace the simpler mock with the more specific one
-            self.BulkWalletChecker = MockBulkWalletChecker
-            
+        This method checks:
+        1. Required directories are accessible
+        2. Dragon components are available or properly mocked
+        
+        Returns:
+            True if validation succeeded, False otherwise
+        """
+        # Check that data directories are accessible
+        for dir_path in [self.wallets_dir, self.export_dir]:
+            if not dir_path.exists():
+                try:
+                    dir_path.mkdir(parents=True, exist_ok=True)
+                except Exception as e:
+                    self.logger.error(f"Failed to create directory {dir_path}: {e}")
+                    return False
+        
+        # In test mode, we don't need actual Dragon components
+        if self.test_mode:
             return True
         
-        # Initialize Dragon components (real mode)
-        # Solana components
-        self.bundle = BundleFinder()
-        self.scan = ScanAllTx()
-        self.wallet_checker = BulkWalletChecker()
-        self.top_traders = TopTraders()
-        self.timestamp = TimestampTransactions()
-        self.copy_wallet = CopyTradeWalletFinder()
-        self.top_holders = TopHolders()
-        self.early_buyers = EarlyBuyers()
-        
-        # Ethereum components
-        self.eth_wallet = EthBulkWalletChecker()
-        self.eth_traders = EthTopTraders()
-        self.eth_timestamp = EthTimestampTransactions()
-        self.eth_scan = EthScanAllTx if 'EthScanAllTx' in globals() else None
-        
-        # GMGN component
-        self.gmgn = GMGN if 'GMGN' in globals() else None
-        
+        # Check if proxy file exists if use_proxies is enabled
+        if self.get_module_config().get("use_proxies", False):
+            proxy_exists = self.check_proxy_file(create_if_missing=True)
+            if not proxy_exists:
+                self.logger.warning("Proxy file doesn't exist but use_proxies is enabled")
+                # We'll continue anyway since this isn't critical
+                
+        # Check Dragon availability - if required but not available, fail validation
+        if not self.dragon_available and self.get_module_config().get("require_dragon", False):
+            self.logger.error("Dragon functionality is required but not available")
+            return False
+            
         return True
+    
+    async def cleanup(self) -> None:
+        """
+        Clean up resources used by the adapter.
+        
+        This method releases any resources acquired during initialization
+        and operation, such as thread pools and network connections.
+        """
+        self.set_state(self.STATE_CLEANING_UP)
+        self.logger.debug("Cleaning up Dragon adapter resources...")
+        
+        # Close threadpools
+        if hasattr(self, '_gmgn_threadpool') and _gmgn_threadpool:
+            _gmgn_threadpool.shutdown(wait=False)
+        
+        if hasattr(self, '_wallet_threadpool') and _wallet_threadpool:
+            _wallet_threadpool.shutdown(wait=False)
+        
+        # Close GMGN client if it exists
+        if self.gmgn_client and hasattr(self.gmgn_client, 'client') and self.gmgn_client.client:
+            try:
+                self.gmgn_client.client.close()
+            except Exception as e:
+                self.logger.warning(f"Error closing GMGN client: {e}")
+                
+        # Clear any cached data
+        if not self.test_mode:
+            try:
+                # Only delete temporary files in non-test mode
+                temp_files = list(LOGS_DIR.glob("*.json"))
+                for temp_file in temp_files:
+                    try:
+                        if temp_file.is_file():
+                            temp_file.unlink()
+                    except Exception as e:
+                        self.logger.warning(f"Failed to delete temp file {temp_file}: {e}")
+            except Exception as e:
+                self.logger.warning(f"Error cleaning up temporary files: {e}")
+        
+        self.set_state(self.STATE_CLEANED_UP)
+        self.logger.debug("Dragon adapter cleanup completed")
+        
+    def _init_dragon_components(self):
+        """Initialize Dragon components or create placeholders if not available."""
+        try:
+            # Store references to Dragon components
+            self.dragon_components = {
+                "BundleFinder": BundleFinder,
+                "ScanAllTx": ScanAllTx,
+                "BulkWalletChecker": BulkWalletChecker,
+                "TopTraders": TopTraders,
+                "TimestampTransactions": TimestampTransactions,
+                "purgeFiles": purgeFiles,
+                "CopyTradeWalletFinder": CopyTradeWalletFinder,
+                "TopHolders": TopHolders,
+                "EarlyBuyers": EarlyBuyers,
+                "checkProxyFile": checkProxyFile,
+                "EthBulkWalletChecker": EthBulkWalletChecker, 
+                "EthTopTraders": EthTopTraders,
+                "EthTimestampTransactions": EthTimestampTransactions,
+                "EthScanAllTx": EthScanAllTx,
+                "GMGN": GMGN
+            }
+            
+            self.dragon_available = DRAGON_IMPORTS_SUCCESS
+            self.logger.debug(f"Dragon components loaded successfully (using {'actual' if DRAGON_IMPORTS_SUCCESS else 'mock'} implementation)")
+            
+        except Exception as e:
+            self.logger.error(f"Failed to initialize Dragon components: {e}")
+            self.dragon_available = False
+            self.dragon_components = {}
 
     def ensure_dragon_paths(self) -> None:
         """
@@ -698,7 +774,7 @@ class DragonAdapter:
         Returns:
             Token information
         """
-        return await self.token_handler.get_token_data(contract_address)
+        return await self.token_data_handler.get_token_data(contract_address)
     
     def get_token_info_sync(self, contract_address: str) -> Dict[str, Any]:
         """
@@ -710,7 +786,7 @@ class DragonAdapter:
         Returns:
             Token information
         """
-        return self.token_handler._get_token_info_sync(contract_address)
+        return self.token_data_handler._get_token_info_sync(contract_address)
     
     def get_new_tokens(self) -> List[Dict[str, Any]]:
         """Get new token listings."""

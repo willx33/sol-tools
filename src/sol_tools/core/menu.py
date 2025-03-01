@@ -19,6 +19,10 @@ class MenuOption:
         self.name = name
         self.handler = handler
         self.children = children or []
+        # Check for circular references in children
+        for child in self.children:
+            if child is self:
+                print(f"ERROR: Circular reference detected in MenuOption {name}")
         self.parent = parent
         self.description = description
         self.missing_env_vars = missing_env_vars
@@ -43,7 +47,14 @@ class MenuManager:
 
     def push_menu(self, options: List[MenuOption]):
         """Push new menu options onto the stack, saving current state to history."""
+        # Debug logging to track recursion
+        print(f"Pushing menu with {len(options)} options")
         if self.current_menu:
+            print(f"Current menu has {len(self.current_menu)} options")
+            # Check for circular reference
+            if self.current_menu is options:
+                print("ERROR: Circular reference detected - trying to push the same menu")
+                return
             self.history.append((self.current_menu, self.selected_idx))
         self.current_menu = options
         self.selected_idx = 0
@@ -90,6 +101,7 @@ def create_main_menu(handlers: Dict[str, Callable]) -> List[MenuOption]:
     """
     Build the top-level menu structure.
     """
+    print("Creating main menu...")
     # Check environment variables for each module
     solana_env_vars_missing = not check_module_env_vars("solana")
     dragon_env_vars_missing = not check_module_env_vars("dragon")
@@ -551,54 +563,60 @@ class InquirerMenu:
                     choice_text = option.name
                     # Add red dot indicator for missing env vars
                     if option.missing_env_vars:
-                        choice_text = f"{option.name} 🔴"
-                    
-                    if option.description:
-                        choice_text = f"{choice_text} - {option.description}"
-                    choices.append(choice_text)
+                        choice_text = f"{choice_text} 🔴"
+                    choices.append((choice_text, option))
                 
                 # If not at the main menu, add "Back" choice
                 is_main_menu = self.manager.current_menu == self.main_menu
                 title = "Sol Tools - Main Menu" if is_main_menu else "Sol Tools"
                 
-                # Display the menu
+                # Use inquirer to create an interactive menu with arrow key navigation
                 questions = [
-                    inquirer.List(
-                        'choice',
-                        message=title,
-                        choices=choices,
-                    ),
+                    inquirer.List('choice',
+                                message=title,
+                                choices=[choice[0] for choice in choices],
+                                carousel=True)
                 ]
-                answers = inquirer.prompt(questions)
                 
-                if not answers:  # User pressed Ctrl+C
-                    break
-                
-                selected_text = answers['choice']
-                selected_idx = choices.index(selected_text)
-                selected_option = self.manager.current_menu[selected_idx]
-                
-                # Handle the selection
-                if selected_option.name == "Back":
-                    if not self.manager.pop_menu():
+                # Get user selection
+                try:
+                    answers = inquirer.prompt(questions, raise_keyboard_interrupt=True)
+                    if not answers:  # User pressed Ctrl+C
                         break
-                    continue
-                
-                if selected_option.name == "Exit":
-                    if selected_option.handler:
+                        
+                    # Find the selected option
+                    selected_text = answers['choice']
+                    selected_option = None
+                    for choice_text, option in choices:
+                        if choice_text == selected_text:
+                            selected_option = option
+                            break
+                            
+                    if not selected_option:
+                        continue
+                    
+                    # Handle the selection
+                    if selected_option.name == "Back" or selected_text.startswith("Back"):
+                        if not self.manager.pop_menu():
+                            break
+                        continue
+                    
+                    if selected_option.name == "Exit" or selected_text.startswith("Exit"):
+                        if selected_option.handler:
+                            selected_option.handler()
+                        break
+                    
+                    if selected_option.children:
+                        self.manager.push_menu(selected_option.children)
+                    elif selected_option.handler:
                         selected_option.handler()
+                        
+                        # Wait for user acknowledgment
+                        input("\nPress Enter to continue...")
+                    
+                except KeyboardInterrupt:
                     break
                 
-                if selected_option.children:
-                    self.manager.push_menu(selected_option.children)
-                elif selected_option.handler:
-                    selected_option.handler()
-                    
-                    # Wait for user acknowledgment
-                    input("\nPress Enter to continue...")
-                
-            except KeyboardInterrupt:
-                break
             except Exception as e:
                 print(f"Menu error: {e}")
-                self.running = False
+                input("\nPress Enter to continue...")

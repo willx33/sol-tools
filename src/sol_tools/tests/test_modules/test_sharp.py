@@ -170,8 +170,16 @@ class SharpTester(BaseTester):
         return super().run_tests(tests)
 
 
-def run_sharp_tests() -> bool:
-    """Run all Sharp tests."""
+def run_sharp_tests(verbose=False) -> bool:
+    """
+    Run all Sharp tests.
+    
+    Args:
+        verbose: Whether to print verbose output
+        
+    Returns:
+        bool: True if all tests passed, False otherwise
+    """
     tester = SharpTester()
     try:
         results = tester.run_tests()

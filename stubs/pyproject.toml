@@ -1,0 +1,12 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["Dragon", "sol_tools"]
+
+[project]
+name = "sol-tools-stubs"
+version = "0.1.0"
+description = "PEP 561 type stubs for sol-tools modules"
+requires-python = ">=3.8" 

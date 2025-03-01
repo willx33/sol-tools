@@ -7,6 +7,8 @@ This module provides the main function for running all tests.
 import os
 import sys
 import time
+import json
+import tempfile
 from pathlib import Path
 from typing import Dict, Any, List, Tuple
 
@@ -46,16 +48,90 @@ try:
 except ImportError:
     WORKFLOWS_AVAILABLE = False
 
+# Enhanced test framework - add additional test modules
+try:
+    from .test_core.test_config import run_config_tests
+    CONFIG_TESTS_AVAILABLE = True
+except ImportError:
+    CONFIG_TESTS_AVAILABLE = False
 
-def run_all_tests() -> bool:
+try:
+    from .test_core.test_cleanup import run_cleanup_tests
+    CLEANUP_TESTS_AVAILABLE = True
+except ImportError:
+    CLEANUP_TESTS_AVAILABLE = False
+
+try:
+    from .test_core.test_environment import run_environment_tests
+    ENVIRONMENT_TESTS_AVAILABLE = True
+except ImportError:
+    ENVIRONMENT_TESTS_AVAILABLE = False
+
+
+def save_test_report(results: Dict[str, bool], duration: float, timestamp: str) -> str:
+    """
+    Save the test results to a JSON file in the cache directory.
+    
+    Args:
+        results: Dictionary of test group results
+        duration: Test duration in seconds
+        timestamp: Timestamp string for the report
+        
+    Returns:
+        str: Path to the saved report file
+    """
+    # Ensure reports directory exists
+    try:
+        root_dir = Path(__file__).parents[3]  # Project root
+        # Save reports to cache directory instead of dedicated reports directory
+        reports_dir = root_dir / "data" / "cache" / "test-reports"
+        reports_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Create report data
+        report = {
+            "timestamp": timestamp,
+            "duration": duration,
+            "results": results,
+            "passed": all(results.values()),
+            "pass_count": sum(1 for v in results.values() if v),
+            "total_count": len(results),
+            "pass_percentage": round(sum(1 for v in results.values() if v) / len(results) * 100, 2),
+            "environment": {
+                "python_version": sys.version,
+                "os": sys.platform
+            }
+        }
+        
+        # Generate filename with timestamp
+        filename = f"test_report_{timestamp.replace(' ', '_').replace(':', '-')}.json"
+        report_path = reports_dir / filename
+        
+        # Write report to file
+        with open(report_path, "w") as f:
+            json.dump(report, f, indent=2)
+            
+        return str(report_path)
+        
+    except Exception as e:
+        cprint(f"⚠️ Failed to save test report: {str(e)}", "yellow")
+        return ""
+
+
+def run_all_tests(save_report: bool = True, verbose: bool = False) -> bool:
     """
     Run all tests for Sol Tools.
     
+    Args:
+        save_report: Whether to save a test report
+        verbose: Whether to print verbose information
+        
     Returns:
         bool: True if all tests passed, False otherwise
     """
     start_time = time.time()
+    timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
     cprint("\n🚀 Starting Sol Tools Test Suite", "cyan")
+    cprint(f"Timestamp: {timestamp}", "cyan")
     
     # Define test groups
     test_groups = [
@@ -64,7 +140,17 @@ def run_all_tests() -> bool:
         {"name": "Solana Module", "run": run_solana_tests, "required": True},
     ]
     
-    # Add optional test groups
+    # Add optional core test groups
+    if CONFIG_TESTS_AVAILABLE:
+        test_groups.append({"name": "Config System", "run": run_config_tests, "required": True})
+    
+    if CLEANUP_TESTS_AVAILABLE:
+        test_groups.append({"name": "Cleanup System", "run": run_cleanup_tests, "required": True})
+    
+    if ENVIRONMENT_TESTS_AVAILABLE:
+        test_groups.append({"name": "Environment System", "run": run_environment_tests, "required": True})
+    
+    # Add optional module test groups
     if SHARP_AVAILABLE:
         test_groups.append({"name": "Sharp Module", "run": run_sharp_tests, "required": False})
     
@@ -94,7 +180,7 @@ def run_all_tests() -> bool:
         cprint(f"\n==== Testing {group_name} ====", "bold")
         
         try:
-            result = test_func()
+            result = test_func(verbose=verbose)
             results[group_name] = result
             
             if result:
@@ -127,6 +213,12 @@ def run_all_tests() -> bool:
     if skipped_count > 0:
         cprint(f"Skipped/Failed: {skipped_count} optional test groups", "yellow")
     
+    # Save test report if requested
+    if save_report:
+        report_path = save_test_report(results, duration, timestamp)
+        if report_path:
+            cprint(f"📊 Test report saved to: {report_path}", "cyan")
+    
     if failed_count == 0:
         cprint("\n✅ All required tests passed! Sol Tools is working correctly.", "green")
     else:
@@ -137,4 +229,8 @@ def run_all_tests() -> bool:
 
 
 if __name__ == "__main__":
-    sys.exit(0 if run_all_tests() else 1) 
+    # Process command-line arguments
+    verbose = "--verbose" in sys.argv or "-v" in sys.argv
+    save_report = "--report" in sys.argv or "-r" in sys.argv
+    
+    sys.exit(0 if run_all_tests(save_report=save_report, verbose=verbose) else 1) 

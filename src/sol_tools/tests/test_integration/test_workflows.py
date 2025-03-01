@@ -159,8 +159,16 @@ class WorkflowTester(BaseTester):
         return super().run_tests(tests)
 
 
-def run_workflow_tests() -> bool:
-    """Run all workflow tests."""
+def run_workflow_tests(verbose=False) -> bool:
+    """
+    Run all workflow integration tests.
+    
+    Args:
+        verbose: Whether to print verbose output
+        
+    Returns:
+        bool: True if all tests passed, False otherwise
+    """
     tester = WorkflowTester()
     try:
         results = tester.run_tests()

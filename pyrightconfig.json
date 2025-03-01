@@ -1,0 +1,16 @@
+{
+  "include": [
+    "src"
+  ],
+  "exclude": [
+    "**/node_modules",
+    "**/__pycache__"
+  ],
+  "stubPath": "stubs",
+  "venvPath": ".",
+  "venv": "venv",
+  "typeCheckingMode": "basic",
+  "reportMissingModuleSource": "warning",
+  "reportGeneralTypeIssues": "warning",
+  "reportMissingImports": "none"
+} 

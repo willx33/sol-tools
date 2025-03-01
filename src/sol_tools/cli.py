@@ -5,11 +5,15 @@ import sys
 import curses
 import argparse
 import asyncio
-from typing import Dict, Callable, Any
+from typing import Dict, Callable, Any, List
 from pathlib import Path
+import logging
 
 from . import __version__
-from .core.config import load_config, check_env_vars, get_env_var
+from .core.config import load_config
+from .core.config_registry import ConfigRegistry
+from .core.di_container import DIContainer
+from .core.base_adapter import BaseAdapter
 from .core.menu import CursesMenu, InquirerMenu
 
 # Import handlers for each module
@@ -112,6 +116,125 @@ def create_handlers() -> Dict[str, Callable[[], Any]]:
     return handlers
 
 
+def register_module_dependencies(container: DIContainer, test_mode: bool) -> None:
+    """
+    Register all module dependencies with the dependency injection container.
+    
+    Args:
+        container: The dependency injection container
+        test_mode: Whether to operate in test mode
+    """
+    # Import adapter classes
+    from .modules.solana.solana_adapter import SolanaAdapter
+    from .modules.dragon.dragon_adapter import DragonAdapter
+    from .modules.dune.dune_adapter import DuneAdapter
+    from .modules.gmgn.gmgn_adapter import GMGNAdapter
+    from .modules.sharp.sharp_adapter import SharpAdapter
+    
+    # Register adapters with the container
+    container.register_type(SolanaAdapter)
+    container.register_type(DragonAdapter)
+    container.register_type(DuneAdapter)
+    container.register_type(GMGNAdapter)
+    container.register_type(SharpAdapter)
+    
+    # Register any interfaces or other dependencies
+    # ...
+
+
+def register_module_schemas(registry: ConfigRegistry) -> None:
+    """
+    Register all module configuration schemas with the registry.
+    
+    Args:
+        registry: The configuration registry
+    """
+    # Solana schema
+    solana_schema = {
+        "type": "object",
+        "properties": {
+            "default_channel": {"type": "string"},
+            "require_dragon": {"type": "boolean"},
+            "max_connections": {"type": "integer", "minimum": 1},
+            "default_token_filter": {"type": "array", "items": {"type": "string"}}
+        }
+    }
+    registry.register_schema(
+        "solana", 
+        solana_schema, 
+        version="1.0.0", 
+        required_env_vars=["HELIUS_API_KEY"]
+    )
+    
+    # Dragon schema
+    dragon_schema = {
+        "type": "object",
+        "properties": {
+            "default_threads": {"type": "integer", "minimum": 1},
+            "use_proxies": {"type": "boolean"}
+        }
+    }
+    registry.register_schema("dragon", dragon_schema, version="1.0.0")
+    
+    # Dune schema
+    dune_schema = {
+        "type": "object",
+        "properties": {
+            "cache_results": {"type": "boolean"},
+            "cache_timeout": {"type": "integer", "minimum": 60}
+        }
+    }
+    registry.register_schema(
+        "dune", 
+        dune_schema, 
+        version="1.0.0", 
+        required_env_vars=["DUNE_API_KEY"]
+    )
+    
+    # GMGN schema
+    gmgn_schema = {
+        "type": "object",
+        "properties": {
+            "default_output_format": {"type": "string", "enum": ["json", "csv", "table"]}
+        }
+    }
+    registry.register_schema("gmgn", gmgn_schema, version="1.0.0")
+    
+    # Sharp schema
+    sharp_schema = {
+        "type": "object",
+        "properties": {
+            "default_prompt": {"type": "string"}
+        }
+    }
+    registry.register_schema("sharp", sharp_schema, version="1.0.0")
+
+
+def setup_application(args) -> tuple:
+    """
+    Set up the application components based on command-line arguments.
+    
+    Args:
+        args: Command-line arguments
+        
+    Returns:
+        Tuple of (ConfigRegistry, DIContainer)
+    """
+    # Create configuration registry
+    registry = ConfigRegistry(test_mode=args.test_mode)
+    
+    # Register module schemas
+    register_module_schemas(registry)
+    
+    # Create dependency injection container
+    container = DIContainer(test_mode=args.test_mode)
+    
+    # Register module dependencies
+    register_module_dependencies(container, args.test_mode)
+    
+    return registry, container
+
+
 def check_requirements():
     """
     Check if all required files and directories exist.
@@ -123,63 +246,139 @@ def check_requirements():
     # All directory creation is now handled in the load_config function
 
 
+def run_tests(args):
+    """
+    Run tests based on command-line arguments.
+    
+    Args:
+        args: Command-line arguments
+    
+    Returns:
+        bool: True if all tests passed, False otherwise
+    """
+    try:
+        from .tests.test_runner import run_all_tests
+        
+        # Prepare test options
+        options = {
+            "save_report": args.report,
+            "verbose": args.verbose
+        }
+        
+        # Run specific tests if requested
+        if args.test_module:
+            print(f"Running tests for module: {args.test_module}")
+            
+            # Check if module test function exists
+            module_name = args.test_module.lower()
+            
+            # Try to import the test function dynamically
+            try:
+                if module_name == "file" or module_name == "fileops":
+                    from .tests.test_core.test_file_ops import run_file_ops_tests
+                    return run_file_ops_tests(verbose=args.verbose)
+                elif module_name == "config":
+                    from .tests.test_core.test_config import run_config_tests
+                    return run_config_tests(verbose=args.verbose)
+                elif module_name == "dragon":
+                    from .tests.test_modules.test_dragon import run_dragon_tests
+                    return run_dragon_tests(verbose=args.verbose)
+                elif module_name == "solana":
+                    from .tests.test_modules.test_solana import run_solana_tests
+                    return run_solana_tests(verbose=args.verbose)
+                elif module_name == "sharp":
+                    from .tests.test_modules.test_sharp import run_sharp_tests
+                    return run_sharp_tests(verbose=args.verbose)
+                elif module_name == "dune":
+                    from .tests.test_modules.test_dune import run_dune_tests
+                    return run_dune_tests(verbose=args.verbose)
+                elif module_name == "gmgn":
+                    from .tests.test_modules.test_gmgn import run_gmgn_tests
+                    return run_gmgn_tests(verbose=args.verbose)
+                elif module_name == "ethereum":
+                    from .tests.test_modules.test_ethereum import run_ethereum_tests
+                    return run_ethereum_tests(verbose=args.verbose)
+                elif module_name == "integration" or module_name == "workflow":
+                    from .tests.test_integration.test_workflows import run_workflow_tests
+                    return run_workflow_tests(verbose=args.verbose)
+                else:
+                    print(f"⚠️ Unknown test module: {module_name}")
+                    print("Available modules: file, config, dragon, solana, sharp, dune, gmgn, ethereum, integration")
+                    return False
+            except ImportError as e:
+                print(f"⚠️ Failed to import test module {module_name}: {str(e)}")
+                return False
+        
+        # Run all tests
+        return run_all_tests(**options)
+    except ImportError as e:
+        print(f"⚠️ Failed to import test runner: {str(e)}")
+        
+        # Fall back to legacy test if new framework is not available
+        try:
+            from .utils.test_file_ops import run_all_tests
+            return run_all_tests()
+        except ImportError:
+            print("❌ Could not find any test framework")
+            return False
+
+
 def parse_args():
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(description="Sol Tools - Ultimate blockchain and crypto analysis toolkit")
     parser.add_argument('--version', action='version', version=f'Sol Tools {__version__}')
     parser.add_argument('--text-menu', action='store_true', help='Use text-based menu (inquirer) instead of curses')
-    parser.add_argument('--test', action='store_true', help='Run file system tests')
+    parser.add_argument('--test', action='store_true', help='Run all tests')
+    parser.add_argument('--test-module', type=str, help='Run tests for a specific module (e.g., dragon, solana, file)')
+    parser.add_argument('--verbose', '-v', action='store_true', help='Enable verbose test output')
+    parser.add_argument('--report', '-r', action='store_true', help='Generate a test report')
     parser.add_argument('--clean', action='store_true', help='Clean cache and __pycache__ directories before starting')
+    parser.add_argument('--use-curses', action='store_true', help='Use curses-based menu')
+    parser.add_argument('--test-mode', action='store_true', help='Run in test mode')
     # No need to add --help as argparse adds it automatically
     
     return parser.parse_args()
 
 
 def main():
-    """Main entry point for the CLI."""
+    """Main entry point for the application."""
+    # Parse command-line arguments
     args = parse_args()
     
-    # Check if the test flag is set
+    # Set up logging
+    logging_level = "DEBUG" if args.verbose else "INFO"
+    logging.basicConfig(
+        level=logging_level,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+    
+    # Run tests if requested
     if args.test:
-        try:
-            from .tests.test_runner import run_all_tests
-            sys.exit(0 if run_all_tests() else 1)
-        except ImportError:
-            # Fall back to legacy test if new framework is not available
-            from .utils.test_file_ops import run_all_tests
-            sys.exit(0 if run_all_tests() else 1)
+        run_tests(args)
+        return
     
-    # Check if the clean flag is set
-    if args.clean:
-        print("Cleaning cache and __pycache__ directories...")
-        try:
-            from .utils.cleanup import clean_caches
-            success = clean_caches()
-            if not success:
-                print("Warning: Some errors occurred during cleanup")
-            if len(sys.argv) == 2:  # Only --clean was specified, exit after cleaning
-                sys.exit(0)
-        except Exception as e:
-            print(f"Error during cleanup: {e}")
-            # Continue with execution even if cleanup fails
-    
-    # Check if required directories exist
+    # Check for required environment variables and files
     check_requirements()
     
-    # Create all function handlers
+    # Set up application components
+    registry, container = setup_application(args)
+    
+    # Create the handlers
     handlers = create_handlers()
     
-    # Run appropriate menu based on args
+    # Create and run the appropriate menu
     if args.text_menu:
+        # Use inquirer menu if explicitly requested
         menu = InquirerMenu(handlers)
         menu.run()
     else:
         try:
+            # Set up curses menu by default
             menu = CursesMenu(handlers)
             curses.wrapper(menu.run)
         except Exception as e:
-            print(f"Error with curses menu: {e}")
-            print("Falling back to text-based menu...")
+            print(f"Error in curses menu: {e}")
+            print("Falling back to inquirer menu")
             menu = InquirerMenu(handlers)
             menu.run()
 

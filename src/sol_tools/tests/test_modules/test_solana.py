@@ -295,8 +295,16 @@ class SolanaTester(BaseTester):
         return super().run_tests(tests)
 
 
-def run_solana_tests() -> bool:
-    """Run all Solana tests."""
+def run_solana_tests(verbose=False) -> bool:
+    """
+    Run all Solana tests.
+    
+    Args:
+        verbose: Whether to print verbose output
+        
+    Returns:
+        bool: True if all tests passed, False otherwise
+    """
     tester = SolanaTester()
     try:
         results = tester.run_tests()

@@ -281,8 +281,16 @@ class DragonTester(BaseTester):
         return super().run_tests(tests)
 
 
-def run_dragon_tests() -> bool:
-    """Run all Dragon tests."""
+def run_dragon_tests(verbose=False) -> bool:
+    """
+    Run all Dragon tests.
+    
+    Args:
+        verbose: Whether to print verbose output
+        
+    Returns:
+        bool: True if all tests passed, False otherwise
+    """
     tester = DragonTester()
     try:
         results = tester.run_tests()

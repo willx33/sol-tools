@@ -189,8 +189,16 @@ class FileOpsTester(BaseTester):
         return super().run_tests(tests)
 
 
-def run_file_ops_tests() -> bool:
-    """Run all file operations tests."""
+def run_file_ops_tests(verbose=False) -> bool:
+    """
+    Run all file operations tests.
+    
+    Args:
+        verbose: Whether to print verbose output
+        
+    Returns:
+        bool: True if all tests passed, False otherwise
+    """
     tester = FileOpsTester()
     try:
         results = tester.run_tests()
