@@ -111,7 +111,8 @@ def token_monitor():
                 module="solana",
                 data_items=processed_results,
                 filename_prefix="token_monitoring",
-                data_type="output"
+                data_type="output",
+                subdir="transaction-data"
             )
             
             print(f"\nAll monitoring results saved to: {output_path}")
@@ -277,7 +278,7 @@ def wallet_monitor():
                 data_items=[monitoring_data],
                 filename_prefix=f"wallet_monitoring_{timestamp}",
                 data_type="output",
-                subdir="wallet_data"
+                subdir="wallet-data"
             )
             
             print(f"\n✅ Monitoring complete. Detected {len(events)} transactions.")

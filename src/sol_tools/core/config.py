@@ -71,10 +71,10 @@ def load_config() -> Dict[str, Any]:
     for directory in [DATA_DIR, CONFIG_DIR, CACHE_DIR, INPUT_DATA_DIR, OUTPUT_DATA_DIR]:
         directory.mkdir(parents=True, exist_ok=True)
     
-    # List of all modules
-    modules = ["dragon", "dune", "sharp", "solana", "gmgn", "ethereum"]
+    # List of all modules that need base directories
+    modules = ["solana", "ethereum"]
     
-    # Create base output directories for each module
+    # Create base output directories for these modules only
     for module in modules:
         (OUTPUT_DATA_DIR / module).mkdir(parents=True, exist_ok=True)
     
@@ -105,8 +105,6 @@ def load_config() -> Dict[str, Any]:
     
     # Solana modules
     (OUTPUT_DATA_DIR / "solana").mkdir(parents=True, exist_ok=True)
-    (OUTPUT_DATA_DIR / "solana" / "token-lists").mkdir(parents=True, exist_ok=True)
-    (OUTPUT_DATA_DIR / "solana" / "wallet-lists").mkdir(parents=True, exist_ok=True)
     (OUTPUT_DATA_DIR / "solana" / "transaction-data").mkdir(parents=True, exist_ok=True)
     (OUTPUT_DATA_DIR / "solana" / "wallet-data").mkdir(parents=True, exist_ok=True)
     (OUTPUT_DATA_DIR / "solana" / "telegram").mkdir(parents=True, exist_ok=True)
@@ -121,8 +119,6 @@ def load_config() -> Dict[str, Any]:
     
     # Ethereum modules
     (OUTPUT_DATA_DIR / "ethereum").mkdir(parents=True, exist_ok=True)
-    (OUTPUT_DATA_DIR / "ethereum" / "token-lists").mkdir(parents=True, exist_ok=True)
-    (OUTPUT_DATA_DIR / "ethereum" / "wallet-lists").mkdir(parents=True, exist_ok=True)
     (OUTPUT_DATA_DIR / "ethereum" / "transaction-data").mkdir(parents=True, exist_ok=True)
     (OUTPUT_DATA_DIR / "ethereum" / "wallet-data").mkdir(parents=True, exist_ok=True)
     
@@ -134,8 +130,13 @@ def load_config() -> Dict[str, Any]:
     (OUTPUT_DATA_DIR / "ethereum" / "dragon" / "early-buyers").mkdir(parents=True, exist_ok=True)
     
     # Sharp modules
-    (OUTPUT_DATA_DIR / "sharp-tools").mkdir(parents=True, exist_ok=True)
-    (OUTPUT_DATA_DIR / "sharp-tools" / "data").mkdir(parents=True, exist_ok=True)
+    (OUTPUT_DATA_DIR / "sharp").mkdir(parents=True, exist_ok=True)
+    (OUTPUT_DATA_DIR / "sharp" / "wallets").mkdir(parents=True, exist_ok=True)
+    (OUTPUT_DATA_DIR / "sharp" / "csv").mkdir(parents=True, exist_ok=True)
+    (OUTPUT_DATA_DIR / "sharp" / "csv" / "merged").mkdir(parents=True, exist_ok=True)
+    (OUTPUT_DATA_DIR / "sharp" / "csv" / "unmerged").mkdir(parents=True, exist_ok=True)
+    (OUTPUT_DATA_DIR / "sharp" / "csv" / "filtered").mkdir(parents=True, exist_ok=True)
+    (OUTPUT_DATA_DIR / "sharp" / "csv" / "unfiltered").mkdir(parents=True, exist_ok=True)
     
     # API modules
     (OUTPUT_DATA_DIR / "api").mkdir(parents=True, exist_ok=True)

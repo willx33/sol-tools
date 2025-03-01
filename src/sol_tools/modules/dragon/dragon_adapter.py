@@ -450,12 +450,12 @@ class DragonAdapter:
         """Initialize the Dragon adapter."""
         from ...core.config import INPUT_DATA_DIR, OUTPUT_DATA_DIR
         
-        # Define the new directory structure based on blockchain
+        # Define the input directory structure
         self.ethereum_input_dir = INPUT_DATA_DIR / "ethereum" / "wallet-lists"
         self.solana_input_dir = INPUT_DATA_DIR / "solana" / "wallet-lists"
         self.proxies_dir = INPUT_DATA_DIR / "proxies"
         
-        # Update output paths based on the new directory structure
+        # Define the output directory structure based on blockchain
         self.ethereum_output_dirs = {
             "wallet_analysis": OUTPUT_DATA_DIR / "ethereum" / "dragon" / "wallet-analysis",
             "top_traders": OUTPUT_DATA_DIR / "ethereum" / "dragon" / "top-traders",
@@ -470,7 +470,8 @@ class DragonAdapter:
             "early_buyers": OUTPUT_DATA_DIR / "solana" / "dragon" / "early-buyers"
         }
         
-        self.token_info_dir = OUTPUT_DATA_DIR / "solana" / "dragon" / "token-info"
+        # GMGN token info is part of API modules
+        self.token_info_dir = OUTPUT_DATA_DIR / "api" / "gmgn" / "token-info"
         
         # Set up threading defaults
         self.default_threads = 40

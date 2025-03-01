@@ -77,9 +77,9 @@ def create_main_menu(handlers: Dict[str, Callable]) -> List[MenuOption]:
     solana_menu = [
         # Core Solana tools
         MenuOption("Token Watcher", handlers.get('solana_token_monitor'), 
-                  description="Monitors token transactions. Saves to data/output-data/solana/monitor/."),
+                  description="Monitors token transactions. Saves to data/output-data/solana/transaction-data/."),
         MenuOption("Wallet Watcher", handlers.get('solana_wallet_monitor'),
-                  description="Tracks wallet activity. Uses data/input-data/solana/wallets/monitor-wallets.txt."),
+                  description="Tracks wallet activity. Uses data/input-data/solana/wallet-lists/monitor-wallets.txt."),
         MenuOption("TG Data Extractor", handlers.get('solana_telegram_scraper'),
                   description="Extracts data from Telegram. Saves to data/output-data/solana/telegram/."),
         
@@ -89,13 +89,13 @@ def create_main_menu(handlers: Dict[str, Callable]) -> List[MenuOption]:
         MenuOption("Wallet Profiler - Dragon", handlers.get('solana_dragon_wallet'),
                   description="PnL analysis from wallet list. Uses data/input-data/solana/wallet-lists/."),
         MenuOption("Top Trader Finder - Dragon", handlers.get('solana_dragon_traders'),
-                  description="Finds best traders by token. Output: data/output-data/dragon/solana/top_traders/."),
+                  description="Finds best traders by token. Output: data/output-data/solana/dragon/top-traders/."),
         MenuOption("TX Scanner - Dragon", handlers.get('solana_dragon_scan'),
-                  description="Gets all token transactions. Output: data/output-data/dragon/solana/transaction_data/."),
+                  description="Gets all token transactions. Output: data/output-data/solana/dragon/transaction-data/."),
         MenuOption("Copycat Finder - Dragon", handlers.get('solana_dragon_copy'),
                   description="Finds copycat wallets. Input: wallet address to analyze."),
         MenuOption("Whale Tracker - Dragon", handlers.get('solana_dragon_holders'),
-                  description="Lists major token holders. Output: data/output-data/dragon/solana/top_holders/."),
+                  description="Lists major token holders. Output: data/output-data/solana/dragon/top-holders/."),
         MenuOption("Early Investor Finder - Dragon", handlers.get('solana_dragon_buyers'),
                   description="Finds first buyers for token. Input: contract address."),
         
@@ -155,26 +155,26 @@ def create_main_menu(handlers: Dict[str, Callable]) -> List[MenuOption]:
     # Dune Analytics tools
     dune_menu = [
         MenuOption("Query Runner", handlers.get('dune_query'),
-                  description="Runs Dune queries by ID. Output: data/output-data/dune/csv/."),
+                  description="Runs Dune queries by ID. Output: data/output-data/api/dune/csv/."),
         MenuOption("Address Extractor", handlers.get('dune_parse'),
-                  description="Extracts addresses from CSV. Input: data/input-data/dune/csv/, output: output-data/dune/parsed/."),
+                  description="Extracts addresses from CSV. Input: data/input-data/api/dune/query-configs/, output: data/output-data/api/dune/parsed/."),
         MenuOption("Back", None)
     ]
     
     # GMGN tools
     gmgn_menu = [
         MenuOption("Token Info", handlers.get('dragon_gmgn_info'),
-                  description="Gets detailed information for a specific token. Output: data/output-data/gmgn/token_info/."),
+                  description="Gets detailed information for a specific token. Output: data/output-data/api/gmgn/token-info/."),
         MenuOption("New Tokens", handlers.get('dragon_gmgn_new'),
-                  description="Gets new listings from GMGN. Output: data/output-data/gmgn/token_listings/."),
+                  description="Gets new listings from GMGN. Output: data/output-data/api/gmgn/token-listings/."),
         MenuOption("Completing Tokens", handlers.get('dragon_gmgn_completing'),
-                  description="Gets completing tokens from GMGN. Output: data/output-data/gmgn/token_listings/."),
+                  description="Gets completing tokens from GMGN. Output: data/output-data/api/gmgn/token-listings/."),
         MenuOption("Soaring Tokens", handlers.get('dragon_gmgn_soaring'),
-                  description="Gets trending tokens from GMGN. Output: data/output-data/gmgn/token_listings/."),
+                  description="Gets trending tokens from GMGN. Output: data/output-data/api/gmgn/token-listings/."),
         MenuOption("Bonded Tokens", handlers.get('dragon_gmgn_bonded'),
-                  description="Gets bonded tokens from GMGN. Output: data/output-data/gmgn/token_listings/."),
+                  description="Gets bonded tokens from GMGN. Output: data/output-data/api/gmgn/token-listings/."),
         MenuOption("Market Cap Data", handlers.get('gmgn_mcap_data'),
-                  description="Fetches market cap data for Solana tokens. Output: data/output-data/gmgn/."),
+                  description="Fetches market cap data for Solana tokens. Output: data/output-data/api/gmgn/market-cap-data/."),
         MenuOption("Back", None)
     ]
     
@@ -191,11 +191,11 @@ def create_main_menu(handlers: Dict[str, Callable]) -> List[MenuOption]:
         MenuOption("Wallet Profiler - Dragon", handlers.get('dragon_eth_wallet'),
                   description="Analyzes ETH wallet performance. Uses data/input-data/ethereum/wallet-lists/."),
         MenuOption("Top Trader Finder - Dragon", handlers.get('dragon_eth_traders'),
-                  description="Finds ETH top traders. Output: data/output-data/dragon/ethereum/top_traders/."),
+                  description="Finds ETH top traders. Output: data/output-data/ethereum/dragon/top-traders/."),
         MenuOption("TX Scanner - Dragon", handlers.get('dragon_eth_scan'),
-                  description="Gets ETH token transactions. Output: data/output-data/dragon/ethereum/wallet_analysis/."),
+                  description="Gets ETH token transactions. Output: data/output-data/ethereum/dragon/wallet-analysis/."),
         MenuOption("Time-Based TX Finder - Dragon", handlers.get('dragon_eth_timestamp'),
-                  description="Finds ETH txs by time range. Output: data/output-data/dragon/ethereum/early_buyers/."),
+                  description="Finds ETH txs by time range. Output: data/output-data/ethereum/dragon/early-buyers/."),
         MenuOption("Back", None)
     ]
     

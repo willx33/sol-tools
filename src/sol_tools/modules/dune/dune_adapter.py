@@ -93,7 +93,7 @@ class DuneAdapter:
                 "error": "No query IDs provided"
             }
             
-        csv_dir = self.dune_data_dir / "csv"
+        csv_dir = self.output_dir / "csv"
         results = {
             "success": True,
             "queries_run": 0,
@@ -197,7 +197,7 @@ class DuneAdapter:
         Returns:
             List of CSV filenames
         """
-        csv_dir = self.dune_data_dir / "csv"
+        csv_dir = self.output_dir / "csv"
         return [f.name for f in csv_dir.glob("*.csv")]
     
     def delete_csv(self, csv_filename: str) -> bool:
@@ -210,7 +210,7 @@ class DuneAdapter:
         Returns:
             True if the file was deleted, False otherwise
         """
-        csv_path = self.dune_data_dir / "csv" / csv_filename
+        csv_path = self.output_dir / "csv" / csv_filename
         if csv_path.exists():
             try:
                 os.remove(csv_path)

@@ -70,10 +70,11 @@ def solana_bundle_checker():
             from ...utils.common import save_unified_data
             
             output_path = save_unified_data(
-                module="dragon",
+                module="solana/dragon",
                 data_items=formatted_data,
                 filename_prefix="bundle_check",
-                data_type="output"
+                data_type="output",
+                subdir="transaction-data"
             )
             
             print(f"\nAll bundle check results saved to: {output_path}")
