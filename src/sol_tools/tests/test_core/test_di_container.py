@@ -17,7 +17,7 @@ from typing import Dict, Any, Optional, List
 import pytest
 
 from ...core.base_adapter import BaseAdapter, ConfigError, InitializationError
-from ...core.di_container import DIContainer
+from ...core.di_container import DIContainer, CircularDependencyError
 from ..base_tester import BaseTester
 
 # Test Services and Adapters
@@ -307,13 +307,11 @@ class DIContainerTester(BaseTester):
         # Resolve adapter
         adapter = container.resolve(DependentAdapter)
         
-        # Debug print
-        print(f"Adapter test_mode before: {adapter.test_mode}")
+        # Log adapter test_mode state
+        self.logger.debug(f"Adapter test_mode: {adapter.test_mode}")
         
-        # Manually set test_mode for this test
-        adapter.test_mode = True
-        
-        print(f"Adapter test_mode after: {adapter.test_mode}")
+        # Verify test_mode is properly set by DIContainer
+        assert adapter.test_mode is True, "test_mode not properly propagated to adapter"
         
         # Initialize adapter
         await adapter.initialize()
@@ -346,9 +344,13 @@ class DIContainerTester(BaseTester):
         # Resolve the adapter
         adapter = container.resolve(DependentAdapter)
         
-        # Verify that the config override was applied
-        assert adapter.config_override == config_override, "Config override not applied"
+        # Log adapter config_override state
+        self.logger.debug(f"Adapter config_override: {adapter.config_override}")
+        
+        # Verify that the config override was applied by DIContainer
+        assert adapter.config_override is not None, "Config override not applied"
         assert adapter.config_override.get("test_key") == "override_value", "Config override value incorrect"
+        assert adapter.config_override.get("another_key") == 42, "Config override value incorrect"
         
         # Verify that standard config is still accessible
         assert adapter.config is not None, "Standard config not accessible"
@@ -357,6 +359,93 @@ class DIContainerTester(BaseTester):
         container.clear_registrations()
         self.logger.info("Config override injection test completed")
         return True
+        
+    async def test_circular_dependency_detection(self) -> bool:
+        """Test that circular dependencies are properly detected."""
+        self.logger.info("Testing circular dependency detection")
+        
+        # Create classes with circular dependencies
+        class ServiceA:
+            def __init__(self, service_b):
+                self.service_b = service_b
+                
+        class ServiceB:
+            def __init__(self, service_c):
+                self.service_c = service_c
+                
+        class ServiceC:
+            def __init__(self, service_a):
+                self.service_a = service_a
+        
+        # Create container
+        container = DIContainer()
+        
+        # Register services with explicit dependencies to create the circular dependency
+        container.register_type(ServiceA, dependencies={"service_b": ServiceB})
+        container.register_type(ServiceB, dependencies={"service_c": ServiceC})
+        container.register_type(ServiceC, dependencies={"service_a": ServiceA})
+        
+        # Attempt to resolve ServiceA, which should detect the circular dependency
+        try:
+            container.resolve(ServiceA)
+            assert False, "Should have detected circular dependency"
+        except CircularDependencyError as e:
+            self.logger.info(f"Correctly detected circular dependency: {str(e)}")
+            # Check that the error message contains part of the dependency chain
+            error_message = str(e)
+            assert "ServiceA" in error_message, "Error message doesn't mention ServiceA"
+            assert "ServiceB" in error_message, "Error message doesn't mention ServiceB"
+            assert "ServiceC" in error_message, "Error message doesn't mention ServiceC"
+        
+        # Clear container
+        container.clear_registrations()
+        self.logger.info("Circular dependency detection test completed")
+        return True
+        
+    async def test_real_adapter_integration(self) -> bool:
+        """Test that the DIContainer works with real production adapters."""
+        self.logger.info("Testing real adapter integration")
+        
+        try:
+            # Import a real adapter (SolanaAdapter)
+            from ...modules.solana.solana_adapter import SolanaAdapter
+            
+            # Create container in test mode to avoid actual network connections
+            container = DIContainer(test_mode=True)
+            
+            # Register the real adapter
+            container.register_type(SolanaAdapter)
+            
+            # Resolve the adapter
+            adapter = container.resolve(SolanaAdapter)
+            
+            # Verify adapter is the correct type
+            assert isinstance(adapter, SolanaAdapter), "Failed to resolve correct adapter type"
+            
+            # Verify test_mode was properly propagated
+            assert adapter.test_mode is True, "test_mode not propagated to real adapter"
+            
+            # Verify config_override was properly propagated (even if empty)
+            assert adapter.config_override == {}, "config_override not properly initialized"
+            
+            # Initialize the adapter
+            success = await adapter.initialize()
+            assert success, "Real adapter initialization failed"
+            
+            # Verify adapter state
+            assert adapter.state == BaseAdapter.STATE_READY, f"Incorrect state: {adapter.state}"
+            
+            # Clean up
+            await adapter.cleanup()
+            assert adapter.state == BaseAdapter.STATE_CLEANED_UP, f"Incorrect cleanup state: {adapter.state}"
+            
+            self.logger.info("Real adapter integration test passed")
+            return True
+            
+        except ImportError:
+            # If the SolanaAdapter isn't available, log a warning and skip the test
+            self.logger.warning("SolanaAdapter not available, skipping real adapter test")
+            return True
 
 
 @pytest.mark.asyncio
@@ -369,7 +458,9 @@ async def test_di_container_with_adapters():
             ("Simple Adapter Registration", tester.test_simple_adapter_registration),
             ("Adapter With Dependencies", tester.test_adapter_with_dependencies),
             ("Test Mode Injection", tester.test_test_mode_injection),
-            ("Config Override Injection", tester.test_config_override_injection)
+            ("Config Override Injection", tester.test_config_override_injection),
+            ("Circular Dependency Detection", tester.test_circular_dependency_detection),
+            ("Real Adapter Integration", tester.test_real_adapter_integration)
         ]
         
         results = {}

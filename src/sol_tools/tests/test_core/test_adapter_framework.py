@@ -31,7 +31,7 @@ from ..base_tester import BaseTester
 
 
 # Create a minimal test adapter that implements BaseAdapter
-class TestAdapter(BaseAdapter):
+class MinimalTestAdapter(BaseAdapter):
     """Minimal adapter implementation for testing purposes."""
     
     def __init__(
@@ -153,7 +153,7 @@ class AdapterFrameworkTester(BaseTester):
         self.logger.info("Testing adapter lifecycle management")
         
         # Create adapter
-        adapter = TestAdapter(test_mode=False, verbose=True)
+        adapter = MinimalTestAdapter(test_mode=False, verbose=True)
         
         # Initialize
         success = await adapter.initialize()
@@ -207,7 +207,7 @@ class AdapterFrameworkTester(BaseTester):
             "max_retries": 5
         }
         
-        adapter = TestAdapter(
+        adapter = MinimalTestAdapter(
             test_mode=False,
             verbose=True,
             config_override=override
@@ -238,7 +238,7 @@ class AdapterFrameworkTester(BaseTester):
         self.logger.info("Testing adapter in test mode")
         
         # Create adapter in test mode
-        adapter = TestAdapter(test_mode=True, verbose=True)
+        adapter = MinimalTestAdapter(test_mode=True, verbose=True)
         
         # Initialize
         success = await adapter.initialize()
@@ -258,14 +258,14 @@ class AdapterFrameworkTester(BaseTester):
         self.logger.info("Testing adapter error handling")
         
         # Test initialization failure
-        adapter = TestAdapter(fail_initialize=True, verbose=True)
+        adapter = MinimalTestAdapter(fail_initialize=True, verbose=True)
         success = await adapter.initialize()
         assert not success, "Adapter should fail initialization"
         assert adapter.state == BaseAdapter.STATE_ERROR, f"Incorrect state: {adapter.state}"
         assert isinstance(adapter.error, InitializationError), f"Incorrect error type: {type(adapter.error)}"
         
         # Test validation failure
-        adapter = TestAdapter(fail_validate=True, verbose=True)
+        adapter = MinimalTestAdapter(fail_validate=True, verbose=True)
         await adapter.initialize()
         success = await adapter.validate()
         assert not success, "Adapter should fail validation"
@@ -273,7 +273,7 @@ class AdapterFrameworkTester(BaseTester):
         assert isinstance(adapter.error, ValidationError), f"Incorrect error type: {type(adapter.error)}"
         
         # Test cleanup failure
-        adapter = TestAdapter(fail_cleanup=True, verbose=True)
+        adapter = MinimalTestAdapter(fail_cleanup=True, verbose=True)
         await adapter.initialize()
         
         try:
@@ -287,6 +287,97 @@ class AdapterFrameworkTester(BaseTester):
         
         self.logger.info("Error handling test passed")
         return True
+        
+    async def test_invalid_config(self) -> bool:
+        """Test handling of invalid configuration."""
+        self.logger.info("Testing invalid configuration handling")
+        
+        # Create a temporary configuration file with invalid structure
+        config_dir = self.test_root / "config"
+        config_dir.mkdir(exist_ok=True)
+        
+        # Write an invalid config (missing modules section)
+        invalid_config = {
+            "not_modules": {
+                "test": {
+                    "api_key": "test_value"
+                }
+            }
+        }
+        
+        config_file = config_dir / "invalid_config.json"
+        with open(config_file, "w") as f:
+            f.write(json.dumps(invalid_config))
+        
+        # Set environment variable to point to our invalid config
+        os.environ["SOL_TOOLS_CONFIG_PATH"] = str(config_file)
+        
+        # Create adapter
+        adapter = MinimalTestAdapter(verbose=True)
+        
+        # Initialize should still succeed but with default values
+        success = await adapter.initialize()
+        assert success, "Adapter should initialize with defaults despite invalid config"
+        
+        # Check that default values are used (don't check specific value, just that it exists)
+        config = adapter.config
+        assert "api_key" in config, "Default api_key not set"
+        
+        # Write a malformed JSON file
+        with open(config_file, "w") as f:
+            f.write("{invalid json")
+        
+        # Create another adapter
+        adapter2 = MinimalTestAdapter(verbose=True)
+        
+        # Initialize should still succeed with defaults
+        success = await adapter2.initialize()
+        assert success, "Adapter should initialize with defaults despite malformed config"
+        
+        # Clean up
+        await adapter.cleanup()
+        await adapter2.cleanup()
+        
+        # Reset environment variable
+        if "SOL_TOOLS_CONFIG_PATH" in os.environ:
+            del os.environ["SOL_TOOLS_CONFIG_PATH"]
+            
+        self.logger.info("Invalid configuration test passed")
+        return True
+        
+    async def test_uninitialized_adapter(self) -> bool:
+        """Test handling of uninitialized adapters."""
+        self.logger.info("Testing uninitialized adapter handling")
+        
+        # Create adapter but don't initialize it
+        adapter = MinimalTestAdapter(verbose=True)
+        
+        # Validate should fail gracefully
+        success = await adapter.validate()
+        assert not success, "Validate should fail on uninitialized adapter"
+        assert adapter.state == BaseAdapter.STATE_ERROR, f"Incorrect state: {adapter.state}"
+        
+        # Try to use adapter methods (this simulates a user trying to use an adapter without initialization)
+        try:
+            # In a real adapter, this would be a business method that requires initialization
+            # Here we'll just try accessing config which should be None/empty before initialization
+            if adapter.config and len(adapter.config) > 0:
+                self.logger.warning("Adapter has config data despite not being initialized")
+        except Exception as e:
+            self.logger.warning(f"Exception when accessing uninitialized adapter: {str(e)}")
+            # We don't assert here because we want to test graceful failure, not specific exceptions
+        
+        # Cleanup should work on uninitialized adapter
+        try:
+            await adapter.cleanup()
+            assert adapter.state == BaseAdapter.STATE_CLEANED_UP, f"Incorrect state after cleanup: {adapter.state}"
+            self.logger.info("Cleanup succeeded on uninitialized adapter")
+        except Exception as e:
+            self.logger.error(f"Cleanup failed on uninitialized adapter: {str(e)}")
+            assert False, "Cleanup should work on uninitialized adapter"
+        
+        self.logger.info("Uninitialized adapter test passed")
+        return True
 
 
 @pytest.mark.asyncio
@@ -298,7 +389,9 @@ async def test_adapter_framework():
         ("Adapter Lifecycle", tester.test_adapter_lifecycle),
         ("Configuration Override", tester.test_config_override),
         ("Test Mode", tester.test_test_mode),
-        ("Error Handling", tester.test_error_handling)
+        ("Error Handling", tester.test_error_handling),
+        ("Invalid Configuration", tester.test_invalid_config),
+        ("Uninitialized Adapter", tester.test_uninitialized_adapter)
     ]
     
     results = {}

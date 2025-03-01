@@ -297,22 +297,23 @@ class DIContainer:
             kwargs['test_mode'] = self.test_mode
             
             # Always pass config_override to adapters, even if it's empty
-            kwargs['config_override'] = self.config_override
+            # Use a copy to avoid sharing the same instance which could cause issues
+            kwargs['config_override'] = self.config_override.copy() if self.config_override else {}
                 
             self.logger.debug(f"Creating adapter {registration.implementation_type.__name__} with test_mode={self.test_mode}, config_override={self.config_override}")
         
         # Create the instance
         instance = registration.implementation_type(**kwargs)
         
-        # Ensure test_mode and config_override are properly set for adapters after creation
+        # Double-check that test_mode and config_override are properly set for adapter instances
         if isinstance(instance, BaseAdapter):
             # Ensure test_mode is correctly set to the container's test_mode
             if instance.test_mode != self.test_mode:
                 self.logger.warning(f"Correcting test_mode for {registration.implementation_type.__name__} from {instance.test_mode} to {self.test_mode}")
                 instance.test_mode = self.test_mode
             
-            # Ensure config_override is correctly set to the container's config_override
-            if instance.config_override != self.config_override:
+            # Ensure config_override is correctly set
+            if self.config_override is not None and instance.config_override != self.config_override:
                 self.logger.warning(f"Correcting config_override for {registration.implementation_type.__name__}")
                 instance.config_override = self.config_override.copy()  # Use copy to ensure we don't have reference issues
         
