@@ -39,26 +39,10 @@ def main():
     
     print(f"Removed {count} __pycache__ directories.")
     
-    # Verify .env has PYTHONPYCACHEPREFIX set
-    env_file = root_dir / ".env"
-    if not env_file.exists():
-        print("Warning: .env file not found.")
-        return
-        
-    with open(env_file, "r") as f:
-        content = f.read()
-        
-    if "PYTHONPYCACHEPREFIX" not in content:
-        print("Warning: PYTHONPYCACHEPREFIX not in .env file.")
-        print("Please add the following line to your .env file:")
-        print("PYTHONPYCACHEPREFIX=./data/__pycache__")
-    else:
-        print("PYTHONPYCACHEPREFIX already set in .env file.")
-        
-    print("\nInstructions:")
-    print("1. When running your code, make sure to load the .env file to set PYTHONPYCACHEPREFIX")
-    print("2. Alternatively, you can set this environment variable before running your scripts:")
-    print("   export PYTHONPYCACHEPREFIX=./data/__pycache__")
+    # No need to check .env file anymore as PYTHONPYCACHEPREFIX is set programmatically
+    print("\nInformation:")
+    print("The PYTHONPYCACHEPREFIX is now set programmatically in cli.py when the application starts.")
+    print("The central __pycache__ directory will be used regardless of .env configuration.")
     
 if __name__ == "__main__":
     main()
