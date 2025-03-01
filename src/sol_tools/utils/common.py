@@ -14,6 +14,9 @@ from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TimeEl
 from rich.live import Live
 from rich.table import Table
 from rich.panel import Panel
+from rich.layout import Layout
+from rich.columns import Columns
+from rich.text import Text
 
 from ..core.config import get_env_var, ROOT_DIR, DATA_DIR, CACHE_DIR
 
@@ -194,115 +197,105 @@ def validate_addresses(addresses: List[str], validator_func: Callable[[str], boo
 
 
 class ProgressManager:
-    """Enhanced progress tracking system with ETA support."""
+    """Manages progress bars and spinners for long-running tasks."""
     
-    def __init__(self, total_steps: int = 0, description: str = "Process Progress"):
-        """Initialize the progress manager.
-        
-        Args:
-            total_steps: Total number of steps in the process
-            description: Description of the process
-        """
-        self.total_steps = total_steps
-        self.completed_steps = 0
-        self.current_description = description
-        self.step_descriptions = {}
-        self.step_progress = {}
-        self.start_time = time.time()
+    def __init__(self, total=None, description="Processing", transient=True):
+        """Initialize a new progress manager."""
+        self.total = total
+        self.description = description
+        self.transient = transient
+        self.task_id = None
         self.progress = None
         self.live = None
-        self._task_id = None
-        self.current_step = None
-        self.step_start_time = None
-    
-    def initialize(self):
-        """Initialize the progress display and start live tracking."""
-        self.progress = Progress(
+        self.start_time = time.time()
+        
+        # Default settings for progress display
+        self.show_sparklines = True
+        self.enable_animations = True
+        
+        # Default colors
+        self.primary_color = '#6C5CE7'
+        self.secondary_color = '#00CEC9'
+        
+        # Create progress columns with theme colors
+        self.progress_columns = [
             SpinnerColumn(),
             TextColumn("[bold blue]{task.description}"),
-            BarColumn(bar_width=40),
+            BarColumn(bar_width=None, complete_style=f"bold {self.primary_color}", 
+                     finished_style=f"bold {self.secondary_color}"),
             TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
             TimeElapsedColumn(),
             TimeRemainingColumn(),
-        )
-        self._task_id = self.progress.add_task(
-            self.current_description, 
-            total=self.total_steps,
-            completed=self.completed_steps
-        )
-        self.live = Live(self.progress, refresh_per_second=4)
+        ]
+    
+    def start(self):
+        """Start the progress tracking."""
+        # Create a new progress instance
+        refresh_rate = 10 if self.enable_animations else 4
+        self.progress = Progress(*self.progress_columns, refresh_per_second=refresh_rate, 
+                               transient=self.transient)
+        
+        # Start the live display
+        self.live = Live(self.progress, refresh_per_second=refresh_rate, transient=self.transient)
         self.live.start()
+        
+        # Add the task
+        self.task_id = self.progress.add_task(self.description, total=self.total)
         return self
     
-    def start_step(self, step_name: str, description: str = None):
-        """Start tracking a new step."""
-        if description is None:
-            description = f"Processing {step_name}..."
-        
-        self.current_step = step_name
-        self.step_descriptions[step_name] = description
-        self.step_start_time = time.time()
-        
-        if self.progress:
-            self.progress.update(self._task_id, description=description)
-    
-    def update_step(self, completed: float, total: float, description: str = None):
+    def update(self, completed: float, total: float = None, description: str = None):
         """Update progress of the current step."""
-        if self.current_step:
-            self.step_progress[self.current_step] = (completed, total)
+        if self.task_id is not None:
+            update_kwargs = {"completed": completed}
+            if total is not None:
+                update_kwargs["total"] = total
+            if description is not None:
+                update_kwargs["description"] = description
             
-            if description:
-                self.step_descriptions[self.current_step] = description
-                if self.progress:
-                    self.progress.update(self._task_id, description=description)
-    
-    def complete_step(self, description: str = None):
-        """Mark the current step as completed."""
-        if self.current_step:
-            self.step_progress[self.current_step] = (1, 1)  # 100% completion
-            
-            if description:
-                self.step_descriptions[self.current_step] = description
-            
-            self.completed_steps += 1
-            if self.progress:
-                self.progress.update(
-                    self._task_id, 
-                    completed=self.completed_steps,
-                    description=f"[green]✓[/green] {self.step_descriptions.get(self.current_step, 'Step completed')}"
-                )
+            self.progress.update(self.task_id, **update_kwargs)
     
     def complete(self, success: bool = True, message: str = None):
         """Finish the progress tracking."""
         if self.live:
             if success:
                 final_msg = message or "Process completed successfully!"
-                self.progress.update(self._task_id, description=f"[bold green]✓ {final_msg}[/bold green]")
+                success_color = 'bright_green'
+                self.progress.update(
+                    self.task_id, 
+                    description=f"[bold {success_color}]✓ {final_msg}[/bold {success_color}]", 
+                    completed=self.total
+                )
             else:
                 final_msg = message or "Process failed!"
-                self.progress.update(self._task_id, description=f"[bold red]✗ {final_msg}[/bold red]")
+                warning_color = 'bright_red'
+                self.progress.update(
+                    self.task_id, 
+                    description=f"[bold {warning_color}]✗ {final_msg}[/bold {warning_color}]"
+                )
             
+            # Add a slight delay to ensure final state is visible
+            time.sleep(0.5)
             self.live.stop()
     
     def get_elapsed_time(self) -> float:
         """Get the total elapsed time in seconds."""
         return time.time() - self.start_time
     
-    def get_step_elapsed_time(self) -> float:
-        """Get the elapsed time for the current step in seconds."""
-        if self.step_start_time:
-            return time.time() - self.step_start_time
-        return 0
-    
     def get_eta(self) -> float:
         """Estimate time remaining in seconds."""
-        if self.completed_steps == 0:
+        if not self.progress or self.task_id is None:
             return 0
-        
+            
+        task = self.progress.tasks[self.task_id]
+        if task.completed == 0:
+            return 0
+            
         elapsed = self.get_elapsed_time()
-        avg_time_per_step = elapsed / self.completed_steps
-        remaining_steps = self.total_steps - self.completed_steps
-        return avg_time_per_step * remaining_steps
+        progress_ratio = task.completed / task.total if task.total else 0
+        if progress_ratio == 0:
+            return 0
+            
+        return elapsed * (1 - progress_ratio) / progress_ratio
 
 
 class WorkflowResult:
@@ -367,33 +360,111 @@ class WorkflowResult:
         self.progress_manager = manager
     
     def print_summary(self):
-        """Print a summary of the workflow results."""
-        console.print("\n[bold cyan]Workflow Summary[/bold cyan]")
+        """Print a richly formatted summary of the workflow results."""
+        # Create a nested panel structure for better organization
+        from rich.panel import Panel
+        from rich.layout import Layout
+        from rich.columns import Columns
+        from rich.text import Text
         
+        # If failed, show error message
         if not self.success:
-            console.print(f"[bold red]Workflow failed: {self.error_message}[/bold red]")
+            error_panel = Panel(
+                f"[bold red]{self.error_message}[/bold red]",
+                title="[bold red]Error[/bold red]",
+                border_style="red"
+            )
+            console.print("\n[bold red]Workflow Failed[/bold red]")
+            console.print(error_panel)
             return
         
-        # Print completion time and duration
-        duration_str = format_duration(self.duration())
-        console.print(f"[green]Completed in: {duration_str}[/green]")
+        # Create header panel
+        header_text = Text.assemble(
+            ("Workflow Summary", "bold purple"),
+            "\n",
+            ("✓ ", "bright_green"),
+            ("Completed Successfully", "bold bright_green")
+        )
         
-        # Print stats
+        # Create time information text
+        duration_str = format_duration(self.duration())
+        time_text = Text.assemble(
+            ("Duration: ", "bold"),
+            (f"{duration_str}", "cyan"),
+            "\n",
+            ("Completed at: ", "bold"),
+            (f"{self.end_time.strftime('%Y-%m-%d %H:%M:%S')}", "cyan")
+        )
+        
+        # Create panels for different sections
+        time_panel = Panel(time_text, title="⏱️ Time Information", border_style="cyan")
+        
+        # Create statistics panel if there are statistics
+        stats_panels = []
         if self.stats:
-            table = Table(title="Statistics", show_header=True)
-            table.add_column("Metric")
-            table.add_column("Value")
+            # Convert stats to a nicely formatted table
+            table = Table(show_header=True, header_style="bold magenta", border_style="bright_black")
+            table.add_column("Metric", style="dim")
+            table.add_column("Value", style="cyan")
             
             for key, value in self.stats.items():
-                table.add_row(key, str(value))
+                formatted_key = key.replace('_', ' ').title()
+                # Format numeric values nicely if possible
+                if isinstance(value, (int, float)):
+                    if isinstance(value, int):
+                        formatted_value = f"{value:,}"
+                    else:
+                        formatted_value = f"{value:,.2f}"
+                else:
+                    formatted_value = str(value)
+                
+                table.add_row(formatted_key, formatted_value)
             
-            console.print(table)
+            stats_panels.append(Panel(table, title="📊 Statistics", border_style="magenta"))
         
-        # Print output files
+        # Create file panels for inputs and outputs
+        file_panels = []
+        if self.input_files:
+            input_table = Table(show_header=True, header_style="bold blue", expand=True)
+            input_table.add_column("Input Name", style="dim")
+            input_table.add_column("Path", style="bright_blue")
+            
+            for key, path in self.input_files.items():
+                formatted_key = key.replace('_', ' ').title()
+                input_table.add_row(formatted_key, path)
+            
+            file_panels.append(Panel(input_table, title="📥 Input Files", border_style="blue"))
+            
         if self.output_files:
-            console.print("[green]Output Files:[/green]")
-            for key, file_path in self.output_files.items():
-                console.print(f"  - {key}: [cyan]{file_path}[/cyan]")
+            output_table = Table(show_header=True, header_style="bold green", expand=True)
+            output_table.add_column("Output Name", style="dim")
+            output_table.add_column("Path", style="bright_green")
+            
+            for key, path in self.output_files.items():
+                formatted_key = key.replace('_', ' ').title()
+                output_table.add_row(formatted_key, path)
+            
+            file_panels.append(Panel(output_table, title="📤 Output Files", border_style="green"))
+            
+        # Create summary layout
+        layout = Layout()
+        layout.split_column(
+            Layout(Panel(header_text, border_style="purple"), size=3),
+            Layout(time_panel, size=6),
+            Layout(
+                Columns(stats_panels) if stats_panels else Panel("[dim]No statistics to display[/dim]", border_style="dim"), 
+                size=12
+            ),
+            Layout(
+                Columns(file_panels) if file_panels else Panel("[dim]No files to display[/dim]", border_style="dim"),
+                size=16
+            )
+        )
+        
+        # Print the layout
+        console.print("\n")
+        console.print(layout)
+        console.print("\n[bright_green]✓[/bright_green] [bold]Workflow completed[/bold]\n")
     
     def export_results(self, export_format: str = 'json', output_path: str = None) -> str:
         """
