@@ -1,33 +1,31 @@
-# Sol-Tools: Ultimate Crypto God Tools
+# Sol-Tools: Ultimate Crypto Analysis Toolkit
 
-A comprehensive command-line toolkit that unifies multiple cryptocurrency analysis and operations tools into a single powerful interface. This project brings together functionality from Dragon, Sharp-Setup, Solana-Token-Bot, Dune API tools, CSV processing, and more.
+A comprehensive command-line toolkit that unifies multiple cryptocurrency analysis and operations tools into a single powerful interface. This project brings together functionality from Dragon, Sharp-Tools, Solana analytics, Dune API integration, GMGN data, and more.
 
 ## Features
 
-### Dragon Tools
+### Cross-Chain Analytics
 - **Solana Analytics**: Bundle checker, wallet analysis, top traders, transaction scanning, copy wallet finder, top holders, early buyers
 - **Ethereum Analytics**: Wallet checker, top traders, transaction scanning, timestamp finder
-- **GMGN Integration**: New tokens, completing tokens, soaring tokens, bonded tokens
+- **API Integrations**: GMGN, Dune Analytics, BullX, and more
 
-### Solana Tools
-- **Token Monitoring**: Real-time monitoring of new transactions for specific tokens
-- **Wallet Monitoring**: Watch transactions for specific wallets
-- **Telegram Scraper**: Extract token data from Telegram channels
+### API Modules
+- **Dune Analytics**: Execute Dune queries and save results to CSV, parse query results
+- **GMGN Integration**: Fetch token data, market cap data, token listings (new, completing, soaring, bonded)
 
-### Dune Analytics
-- **Query Runner**: Execute Dune queries and save results to CSV
-- **Result Parser**: Extract token addresses from query results
+### Blockchain Modules
+- **Solana Tools**: Token monitoring, wallet tracking, transaction analysis, telegram integration
+- **Ethereum Tools**: Transaction analysis, wallet analysis, token tracking
 
-### Sharp Tools
+### Sharp-Tools
 - **Wallet Checker**: Analyze wallet statistics via BullX API with real-time progress tracking and export
 - **Wallet Splitter**: Break large wallet lists into smaller chunks with validation and detailed reporting
-- **CSV Merger**: Combine multiple CSV files with advanced options and comprehensive metadata
-- **PnL Checker**: Filter wallet CSVs based on performance metrics
+- **CSV Processing**: Merge, filter, and analyze CSV data with comprehensive metadata
 
 ### Core Features
 - **Interactive CLI**: User-friendly menu with keyboard navigation (arrow keys)
 - **Environment Manager**: GUI for adding/editing API keys and environment variables
-- **Unified Configuration**: Centralized settings across all tools
+- **Unified Data Structure**: Organized by blockchain and module type for clarity
 - **Cross-blockchain Support**: Works with Solana, Ethereum, and other networks
 - **Progress Tracking**: Real-time progress bars with ETA for all operations
 - **Export Functionality**: Export results in JSON, CSV, and Excel formats with detailed metadata
