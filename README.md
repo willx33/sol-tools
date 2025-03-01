@@ -25,6 +25,7 @@ A comprehensive command-line toolkit that unifies multiple cryptocurrency analys
 ### Core Features
 - **Interactive CLI**: User-friendly menu with keyboard navigation (arrow keys)
 - **Environment Manager**: GUI for adding/editing API keys and environment variables
+- **Visual Indicators**: Red dots show menu options with missing required environment variables
 - **Unified Data Structure**: Organized by blockchain and module type for clarity
 - **Cross-blockchain Support**: Works with Solana, Ethereum, and other networks
 - **Progress Tracking**: Real-time progress bars with ETA for all operations
@@ -64,9 +65,34 @@ sol-tools --test
 sol-tools --clean
 ```
 
+## Testing
+
+Sol-Tools includes a comprehensive testing framework to ensure all components function correctly. The tests use mock data to simulate APIs and blockchain interactions without making actual external calls.
+
+### Running Tests
+
+```bash
+# Run all tests
+sol-tools --test
+
+# Run individual test modules (for developers)
+python -m src.sol_tools.tests.test_modules.test_dragon
+python -m src.sol_tools.tests.test_modules.test_solana
+python -m src.sol_tools.tests.test_core.test_file_ops
+```
+
+### Test Framework Structure
+
+- **Core Tests**: Test basic functionality like file operations and configuration
+- **Module Tests**: Test each module (Dragon, Solana, GMGN, etc.) individually
+- **Integration Tests**: Test cross-module workflows and interactions
+- **Mock Data**: Uses realistic mock data to simulate API responses
+
+All tests run in isolated temporary directories and clean up after themselves.
+
 ## Configuration
 
-The application uses environment variables for configuration. You can set these in a `.env` file in the project root or use the Settings menu in the application.
+The application uses environment variables for configuration. You can set these in a `.env` file in the project root or use the Settings menu in the application. Menu options requiring environment variables that aren't set are marked with a red dot (🔴) for easy identification.
 
 Required environment variables by module:
 

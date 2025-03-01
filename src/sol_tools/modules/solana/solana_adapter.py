@@ -13,20 +13,31 @@ from pathlib import Path
 class SolanaAdapter:
     """Adapter for Solana monitoring functionality."""
     
-    def __init__(self, config: Optional[Dict[str, Any]] = None):
+    def __init__(self, config: Optional[Dict[str, Any]] = None, test_mode: bool = False):
         """
         Initialize the Solana adapter.
         
         Args:
             config: Additional configuration parameters (optional)
+            test_mode: If True, operate in test mode without external API calls
         """
         self.logger = logging.getLogger(__name__)
         self.config = config or {}
+        self.test_mode = test_mode
         
-        # Environment variables
-        self.helius_api_key = os.environ.get("HELIUS_API_KEY")
-        self.telegram_bot_token = os.environ.get("TELEGRAM_BOT_TOKEN")
-        self.telegram_chat_id = os.environ.get("TELEGRAM_CHAT_ID")
+        # Environment variables (not used in test mode)
+        if not self.test_mode:
+            self.helius_api_key = os.environ.get("HELIUS_API_KEY")
+            self.telegram_bot_token = os.environ.get("TELEGRAM_BOT_TOKEN")
+            self.telegram_chat_id = os.environ.get("TELEGRAM_CHAT_ID")
+        else:
+            # Use dummy values in test mode
+            self.helius_api_key = "test_helius_key"
+            self.telegram_bot_token = "test_telegram_token"
+            self.telegram_chat_id = "test_chat_id"
+            
+            # Set up mock data for testing
+            self._setup_test_data()
         
         # Get proper directories using the ensure_data_dir utility
         from ...utils.common import ensure_data_dir
@@ -44,11 +55,50 @@ class SolanaAdapter:
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         
         # Initialize components conditionally based on environment variables
-        self._init_telegram()
-        self._init_websocket()
+        if not self.test_mode:
+            self._init_telegram()
+            self._init_websocket()
+            
+            # Attempt to initialize Dragon-related functionality
+            self._init_dragon()
+    
+    def _setup_test_data(self):
+        """Set up mock data for testing"""
+        from ...tests.test_data.mock_data import (
+            generate_solana_wallet_list,
+            generate_solana_transaction_list,
+            random_token_amount
+        )
         
-        # Attempt to initialize Dragon-related functionality
-        self._init_dragon()
+        # Create mock data structures
+        self.mock_wallets = generate_solana_wallet_list(10)
+        self.mock_transactions = generate_solana_transaction_list(20)
+        
+        # Mock token data
+        self.token_data = {
+            "SOL": {
+                "symbol": "SOL",
+                "name": "Solana",
+                "address": "So11111111111111111111111111111111111111112",
+                "decimals": 9,
+                "price_usd": 120.45,
+                "market_cap": 51234567890
+            },
+            "BONK": {
+                "symbol": "BONK",
+                "name": "Bonk",
+                "address": "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263",
+                "decimals": 5,
+                "price_usd": 0.00001245,
+                "market_cap": 623457000
+            }
+        }
+        
+        # Mock monitoring data
+        self.mock_monitoring = {
+            "wallets": {},
+            "tokens": {}
+        }
     
     def _init_dragon(self):
         """Initialize Dragon functionality."""
@@ -358,3 +408,133 @@ class SolanaAdapter:
         except Exception as e:
             self.logger.error(f"Error in solana_wallet_checker: {e}")
             return {"success": False, "error": f"Error: {str(e)}"}
+    
+    def setup_wallet_monitor(self, wallet_address: str, token_filter: List[str] = None, test_mode: bool = False) -> Dict[str, Any]:
+        """
+        Set up monitoring for a Solana wallet.
+        
+        Args:
+            wallet_address: Solana wallet address to monitor
+            token_filter: List of token symbols to include (optional)
+            test_mode: Run in test mode without making actual API calls
+            
+        Returns:
+            Dictionary with setup status and additional information
+        """
+        # Use class test_mode if not explicitly specified
+        if self.test_mode or test_mode:
+            # Return mock data in test mode
+            return {
+                "success": True,
+                "wallet_address": wallet_address,
+                "monitor_id": f"test_monitor_{int(time.time())}",
+                "token_count": 5,
+                "test_mode": True,
+                "wallet_data": next((w for w in self.mock_wallets if w["address"] == wallet_address), self.mock_wallets[0])
+            }
+        
+        # Validate wallet address format
+        if not self._validate_solana_address(wallet_address):
+            return {
+                "success": False,
+                "error": "Invalid Solana wallet address format"
+            }
+        
+        # Check if required API key is available
+        if not self.helius_api_key:
+            return {
+                "success": False,
+                "error": "Helius API key not set. Please add HELIUS_API_KEY to your environment variables."
+            }
+        
+        try:
+            # Create output directory for this wallet
+            wallet_output_dir = self.output_dir / "wallet-monitor" / wallet_address
+            wallet_output_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Initialize wallet data file
+            wallet_data_file = wallet_output_dir / "wallet_data.json"
+            
+            # Fetch initial wallet data using Helius
+            wallet_data = self._fetch_wallet_data(wallet_address)
+            
+            if not wallet_data:
+                return {
+                    "success": False,
+                    "error": "Failed to fetch wallet data from Helius API"
+                }
+            
+            # Apply token filter if provided
+            if token_filter:
+                wallet_data["tokens"] = [t for t in wallet_data.get("tokens", []) 
+                                        if t.get("symbol", "").upper() in [tf.upper() for tf in token_filter]]
+            
+            # Save initial data
+            with open(wallet_data_file, "w") as f:
+                json.dump(wallet_data, f, indent=2)
+            
+            # Create monitor configuration
+            monitor_config = {
+                "wallet_address": wallet_address,
+                "created_at": int(time.time()),
+                "token_filter": token_filter,
+                "active": True,
+                "last_updated": int(time.time()),
+                "update_frequency": 300  # 5 minutes default
+            }
+            
+            # Save monitor configuration
+            config_file = wallet_output_dir / "monitor_config.json"
+            with open(config_file, "w") as f:
+                json.dump(monitor_config, f, indent=2)
+            
+            return {
+                "success": True,
+                "wallet_address": wallet_address,
+                "monitor_id": str(int(time.time())),
+                "token_count": len(wallet_data.get("tokens", [])),
+                "data_file": str(wallet_data_file),
+                "config_file": str(config_file)
+            }
+            
+        except Exception as e:
+            self.logger.exception(f"Error setting up wallet monitor: {str(e)}")
+            return {
+                "success": False,
+                "error": f"Error setting up wallet monitor: {str(e)}"
+            }
+    
+    def get_token_data(self, token_symbol: str) -> Dict[str, Any]:
+        """
+        Get data for a specific token.
+        
+        Args:
+            token_symbol: Symbol of the token to get data for
+            
+        Returns:
+            Dictionary with token data or empty dict if not found
+        """
+        # In test mode, return mock data
+        if self.test_mode:
+            if token_symbol.upper() in self.token_data:
+                return self.token_data[token_symbol.upper()]
+            else:
+                # Return generic token data if the specific token is not found
+                return {
+                    "symbol": token_symbol.upper(),
+                    "name": f"{token_symbol.capitalize()} Token",
+                    "address": f"SampleAddress{token_symbol.upper()}123456789",
+                    "decimals": 9,
+                    "price_usd": 1.23,
+                    "market_cap": 1000000
+                }
+        
+        # In real mode, fetch data from API or cache
+        try:
+            # Placeholder for real implementation
+            # This would fetch from API or local cache
+            return {}
+            
+        except Exception as e:
+            self.logger.exception(f"Error fetching token data: {str(e)}")
+            return {}

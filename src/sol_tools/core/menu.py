@@ -13,13 +13,15 @@ class MenuOption:
         handler: Optional[Callable] = None,
         children: Optional[List['MenuOption']] = None,
         parent: Optional['MenuOption'] = None,
-        description: str = ""
+        description: str = "",
+        missing_env_vars: bool = False
     ):
         self.name = name
         self.handler = handler
         self.children = children or []
         self.parent = parent
         self.description = description
+        self.missing_env_vars = missing_env_vars
 
 
 class MenuManager:
@@ -69,35 +71,70 @@ class MenuManager:
             self.selected_idx = new_idx
 
 
+def check_module_env_vars(module_name: str) -> bool:
+    """
+    Check if required environment variables are set for a module.
+    
+    Args:
+        module_name: Name of the module to check
+        
+    Returns:
+        True if all required variables are set, False if any are missing
+    """
+    from .config import check_env_vars
+    
+    env_vars = check_env_vars(module_name)
+    return all(env_vars.values()) if env_vars else True
+
 def create_main_menu(handlers: Dict[str, Callable]) -> List[MenuOption]:
     """
     Build the top-level menu structure.
     """
+    # Check environment variables for each module
+    solana_env_vars_missing = not check_module_env_vars("solana")
+    dragon_env_vars_missing = not check_module_env_vars("dragon")
+    dune_env_vars_missing = not check_module_env_vars("dune")
+    ethereum_env_vars_missing = not check_module_env_vars("ethereum")
+    gmgn_env_vars_missing = not check_module_env_vars("gmgn")
+    telegram_env_vars_missing = not check_module_env_vars("telegram")
+    bullx_env_vars_missing = not check_module_env_vars("bullx")
+    sharp_env_vars_missing = not check_module_env_vars("sharp")
+    
     # Solana Tools (including Dragon Solana tools)
     solana_menu = [
         # Core Solana tools
         MenuOption("Token Watcher", handlers.get('solana_token_monitor'), 
-                  description="Monitors token transactions. Saves to data/output-data/solana/transaction-data/."),
+                  description="Monitors token transactions. Saves to data/output-data/solana/transaction-data/.",
+                  missing_env_vars=solana_env_vars_missing),
         MenuOption("Wallet Watcher", handlers.get('solana_wallet_monitor'),
-                  description="Tracks wallet activity. Uses data/input-data/solana/wallet-lists/monitor-wallets.txt."),
+                  description="Tracks wallet activity. Uses data/input-data/solana/wallet-lists/monitor-wallets.txt.",
+                  missing_env_vars=solana_env_vars_missing),
         MenuOption("TG Data Extractor", handlers.get('solana_telegram_scraper'),
-                  description="Extracts data from Telegram. Saves to data/output-data/solana/telegram/."),
+                  description="Extracts data from Telegram. Saves to data/output-data/solana/telegram/.",
+                  missing_env_vars=telegram_env_vars_missing),
         
         # Dragon Solana tools
         MenuOption("Bundle Tracker - Dragon", handlers.get('solana_dragon_bundle'),
-                  description="Finds bundled buys. Input: contract address."),
+                  description="Finds bundled buys. Input: contract address.",
+                  missing_env_vars=solana_env_vars_missing or dragon_env_vars_missing),
         MenuOption("Wallet Profiler - Dragon", handlers.get('solana_dragon_wallet'),
-                  description="PnL analysis from wallet list. Uses data/input-data/solana/wallet-lists/."),
+                  description="PnL analysis from wallet list. Uses data/input-data/solana/wallet-lists/.",
+                  missing_env_vars=solana_env_vars_missing or dragon_env_vars_missing),
         MenuOption("Top Trader Finder - Dragon", handlers.get('solana_dragon_traders'),
-                  description="Finds best traders by token. Output: data/output-data/solana/dragon/top-traders/."),
+                  description="Finds best traders by token. Output: data/output-data/solana/dragon/top-traders/.",
+                  missing_env_vars=solana_env_vars_missing or dragon_env_vars_missing),
         MenuOption("TX Scanner - Dragon", handlers.get('solana_dragon_scan'),
-                  description="Gets all token transactions. Output: data/output-data/solana/dragon/transaction-data/."),
+                  description="Gets all token transactions. Output: data/output-data/solana/dragon/transaction-data/.",
+                  missing_env_vars=solana_env_vars_missing or dragon_env_vars_missing),
         MenuOption("Copycat Finder - Dragon", handlers.get('solana_dragon_copy'),
-                  description="Finds copycat wallets. Input: wallet address to analyze."),
+                  description="Finds copycat wallets. Input: wallet address to analyze.",
+                  missing_env_vars=solana_env_vars_missing or dragon_env_vars_missing),
         MenuOption("Whale Tracker - Dragon", handlers.get('solana_dragon_holders'),
-                  description="Lists major token holders. Output: data/output-data/solana/dragon/top-holders/."),
+                  description="Lists major token holders. Output: data/output-data/solana/dragon/top-holders/.",
+                  missing_env_vars=solana_env_vars_missing or dragon_env_vars_missing),
         MenuOption("Early Investor Finder - Dragon", handlers.get('solana_dragon_buyers'),
-                  description="Finds first buyers for token. Input: contract address."),
+                  description="Finds first buyers for token. Input: contract address.",
+                  missing_env_vars=solana_env_vars_missing or dragon_env_vars_missing),
         
         MenuOption("Back", None)
     ]
@@ -105,49 +142,65 @@ def create_main_menu(handlers: Dict[str, Callable]) -> List[MenuOption]:
     # Sharp wallet and CSV tools
     wallet_analyzer_submenu = [
         MenuOption("Standard (No Export)", handlers.get('sharp_wallet_checker'),
-                  description="Basic wallet analysis with no export file."),
+                  description="Basic wallet analysis with no export file.",
+                  missing_env_vars=sharp_env_vars_missing or bullx_env_vars_missing),
         MenuOption("Export as JSON", handlers.get('sharp_wallet_checker_json'),
-                  description="Wallet analysis with JSON export of results."),
+                  description="Wallet analysis with JSON export of results.",
+                  missing_env_vars=sharp_env_vars_missing or bullx_env_vars_missing),
         MenuOption("Export as CSV", handlers.get('sharp_wallet_checker_csv'),
-                  description="Wallet analysis with CSV export of results."),
+                  description="Wallet analysis with CSV export of results.",
+                  missing_env_vars=sharp_env_vars_missing or bullx_env_vars_missing),
         MenuOption("Export as Excel", handlers.get('sharp_wallet_checker_excel'),
-                  description="Wallet analysis with Excel workbook export of results."),
+                  description="Wallet analysis with Excel workbook export of results.",
+                  missing_env_vars=sharp_env_vars_missing or bullx_env_vars_missing),
         MenuOption("Back", None)
     ]
     
     address_splitter_submenu = [
         MenuOption("Standard (No Export)", handlers.get('sharp_wallet_splitter'),
-                  description="Standard address splitting with no export."),
+                  description="Standard address splitting with no export.",
+                  missing_env_vars=sharp_env_vars_missing or bullx_env_vars_missing),
         MenuOption("Export as JSON", handlers.get('sharp_wallet_splitter_json'),
-                  description="Address splitting with JSON export of results."),
+                  description="Address splitting with JSON export of results.",
+                  missing_env_vars=sharp_env_vars_missing or bullx_env_vars_missing),
         MenuOption("Export as CSV", handlers.get('sharp_wallet_splitter_csv'),
-                  description="Address splitting with CSV export of results."),
+                  description="Address splitting with CSV export of results.",
+                  missing_env_vars=sharp_env_vars_missing or bullx_env_vars_missing),
         MenuOption("Export as Excel", handlers.get('sharp_wallet_splitter_excel'),
-                  description="Address splitting with Excel workbook export."),
+                  description="Address splitting with Excel workbook export.",
+                  missing_env_vars=sharp_env_vars_missing or bullx_env_vars_missing),
         MenuOption("Back", None)
     ]
     
     csv_combiner_submenu = [
         MenuOption("Standard (No Export)", handlers.get('sharp_csv_merger'),
-                  description="Standard CSV combining with no export."),
+                  description="Standard CSV combining with no export.",
+                  missing_env_vars=sharp_env_vars_missing or bullx_env_vars_missing),
         MenuOption("Export as JSON", handlers.get('sharp_csv_merger_json'),
-                  description="CSV combining with JSON export of results."),
+                  description="CSV combining with JSON export of results.",
+                  missing_env_vars=sharp_env_vars_missing or bullx_env_vars_missing),
         MenuOption("Export as CSV", handlers.get('sharp_csv_merger_csv'),
-                  description="CSV combining with CSV export of results."),
+                  description="CSV combining with CSV export of results.",
+                  missing_env_vars=sharp_env_vars_missing or bullx_env_vars_missing),
         MenuOption("Export as Excel", handlers.get('sharp_csv_merger_excel'),
-                  description="CSV combining with Excel workbook export."),
+                  description="CSV combining with Excel workbook export.",
+                  missing_env_vars=sharp_env_vars_missing or bullx_env_vars_missing),
         MenuOption("Back", None)
     ]
     
     sharp_menu = [
         MenuOption("Wallet Analyzer", children=wallet_analyzer_submenu,
-                  description="Analyzes wallet data via BullX API with enhanced progress tracking."),
+                  description="Analyzes wallet data via BullX API with enhanced progress tracking.",
+                  missing_env_vars=sharp_env_vars_missing or bullx_env_vars_missing),
         MenuOption("Address Splitter", children=address_splitter_submenu,
-                  description="Splits address lists to 25k chunks with validation and tracking."),
+                  description="Splits address lists to 25k chunks with validation and tracking.",
+                  missing_env_vars=sharp_env_vars_missing or bullx_env_vars_missing),
         MenuOption("CSV Combiner", children=csv_combiner_submenu,
-                  description="Combines CSV files with advanced options and detailed reporting."),
+                  description="Combines CSV files with advanced options and detailed reporting.",
+                  missing_env_vars=sharp_env_vars_missing or bullx_env_vars_missing),
         MenuOption("Profit Filter", handlers.get('sharp_pnl_checker'),
-                  description="Filters CSV data by profit metrics. Uses data/input-data/sharp/pnl/."),
+                  description="Filters CSV data by profit metrics. Uses data/input-data/sharp/pnl/.",
+                  missing_env_vars=sharp_env_vars_missing or bullx_env_vars_missing),
         MenuOption("Back", None)
     ]
     
@@ -155,47 +208,61 @@ def create_main_menu(handlers: Dict[str, Callable]) -> List[MenuOption]:
     # Dune Analytics tools
     dune_menu = [
         MenuOption("Query Runner", handlers.get('dune_query'),
-                  description="Runs Dune queries by ID. Output: data/output-data/api/dune/csv/."),
+                  description="Runs Dune queries by ID. Output: data/output-data/api/dune/csv/.",
+                  missing_env_vars=dune_env_vars_missing),
         MenuOption("Address Extractor", handlers.get('dune_parse'),
-                  description="Extracts addresses from CSV. Input: data/input-data/api/dune/query-configs/, output: data/output-data/api/dune/parsed/."),
+                  description="Extracts addresses from CSV. Input: data/input-data/api/dune/query-configs/, output: data/output-data/api/dune/parsed/.",
+                  missing_env_vars=dune_env_vars_missing),
         MenuOption("Back", None)
     ]
     
     # GMGN tools
     gmgn_menu = [
         MenuOption("Token Info", handlers.get('dragon_gmgn_info'),
-                  description="Gets detailed information for a specific token. Output: data/output-data/api/gmgn/token-info/."),
+                  description="Gets detailed information for a specific token. Output: data/output-data/api/gmgn/token-info/.",
+                  missing_env_vars=gmgn_env_vars_missing or dragon_env_vars_missing),
         MenuOption("New Tokens", handlers.get('dragon_gmgn_new'),
-                  description="Gets new listings from GMGN. Output: data/output-data/api/gmgn/token-listings/."),
+                  description="Gets new listings from GMGN. Output: data/output-data/api/gmgn/token-listings/.",
+                  missing_env_vars=gmgn_env_vars_missing or dragon_env_vars_missing),
         MenuOption("Completing Tokens", handlers.get('dragon_gmgn_completing'),
-                  description="Gets completing tokens from GMGN. Output: data/output-data/api/gmgn/token-listings/."),
+                  description="Gets completing tokens from GMGN. Output: data/output-data/api/gmgn/token-listings/.",
+                  missing_env_vars=gmgn_env_vars_missing or dragon_env_vars_missing),
         MenuOption("Soaring Tokens", handlers.get('dragon_gmgn_soaring'),
-                  description="Gets trending tokens from GMGN. Output: data/output-data/api/gmgn/token-listings/."),
+                  description="Gets trending tokens from GMGN. Output: data/output-data/api/gmgn/token-listings/.",
+                  missing_env_vars=gmgn_env_vars_missing or dragon_env_vars_missing),
         MenuOption("Bonded Tokens", handlers.get('dragon_gmgn_bonded'),
-                  description="Gets bonded tokens from GMGN. Output: data/output-data/api/gmgn/token-listings/."),
+                  description="Gets bonded tokens from GMGN. Output: data/output-data/api/gmgn/token-listings/.",
+                  missing_env_vars=gmgn_env_vars_missing or dragon_env_vars_missing),
         MenuOption("Market Cap Data", handlers.get('gmgn_mcap_data'),
-                  description="Fetches market cap data for Solana tokens. Output: data/output-data/api/gmgn/market-cap-data/."),
+                  description="Fetches market cap data for Solana tokens. Output: data/output-data/api/gmgn/market-cap-data/.",
+                  missing_env_vars=gmgn_env_vars_missing or dragon_env_vars_missing),
         MenuOption("Back", None)
     ]
     
     api_menu = [
         MenuOption("Dune API Tools", children=dune_menu,
-                  description="Fetches and processes data from Dune Analytics API."),
+                  description="Fetches and processes data from Dune Analytics API.",
+                  missing_env_vars=dune_env_vars_missing),
         MenuOption("GMGN Tools", children=gmgn_menu,
-                  description="Tools for GMGN.ai data collection and processing."),
+                  description="Tools for GMGN.ai data collection and processing.",
+                  missing_env_vars=gmgn_env_vars_missing),
         MenuOption("Back", None)
     ]
     
     # Ethereum Tools
     eth_menu = [
         MenuOption("Wallet Profiler - Dragon", handlers.get('dragon_eth_wallet'),
-                  description="Analyzes ETH wallet performance. Uses data/input-data/ethereum/wallet-lists/."),
+                  description="Analyzes ETH wallet performance. Uses data/input-data/ethereum/wallet-lists/.",
+                  missing_env_vars=ethereum_env_vars_missing or dragon_env_vars_missing),
         MenuOption("Top Trader Finder - Dragon", handlers.get('dragon_eth_traders'),
-                  description="Finds ETH top traders. Output: data/output-data/ethereum/dragon/top-traders/."),
+                  description="Finds ETH top traders. Output: data/output-data/ethereum/dragon/top-traders/.",
+                  missing_env_vars=ethereum_env_vars_missing or dragon_env_vars_missing),
         MenuOption("TX Scanner - Dragon", handlers.get('dragon_eth_scan'),
-                  description="Gets ETH token transactions. Output: data/output-data/ethereum/dragon/wallet-analysis/."),
+                  description="Gets ETH token transactions. Output: data/output-data/ethereum/dragon/wallet-analysis/.",
+                  missing_env_vars=ethereum_env_vars_missing or dragon_env_vars_missing),
         MenuOption("Time-Based TX Finder - Dragon", handlers.get('dragon_eth_timestamp'),
-                  description="Finds ETH txs by time range. Output: data/output-data/ethereum/dragon/early-buyers/."),
+                  description="Finds ETH txs by time range. Output: data/output-data/ethereum/dragon/early-buyers/.",
+                  missing_env_vars=ethereum_env_vars_missing or dragon_env_vars_missing),
         MenuOption("Back", None)
     ]
     
@@ -217,16 +284,20 @@ def create_main_menu(handlers: Dict[str, Callable]) -> List[MenuOption]:
         MenuOption("Back", None)
     ]
 
-    # Main menu with new structure
+    # Main menu with updated structure for missing environment variables
     return [
         MenuOption("Solana Tools", children=solana_menu,
-                  description="Sol blockchain monitoring, analytics, and tracking."),
+                  description="Sol blockchain monitoring, analytics, and tracking.",
+                  missing_env_vars=solana_env_vars_missing or telegram_env_vars_missing or dragon_env_vars_missing),
         MenuOption("Sharp Tools", children=sharp_menu,
-                  description="Wallet analysis, CSV processing, and BullX integration."),
+                  description="Wallet analysis, CSV processing, and BullX integration.",
+                  missing_env_vars=sharp_env_vars_missing or bullx_env_vars_missing),
         MenuOption("API Tools", children=api_menu,
-                  description="External API integrations (Dune, GMGN) for blockchain data."),
+                  description="External API integrations (Dune, GMGN) for blockchain data.",
+                  missing_env_vars=dune_env_vars_missing or gmgn_env_vars_missing or dragon_env_vars_missing),
         MenuOption("Eth Tools", children=eth_menu,
-                  description="Ethereum blockchain analysis and wallet tracking."),
+                  description="Ethereum blockchain analysis and wallet tracking.",
+                  missing_env_vars=ethereum_env_vars_missing or dragon_env_vars_missing),
         MenuOption("Tron Tools", children=tron_menu,
                   description="Tron blockchain tools (coming soon)."),
         MenuOption("Settings", children=utils_menu,
@@ -342,7 +413,12 @@ class CursesMenu:
                 continue
                 
             # Normal display for non-selected items
-            option_text = f"▶ {option.name}"
+            # Add red dot indicator for missing env vars
+            if option.missing_env_vars:
+                option_text = f"▶ {option.name} 🔴"
+            else:
+                option_text = f"▶ {option.name}"
+            
             x = max((width - len(option_text)) // 2, 0)
             
             # Only draw if it fits on screen
@@ -357,7 +433,12 @@ class CursesMenu:
             option = self.manager.current_menu[self.manager.selected_idx]
             
             # Create highlighted text with padding
-            option_text = f"▶ {option.name}"
+            # Add red dot indicator for missing env vars
+            if option.missing_env_vars:
+                option_text = f"▶ {option.name} 🔴"
+            else:
+                option_text = f"▶ {option.name}"
+            
             padded_text = f" {option_text} "
             padded_x = max((width - len(padded_text)) // 2, 0)
             
@@ -468,8 +549,12 @@ class InquirerMenu:
                 choices = []
                 for option in self.manager.current_menu:
                     choice_text = option.name
+                    # Add red dot indicator for missing env vars
+                    if option.missing_env_vars:
+                        choice_text = f"{option.name} 🔴"
+                    
                     if option.description:
-                        choice_text = f"{option.name} - {option.description}"
+                        choice_text = f"{choice_text} - {option.description}"
                     choices.append(choice_text)
                 
                 # If not at the main menu, add "Back" choice

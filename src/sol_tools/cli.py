@@ -141,8 +141,13 @@ def main():
     
     # Check if the test flag is set
     if args.test:
-        from .utils.test_file_ops import run_all_tests
-        sys.exit(0 if run_all_tests() else 1)
+        try:
+            from .tests.test_runner import run_all_tests
+            sys.exit(0 if run_all_tests() else 1)
+        except ImportError:
+            # Fall back to legacy test if new framework is not available
+            from .utils.test_file_ops import run_all_tests
+            sys.exit(0 if run_all_tests() else 1)
     
     # Check if the clean flag is set
     if args.clean:
