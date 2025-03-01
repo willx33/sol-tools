@@ -495,7 +495,7 @@ def dragon_solana_wallet():
         return
     
     # Setup wallet directory
-    wallet_dir = ensure_data_dir("input-data/dragon", "solana/wallet_lists")
+    wallet_dir = ensure_data_dir("solana", "wallet-lists", data_type="input")
     
     # Default wallets file
     default_wallets_file = wallet_dir / "wallets.txt"

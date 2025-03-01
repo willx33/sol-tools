@@ -31,9 +31,9 @@ logger = logging.getLogger(__name__)
 _gmgn_threadpool = ThreadPoolExecutor(max_workers=20)
 _wallet_threadpool = ThreadPoolExecutor(max_workers=40)
 
-# Properly use the logs directory structure
-from ...core.config import LOG_DIR
-LOGS_DIR = LOG_DIR / "dragon"
+# Use cache directory for temporary logs
+from ...core.config import CACHE_DIR
+LOGS_DIR = CACHE_DIR / "logs" / "dragon"
 LOGS_DIR.mkdir(parents=True, exist_ok=True)
 
 # Import Dragon modules
@@ -131,7 +131,7 @@ class GMGN_Client:
     def load_proxies(self) -> List[Dict[str, str]]:
         """Load proxies from the proxies.txt file."""
         from ...core.config import INPUT_DATA_DIR
-        proxies_file = INPUT_DATA_DIR / "dragon" / "proxies" / "proxies.txt"
+        proxies_file = INPUT_DATA_DIR / "proxies" / "proxies.txt"
         
         if not proxies_file.exists():
             return []
@@ -434,29 +434,28 @@ class DragonAdapter:
         from ...core.config import INPUT_DATA_DIR, OUTPUT_DATA_DIR
         
         # Setup input and output directories
-        self.input_data_dir = INPUT_DATA_DIR / "dragon"
         self.output_data_dir = OUTPUT_DATA_DIR / "dragon"
         
-        # Define the new directory structure
-        self.ethereum_input_dir = self.input_data_dir / "ethereum" / "wallet_lists"
-        self.solana_input_dir = self.input_data_dir / "solana" / "wallet_lists"
-        self.proxies_dir = self.input_data_dir / "proxies"
+        # Define the new directory structure based on blockchain
+        self.ethereum_input_dir = INPUT_DATA_DIR / "ethereum" / "wallet-lists"
+        self.solana_input_dir = INPUT_DATA_DIR / "solana" / "wallet-lists"
+        self.proxies_dir = INPUT_DATA_DIR / "proxies"
         
         self.ethereum_output_dirs = {
-            "wallet_analysis": self.output_data_dir / "ethereum" / "wallet_analysis",
-            "top_traders": self.output_data_dir / "ethereum" / "top_traders",
-            "top_holders": self.output_data_dir / "ethereum" / "top_holders",
-            "early_buyers": self.output_data_dir / "ethereum" / "early_buyers"
+            "wallet_analysis": self.output_data_dir / "ethereum" / "wallet-analysis",
+            "top_traders": self.output_data_dir / "ethereum" / "top-traders",
+            "top_holders": self.output_data_dir / "ethereum" / "top-holders",
+            "early_buyers": self.output_data_dir / "ethereum" / "early-buyers"
         }
         
         self.solana_output_dirs = {
-            "wallet_analysis": self.output_data_dir / "solana" / "wallet_analysis",
-            "top_traders": self.output_data_dir / "solana" / "top_traders",
-            "top_holders": self.output_data_dir / "solana" / "top_holders",
-            "early_buyers": self.output_data_dir / "solana" / "early_buyers"
+            "wallet_analysis": self.output_data_dir / "solana" / "wallet-analysis",
+            "top_traders": self.output_data_dir / "solana" / "top-traders",
+            "top_holders": self.output_data_dir / "solana" / "top-holders",
+            "early_buyers": self.output_data_dir / "solana" / "early-buyers"
         }
         
-        self.token_info_dir = self.output_data_dir / "token_info"
+        self.token_info_dir = self.output_data_dir / "token-info"
         
         # Set up threading defaults
         self.default_threads = 40
@@ -492,11 +491,10 @@ class DragonAdapter:
         """
         Ensure proper paths for Dragon operations within the input-data/output-data structure.
         """
-        # Make sure our input/output directories for Dragon exist
-        self.input_data_dir.mkdir(parents=True, exist_ok=True)
+        # Make sure our output directory for Dragon exists
         self.output_data_dir.mkdir(parents=True, exist_ok=True)
         
-        # Make sure specific directories exist
+        # Make sure specific input directories exist
         self.ethereum_input_dir.mkdir(parents=True, exist_ok=True)
         self.solana_input_dir.mkdir(parents=True, exist_ok=True)
         self.proxies_dir.mkdir(parents=True, exist_ok=True)

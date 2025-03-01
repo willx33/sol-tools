@@ -37,8 +37,8 @@ class SolanaAdapter:
         self.output_dir = ensure_data_dir("solana", data_type="output")
         
         # Create specific subdirectories under proper structure
-        self.wallet_dir = ensure_data_dir("solana", "wallet_lists", data_type="input")
-        self.token_dir = ensure_data_dir("solana", "token_lists", data_type="input")
+        self.wallet_dir = ensure_data_dir("solana", "wallet-lists", data_type="input")
+        self.token_dir = ensure_data_dir("solana", "token-lists", data_type="input")
         self.telegram_dir = ensure_data_dir("solana", "telegram", data_type="output")
         self.cache_dir = CACHE_DIR / "solana"
         self.cache_dir.mkdir(parents=True, exist_ok=True)

@@ -6,6 +6,7 @@ import curses
 import argparse
 import asyncio
 from typing import Dict, Callable, Any
+from pathlib import Path
 
 from . import __version__
 from .core.config import load_config, check_env_vars, get_env_var
@@ -18,6 +19,13 @@ from .modules.sharp import handlers as sharp_handlers
 from .modules.solana import handlers as solana_handlers
 from .modules.gmgn import handlers as gmgn_handlers
 from .utils import common as utils_handlers
+
+# Set up centralized __pycache__ location if not already set
+if 'PYTHONPYCACHEPREFIX' not in os.environ:
+    root_dir = Path(__file__).parents[2]  # Get project root
+    pycache_dir = root_dir / "data" / "__pycache__"
+    pycache_dir.mkdir(parents=True, exist_ok=True)
+    os.environ['PYTHONPYCACHEPREFIX'] = str(pycache_dir)
 
 
 def exit_app() -> None:
@@ -121,6 +129,7 @@ def parse_args():
     parser.add_argument('--version', action='version', version=f'Sol Tools {__version__}')
     parser.add_argument('--text-menu', action='store_true', help='Use text-based menu (inquirer) instead of curses')
     parser.add_argument('--test', action='store_true', help='Run file system tests')
+    parser.add_argument('--clean', action='store_true', help='Clean cache and __pycache__ directories before starting')
     
     return parser.parse_args()
 
@@ -133,6 +142,20 @@ def main():
     if args.test:
         from .utils.test_file_ops import run_all_tests
         sys.exit(0 if run_all_tests() else 1)
+    
+    # Check if the clean flag is set
+    if args.clean:
+        print("Cleaning cache and __pycache__ directories...")
+        try:
+            from .utils.cleanup import clean_caches
+            success = clean_caches()
+            if not success:
+                print("Warning: Some errors occurred during cleanup")
+            if len(sys.argv) == 2:  # Only --clean was specified, exit after cleaning
+                sys.exit(0)
+        except Exception as e:
+            print(f"Error during cleanup: {e}")
+            # Continue with execution even if cleanup fails
     
     # Check if required directories exist
     check_requirements()

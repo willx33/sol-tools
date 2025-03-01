@@ -120,6 +120,7 @@ dmypy.json
 data/**/
 !data/**/
 !data/**/.gitkeep
+data/__pycache__/
 logs/
 cache/
 *.db

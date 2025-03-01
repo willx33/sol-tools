@@ -87,7 +87,7 @@ def create_main_menu(handlers: Dict[str, Callable]) -> List[MenuOption]:
         MenuOption("Bundle Tracker - Dragon", handlers.get('solana_dragon_bundle'),
                   description="Finds bundled buys. Input: contract address."),
         MenuOption("Wallet Profiler - Dragon", handlers.get('solana_dragon_wallet'),
-                  description="PnL analysis from wallet list. Uses data/input-data/dragon/solana/wallet_lists/."),
+                  description="PnL analysis from wallet list. Uses data/input-data/solana/wallet-lists/."),
         MenuOption("Top Trader Finder - Dragon", handlers.get('solana_dragon_traders'),
                   description="Finds best traders by token. Output: data/output-data/dragon/solana/top_traders/."),
         MenuOption("TX Scanner - Dragon", handlers.get('solana_dragon_scan'),
@@ -164,15 +164,15 @@ def create_main_menu(handlers: Dict[str, Callable]) -> List[MenuOption]:
     # GMGN tools
     gmgn_menu = [
         MenuOption("Token Info", handlers.get('dragon_gmgn_info'),
-                  description="Gets detailed information for a specific token. Output: data/output-data/dragon/GMGN/."),
+                  description="Gets detailed information for a specific token. Output: data/output-data/gmgn/token_info/."),
         MenuOption("New Tokens", handlers.get('dragon_gmgn_new'),
-                  description="Gets new listings from GMGN. Output: data/output-data/dragon/GMGN/."),
+                  description="Gets new listings from GMGN. Output: data/output-data/gmgn/token_listings/."),
         MenuOption("Completing Tokens", handlers.get('dragon_gmgn_completing'),
-                  description="Gets completing tokens from GMGN. Output: data/output-data/dragon/GMGN/."),
+                  description="Gets completing tokens from GMGN. Output: data/output-data/gmgn/token_listings/."),
         MenuOption("Soaring Tokens", handlers.get('dragon_gmgn_soaring'),
-                  description="Gets trending tokens from GMGN. Output: data/output-data/dragon/GMGN/."),
+                  description="Gets trending tokens from GMGN. Output: data/output-data/gmgn/token_listings/."),
         MenuOption("Bonded Tokens", handlers.get('dragon_gmgn_bonded'),
-                  description="Gets bonded tokens from GMGN. Output: data/output-data/dragon/GMGN/."),
+                  description="Gets bonded tokens from GMGN. Output: data/output-data/gmgn/token_listings/."),
         MenuOption("Market Cap Data", handlers.get('gmgn_mcap_data'),
                   description="Fetches market cap data for Solana tokens. Output: data/output-data/gmgn/."),
         MenuOption("Back", None)
@@ -189,13 +189,13 @@ def create_main_menu(handlers: Dict[str, Callable]) -> List[MenuOption]:
     # Ethereum Tools
     eth_menu = [
         MenuOption("Wallet Profiler - Dragon", handlers.get('dragon_eth_wallet'),
-                  description="Analyzes ETH wallet performance. Uses data/input-data/dragon/Ethereum/."),
+                  description="Analyzes ETH wallet performance. Uses data/input-data/ethereum/wallet-lists/."),
         MenuOption("Top Trader Finder - Dragon", handlers.get('dragon_eth_traders'),
-                  description="Finds ETH top traders. Output: data/output-data/dragon/Ethereum/TopTraders/."),
+                  description="Finds ETH top traders. Output: data/output-data/dragon/ethereum/top_traders/."),
         MenuOption("TX Scanner - Dragon", handlers.get('dragon_eth_scan'),
-                  description="Gets ETH token transactions. Output: data/output-data/dragon/Ethereum/ScanTx/."),
+                  description="Gets ETH token transactions. Output: data/output-data/dragon/ethereum/wallet_analysis/."),
         MenuOption("Time-Based TX Finder - Dragon", handlers.get('dragon_eth_timestamp'),
-                  description="Finds ETH txs by time range. Output: data/output-data/dragon/Ethereum/Timestamp/."),
+                  description="Finds ETH txs by time range. Output: data/output-data/dragon/ethereum/early_buyers/."),
         MenuOption("Back", None)
     ]
     

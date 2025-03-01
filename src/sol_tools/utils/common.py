@@ -513,8 +513,15 @@ def clear_terminal():
     os.system('cls' if os.name == 'nt' else 'clear')
 
 
-def clear_cache():
-    """Clear all cached data files."""
+def clear_cache(clear_pycache: bool = False):
+    """
+    Clear all cached data files.
+    
+    Args:
+        clear_pycache: Whether to also clear the __pycache__ directory
+    """
+    success = True
+    
     try:
         # Clear cache directory
         if os.path.exists(CACHE_DIR):
@@ -531,8 +538,22 @@ def clear_cache():
         # Create cache directory if it doesn't exist
         os.makedirs(CACHE_DIR, exist_ok=True)
         
+        # Also clear __pycache__ if requested
+        if clear_pycache:
+            pycache_dir = DATA_DIR / "__pycache__"
+            if os.path.exists(pycache_dir):
+                shutil.rmtree(pycache_dir)
+                os.makedirs(pycache_dir, exist_ok=True)
+                console.print(f"[green]✓ Successfully cleared __pycache__ directory: {pycache_dir}[/green]")
+            else:
+                console.print(f"[yellow]__pycache__ directory does not exist: {pycache_dir}[/yellow]")
+                os.makedirs(pycache_dir, exist_ok=True)
+        
     except Exception as e:
         console.print(f"[red]Error clearing cache: {e}[/red]")
+        success = False
+        
+    return success
 
 
 def test_telegram():
@@ -1153,14 +1174,14 @@ def check_proxy_file(proxy_path: Optional[str] = None) -> List[str]:
     Check if proxy file exists and get proxies.
     
     Args:
-        proxy_path: Optional path to proxy file, defaults to input-data/dragon/proxies/proxies.txt
+        proxy_path: Optional path to proxy file, defaults to input-data/proxies/proxies.txt
         
     Returns:
         List of proxy strings or empty list if no proxies
     """
     if proxy_path is None:
         from ..core.config import INPUT_DATA_DIR
-        proxy_path = INPUT_DATA_DIR / "dragon" / "proxies" / "proxies.txt"
+        proxy_path = INPUT_DATA_DIR / "proxies" / "proxies.txt"
         
     try:
         if os.path.exists(proxy_path):

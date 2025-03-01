@@ -13,8 +13,7 @@ DATA_DIR = ROOT_DIR / "data"
 INPUT_DATA_DIR = DATA_DIR / "input-data"
 OUTPUT_DATA_DIR = DATA_DIR / "output-data"
 CONFIG_DIR = ROOT_DIR / "config"
-CACHE_DIR = ROOT_DIR / "cache"
-LOG_DIR = ROOT_DIR / "logs"
+CACHE_DIR = DATA_DIR / "cache"
 
 # Environment variables
 ENV_FILE = ROOT_DIR / ".env"
@@ -57,12 +56,11 @@ REQUIRED_ENV_VARS = {
 # Default configuration
 DEFAULT_CONFIG = {
     "proxy_enabled": False,
-    "proxy_file": str(INPUT_DATA_DIR / "dragon" / "proxies" / "proxies.txt"),
-    "data_dir": str(DATA_DIR),
-    "input_data_dir": str(INPUT_DATA_DIR),
-    "output_data_dir": str(OUTPUT_DATA_DIR),
-    "log_dir": str(LOG_DIR),
-    "cache_dir": str(CACHE_DIR),
+    "proxy_file": "data/input-data/proxies/proxies.txt",
+    "data_dir": "data",
+    "input_data_dir": "data/input-data",
+    "output_data_dir": "data/output-data",
+    "cache_dir": "data/cache",
     "theme": "dark"
 }
 
@@ -70,61 +68,95 @@ DEFAULT_CONFIG = {
 def load_config() -> Dict[str, Any]:
     """Load configuration from files and environment variables."""
     # Create directories if they don't exist
-    for directory in [DATA_DIR, CONFIG_DIR, CACHE_DIR, LOG_DIR, INPUT_DATA_DIR, OUTPUT_DATA_DIR]:
+    for directory in [DATA_DIR, CONFIG_DIR, CACHE_DIR, INPUT_DATA_DIR, OUTPUT_DATA_DIR]:
         directory.mkdir(parents=True, exist_ok=True)
     
     # List of all modules
     modules = ["dragon", "dune", "sharp", "solana", "gmgn", "ethereum"]
     
-    # Create data module directories with clean organized structure
+    # Create base output directories for each module
     for module in modules:
-        (INPUT_DATA_DIR / module).mkdir(parents=True, exist_ok=True)
         (OUTPUT_DATA_DIR / module).mkdir(parents=True, exist_ok=True)
-        
-    # Create specific subdirectories for each module
-    # Dragon module
-    (INPUT_DATA_DIR / "dragon" / "ethereum" / "wallet_lists").mkdir(parents=True, exist_ok=True)
-    (INPUT_DATA_DIR / "dragon" / "solana" / "wallet_lists").mkdir(parents=True, exist_ok=True)
-    (INPUT_DATA_DIR / "dragon" / "proxies").mkdir(parents=True, exist_ok=True)
     
-    (OUTPUT_DATA_DIR / "dragon" / "ethereum" / "wallet_analysis").mkdir(parents=True, exist_ok=True)
-    (OUTPUT_DATA_DIR / "dragon" / "ethereum" / "top_traders").mkdir(parents=True, exist_ok=True)
-    (OUTPUT_DATA_DIR / "dragon" / "ethereum" / "top_holders").mkdir(parents=True, exist_ok=True)
-    (OUTPUT_DATA_DIR / "dragon" / "ethereum" / "early_buyers").mkdir(parents=True, exist_ok=True)
+    # Create new organized input directory structure by blockchain/API
     
-    (OUTPUT_DATA_DIR / "dragon" / "solana" / "wallet_analysis").mkdir(parents=True, exist_ok=True)
-    (OUTPUT_DATA_DIR / "dragon" / "solana" / "top_traders").mkdir(parents=True, exist_ok=True)
-    (OUTPUT_DATA_DIR / "dragon" / "solana" / "top_holders").mkdir(parents=True, exist_ok=True)
-    (OUTPUT_DATA_DIR / "dragon" / "solana" / "early_buyers").mkdir(parents=True, exist_ok=True)
+    # Solana
+    (INPUT_DATA_DIR / "solana").mkdir(parents=True, exist_ok=True)
+    (INPUT_DATA_DIR / "solana" / "token-lists").mkdir(parents=True, exist_ok=True)
+    (INPUT_DATA_DIR / "solana" / "wallet-lists").mkdir(parents=True, exist_ok=True)
     
-    (OUTPUT_DATA_DIR / "dragon" / "token_info").mkdir(parents=True, exist_ok=True)
+    # Ethereum
+    (INPUT_DATA_DIR / "ethereum").mkdir(parents=True, exist_ok=True)
+    (INPUT_DATA_DIR / "ethereum" / "token-lists").mkdir(parents=True, exist_ok=True)
+    (INPUT_DATA_DIR / "ethereum" / "wallet-lists").mkdir(parents=True, exist_ok=True)
     
-    # GMGN module
-    (INPUT_DATA_DIR / "gmgn" / "token_lists").mkdir(parents=True, exist_ok=True)
-    (OUTPUT_DATA_DIR / "gmgn" / "token_listings").mkdir(parents=True, exist_ok=True)
-    (OUTPUT_DATA_DIR / "gmgn" / "market_cap_data").mkdir(parents=True, exist_ok=True)
-    (OUTPUT_DATA_DIR / "gmgn" / "token_info").mkdir(parents=True, exist_ok=True)
+    # Sharp
+    (INPUT_DATA_DIR / "sharp").mkdir(parents=True, exist_ok=True)
     
-    # Dune module
-    (INPUT_DATA_DIR / "dune" / "query_configs").mkdir(parents=True, exist_ok=True)
-    (OUTPUT_DATA_DIR / "dune" / "csv").mkdir(parents=True, exist_ok=True)
-    (OUTPUT_DATA_DIR / "dune" / "parsed").mkdir(parents=True, exist_ok=True)
+    # API
+    (INPUT_DATA_DIR / "api").mkdir(parents=True, exist_ok=True)
+    (INPUT_DATA_DIR / "api" / "dune").mkdir(parents=True, exist_ok=True)
+    (INPUT_DATA_DIR / "api" / "dune" / "query_configs").mkdir(parents=True, exist_ok=True)
+    (INPUT_DATA_DIR / "api" / "gmgn").mkdir(parents=True, exist_ok=True)
+    (INPUT_DATA_DIR / "api" / "gmgn" / "token-lists").mkdir(parents=True, exist_ok=True)
     
-    # Solana module
-    (INPUT_DATA_DIR / "solana" / "wallet_lists").mkdir(parents=True, exist_ok=True)
-    (OUTPUT_DATA_DIR / "solana" / "transaction_data").mkdir(parents=True, exist_ok=True)
-    (OUTPUT_DATA_DIR / "solana" / "wallet_data").mkdir(parents=True, exist_ok=True)
+    # Proxies
+    (INPUT_DATA_DIR / "proxies").mkdir(parents=True, exist_ok=True)
+    
+    # Solana
+    (OUTPUT_DATA_DIR / "solana").mkdir(parents=True, exist_ok=True)
+    (OUTPUT_DATA_DIR / "solana" / "token-lists").mkdir(parents=True, exist_ok=True)
+    (OUTPUT_DATA_DIR / "solana" / "wallet-lists").mkdir(parents=True, exist_ok=True)
+    (OUTPUT_DATA_DIR / "solana" / "transaction-data").mkdir(parents=True, exist_ok=True)
+    (OUTPUT_DATA_DIR / "solana" / "wallet-data").mkdir(parents=True, exist_ok=True)
+    (OUTPUT_DATA_DIR / "solana" / "telegram").mkdir(parents=True, exist_ok=True)
+    
+    # Ethereum
+    (OUTPUT_DATA_DIR / "ethereum").mkdir(parents=True, exist_ok=True)
+    (OUTPUT_DATA_DIR / "ethereum" / "token-lists").mkdir(parents=True, exist_ok=True)
+    (OUTPUT_DATA_DIR / "ethereum" / "wallet-lists").mkdir(parents=True, exist_ok=True)
+    (OUTPUT_DATA_DIR / "ethereum" / "transaction-data").mkdir(parents=True, exist_ok=True)
+    (OUTPUT_DATA_DIR / "ethereum" / "wallet-data").mkdir(parents=True, exist_ok=True)
+    
+    # Sharp
+    (OUTPUT_DATA_DIR / "sharp").mkdir(parents=True, exist_ok=True)
+    
+    # API
+    (OUTPUT_DATA_DIR / "api").mkdir(parents=True, exist_ok=True)
+    
+    # API - Dune Analytics
+    (OUTPUT_DATA_DIR / "api" / "dune").mkdir(parents=True, exist_ok=True)
+    (OUTPUT_DATA_DIR / "api" / "dune" / "csv").mkdir(parents=True, exist_ok=True)
+    (OUTPUT_DATA_DIR / "api" / "dune" / "parsed").mkdir(parents=True, exist_ok=True)
+    
+    # API - GMGN
+    (OUTPUT_DATA_DIR / "api" / "gmgn").mkdir(parents=True, exist_ok=True)
+    (OUTPUT_DATA_DIR / "api" / "gmgn" / "token-listings").mkdir(parents=True, exist_ok=True)
+    (OUTPUT_DATA_DIR / "api" / "gmgn" / "market-cap-data").mkdir(parents=True, exist_ok=True)
+    (OUTPUT_DATA_DIR / "api" / "gmgn" / "token-info").mkdir(parents=True, exist_ok=True)
+    
+    # Dragon data directories
+    (OUTPUT_DATA_DIR / "dragon").mkdir(parents=True, exist_ok=True)
+    (OUTPUT_DATA_DIR / "dragon" / "ethereum" / "wallet-analysis").mkdir(parents=True, exist_ok=True)
+    (OUTPUT_DATA_DIR / "dragon" / "ethereum" / "top-traders").mkdir(parents=True, exist_ok=True)
+    (OUTPUT_DATA_DIR / "dragon" / "ethereum" / "top-holders").mkdir(parents=True, exist_ok=True)
+    (OUTPUT_DATA_DIR / "dragon" / "ethereum" / "early-buyers").mkdir(parents=True, exist_ok=True)
+    (OUTPUT_DATA_DIR / "dragon" / "solana" / "wallet-analysis").mkdir(parents=True, exist_ok=True)
+    (OUTPUT_DATA_DIR / "dragon" / "solana" / "top-traders").mkdir(parents=True, exist_ok=True)
+    (OUTPUT_DATA_DIR / "dragon" / "solana" / "top-holders").mkdir(parents=True, exist_ok=True)
+    (OUTPUT_DATA_DIR / "dragon" / "solana" / "early-buyers").mkdir(parents=True, exist_ok=True)
+    (OUTPUT_DATA_DIR / "dragon" / "token-info").mkdir(parents=True, exist_ok=True)
     
     # Import ensure_file_dir from utils
     from ..utils.common import ensure_file_dir
     
     # Ensure placeholder files exist
     placeholder_files = [
-        (INPUT_DATA_DIR / "dragon" / "ethereum" / "wallet_lists" / "wallets.txt"),
-        (INPUT_DATA_DIR / "dragon" / "solana" / "wallet_lists" / "wallets.txt"),
-        (INPUT_DATA_DIR / "dragon" / "proxies" / "proxies.txt"),
-        (INPUT_DATA_DIR / "gmgn" / "token_lists" / "token_addresses.txt"),
-        (INPUT_DATA_DIR / "solana" / "wallet_lists" / "wallets.txt")
+        (INPUT_DATA_DIR / "ethereum" / "wallet-lists" / "wallets.txt"),
+        (INPUT_DATA_DIR / "solana" / "wallet-lists" / "wallets.txt"),
+        (INPUT_DATA_DIR / "proxies" / "proxies.txt"),
+        (INPUT_DATA_DIR / "api" / "gmgn" / "token-lists" / "token_addresses.txt"),
+        (INPUT_DATA_DIR / "solana" / "token-lists" / "tokens.txt")
     ]
     
     for file_path in placeholder_files:

@@ -99,7 +99,7 @@ def solana_wallet_checker():
         return
     
     # Setup wallet directory
-    wallet_dir = ensure_data_dir("dragon", "solana/wallet_lists", data_type="input")
+    wallet_dir = ensure_data_dir("solana", "wallet-lists", data_type="input")
     
     # Choose wallets file
     default_wallets_file = wallet_dir / "wallets.txt"
@@ -221,7 +221,7 @@ def solana_wallet_checker():
                 data_items=wallet_data if isinstance(wallet_data, list) else [wallet_data],
                 filename_prefix=f"wallet_analysis_{timestamp}",
                 data_type="output",
-                subdir="solana/wallet_analysis"
+                subdir="solana/wallet-analysis"
             )
             
             # Display summary stats
@@ -324,7 +324,7 @@ def gmgn_new_tokens():
         return
         
     # Set up data directories
-    output_dir = ensure_data_dir("output-data/dragon", "GMGN")
+    output_dir = ensure_data_dir("api/gmgn", "token-listings", data_type="output")
     
     print("Fetching new tokens from GMGN...")
     try:
@@ -368,7 +368,7 @@ def gmgn_completing_tokens():
         return
         
     # Set up data directories
-    output_dir = ensure_data_dir("output-data/dragon", "GMGN")
+    output_dir = ensure_data_dir("api/gmgn", "token-listings", data_type="output")
     
     print("Fetching completing tokens from GMGN...")
     try:
@@ -412,7 +412,7 @@ def gmgn_soaring_tokens():
         return
         
     # Set up data directories
-    output_dir = ensure_data_dir("output-data/dragon", "GMGN")
+    output_dir = ensure_data_dir("api/gmgn", "token-listings", data_type="output")
     
     print("Fetching soaring tokens from GMGN...")
     try:
@@ -456,7 +456,7 @@ def gmgn_bonded_tokens():
         return
         
     # Set up data directories
-    output_dir = ensure_data_dir("output-data/dragon", "GMGN")
+    output_dir = ensure_data_dir("api/gmgn", "token-listings", data_type="output")
     
     print("Fetching bonded tokens from GMGN...")
     try:
@@ -514,7 +514,7 @@ def gmgn_token_info():
     token_address = answers["token_address"].strip()
     
     # Set up data directories
-    output_dir = ensure_data_dir("output-data/dragon", "GMGN")
+    output_dir = ensure_data_dir("api/gmgn", "token-info", data_type="output")
     
     print(f"Fetching information for token {token_address}...")
     try:

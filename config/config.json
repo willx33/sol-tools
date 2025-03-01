@@ -1,8 +1,7 @@
 {
   "proxy_enabled": false,
-  "proxy_file": "data/proxies.txt",
+  "proxy_file": "data/input-data/proxies/proxies.txt",
   "data_dir": "data",
-  "log_dir": "logs",
-  "cache_dir": "cache",
+  "cache_dir": "data/cache",
   "theme": "dark"
 }

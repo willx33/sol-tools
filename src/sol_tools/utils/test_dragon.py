@@ -40,13 +40,13 @@ class DragonTester:
         """Set up the tester with temporary directories."""
         # Create temp directories for testing
         self.test_root = Path(tempfile.mkdtemp(prefix="dragon_test_"))
-        self.test_input = self.test_root / "input-data" / "dragon"
+        # No longer using dragon-specific structure, just use the root paths
         self.test_output = self.test_root / "output-data" / "dragon"
         
-        # Create necessary subdirectories
-        (self.test_input / "ethereum" / "wallet_lists").mkdir(parents=True, exist_ok=True)
-        (self.test_input / "solana" / "wallet_lists").mkdir(parents=True, exist_ok=True)
-        (self.test_input / "proxies").mkdir(parents=True, exist_ok=True)
+        # Create necessary subdirectories (using new structure)
+        (self.test_root / "input-data" / "ethereum" / "wallet-lists").mkdir(parents=True, exist_ok=True)
+        (self.test_root / "input-data" / "solana" / "wallet-lists").mkdir(parents=True, exist_ok=True)
+        (self.test_root / "input-data" / "proxies").mkdir(parents=True, exist_ok=True)
         
         (self.test_output / "ethereum" / "wallet_analysis").mkdir(parents=True, exist_ok=True)
         (self.test_output / "ethereum" / "top_traders").mkdir(parents=True, exist_ok=True)
@@ -72,20 +72,20 @@ class DragonTester:
     
     def create_test_data(self):
         """Create test data files for testing."""
-        # Create Solana wallets test file
-        with open(self.test_input / "solana" / "wallet_lists" / "wallets.txt", "w") as f:
+        # Create Solana wallets test file (using new structure)
+        with open(self.test_root / "input-data" / "solana" / "wallet-lists" / "wallets.txt", "w") as f:
             f.write("AA1XnMJ9HnqVqXLG73icxKU9AUfbMTe9a19isUWtw2JZ\n")
             f.write("DdzFFzCqrhsrKfA7gdVfBUwnfQGwRVy4NwgLzJi2KJKt\n")
             f.write("5aMTYWBtgESM1JJRBqPchhMDzvkfHKcNvr1ByuBmkwnJ\n")
         
-        # Create Ethereum wallets test file
-        with open(self.test_input / "ethereum" / "wallet_lists" / "wallets.txt", "w") as f:
+        # Create Ethereum wallets test file (using new structure)
+        with open(self.test_root / "input-data" / "ethereum" / "wallet-lists" / "wallets.txt", "w") as f:
             f.write("0x742d35Cc6634C0532925a3b844Bc454e4438f44e\n")
             f.write("0xdAC17F958D2ee523a2206206994597C13D831ec7\n")
             f.write("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48\n")
         
-        # Create proxies test file
-        with open(self.test_input / "proxies" / "proxies.txt", "w") as f:
+        # Create proxies test file (using new structure)
+        with open(self.test_root / "input-data" / "proxies" / "proxies.txt", "w") as f:
             f.write("127.0.0.1:8080\n")
             f.write("127.0.0.1:8081:user:pass\n")
         
