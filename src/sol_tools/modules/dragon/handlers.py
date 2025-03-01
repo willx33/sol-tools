@@ -93,19 +93,57 @@ def solana_wallet_checker():
     wallet_dir = ensure_data_dir("dragon", "solana/wallet_lists", data_type="input")
     
     # Choose wallets file
-    wallets_file = wallet_dir / "wallets.txt"
-    if not os.path.exists(wallets_file):
+    default_wallets_file = wallet_dir / "wallets.txt"
+    if not os.path.exists(default_wallets_file):
         # Create example file if it doesn't exist
-        with open(wallets_file, 'w') as f:
+        with open(default_wallets_file, 'w') as f:
             f.write("# Add wallet addresses here (one per line)")
-        
-    # Prompt for file path
+    
+    # Import the universal file selection utility
+    from ...utils.common import select_input_file
+    
+    # First, allow the user to choose whether to use the default file or select a file
     questions = [
-        inquirer.Text(
-            "wallets_file",
-            message="Path to wallets file",
-            default=str(wallets_file)
-        ),
+        inquirer.List(
+            "file_option",
+            message="How would you like to provide wallet addresses?",
+            choices=[
+                ('Use the default wallets file', 'default'),
+                ('Select a wallets file from all available files', 'select'),
+                ('Enter a specific file path manually', 'manual')
+            ],
+            default='default'
+        )
+    ]
+    file_option = inquirer.prompt(questions)["file_option"]
+    
+    # Handle file selection based on user choice
+    if file_option == 'default':
+        wallets_path = str(default_wallets_file)
+        print(f"Using default wallets file: {wallets_path}")
+    elif file_option == 'select':
+        # Use our new universal file selector
+        wallets_path = select_input_file(
+            pattern="wallets.txt", 
+            message="Select a wallets file from any module:",
+            show_module=True
+        )
+        
+        if not wallets_path:
+            print("❌ No file selected. Using default file.")
+            wallets_path = str(default_wallets_file)
+    else:  # manual option
+        manual_questions = [
+            inquirer.Text(
+                "wallets_file",
+                message="Enter the path to wallets file",
+                default=str(default_wallets_file)
+            )
+        ]
+        wallets_path = inquirer.prompt(manual_questions)["wallets_file"]
+    
+    # Get other options
+    option_questions = [
         inquirer.Text(
             "threads",
             message="Number of threads",
@@ -122,10 +160,9 @@ def solana_wallet_checker():
             default=False
         )
     ]
-    answers = inquirer.prompt(questions)
+    answers = inquirer.prompt(option_questions)
     
     # Load wallets from file
-    wallets_path = answers["wallets_file"]
     try:
         with open(wallets_path, 'r') as f:
             wallets = [line.strip() for line in f if line.strip() and not line.startswith('#')]

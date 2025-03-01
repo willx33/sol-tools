@@ -791,6 +791,177 @@ def list_saved_data(module: str,
     return file_info
 
 
+def find_all_matching_files(pattern: str, recursive: bool = True) -> List[Dict[str, Any]]:
+    """
+    Find all matching files in the entire input-data directory, regardless of module.
+    
+    Args:
+        pattern: File pattern to match (e.g., "*.json", "wallets.txt")
+        recursive: Whether to search recursively (default True)
+        
+    Returns:
+        List of dictionaries with file information
+    """
+    from ..core.config import INPUT_DATA_DIR
+    
+    # Set up search pattern
+    search_pattern = "**/" + pattern if recursive else pattern
+    
+    # Find all matching files in the input-data directory
+    files = list(INPUT_DATA_DIR.glob(search_pattern))
+    
+    # Sort by modification time (newest first)
+    files.sort(key=lambda x: x.stat().st_mtime, reverse=True)
+    
+    # Create file information
+    file_info = []
+    for file in files:
+        # Determine relative module path
+        rel_path = file.relative_to(INPUT_DATA_DIR)
+        module_path = str(rel_path.parts[0] if len(rel_path.parts) > 0 else "")
+        
+        # Try to load metadata if it's a JSON file
+        metadata = {"type": "unknown"}
+        item_count = 1
+        
+        if file.suffix.lower() == ".json":
+            try:
+                with open(file, 'r') as f:
+                    data = json.load(f)
+                    
+                if 'metadata' in data:
+                    metadata = data['metadata']
+                    item_count = metadata.get('item_count', 0)
+            except Exception:
+                pass  # Use default metadata for invalid JSON files
+        
+        file_info.append({
+            "path": str(file),
+            "name": file.name,
+            "stem": file.stem,
+            "size": file.stat().st_size,
+            "modified": datetime.fromtimestamp(file.stat().st_mtime).isoformat(),
+            "module": module_path,
+            "metadata": metadata,
+            "item_count": item_count,
+            "rel_path": str(rel_path)
+        })
+    
+    return file_info
+
+
+def select_input_file(pattern: str, 
+                     message: str = "Select an input file:", 
+                     show_module: bool = True) -> Optional[str]:
+    """
+    Universal file selection utility that presents a list of all matching files 
+    from the entire input-data directory.
+    
+    Args:
+        pattern: File pattern to match (e.g., "*.json", "wallets.txt")
+        message: Prompt message to display
+        show_module: Whether to show the module path in the selection
+        
+    Returns:
+        Path to the selected file or None if no selection was made
+    """
+    # Import inquirer for the UI
+    import inquirer
+    
+    # Find all matching files
+    files = find_all_matching_files(pattern)
+    
+    if not files:
+        console.print(f"[yellow]No files matching '{pattern}' found in the input-data directory.[/yellow]")
+        return None
+    
+    # Create a list of choices for the user
+    choices = []
+    for file in files:
+        # Format each file nicely for display
+        modified_date = datetime.fromisoformat(file.get("modified", "")).strftime("%Y-%m-%d %H:%M")
+        module_name = file.get("module", "")
+        name = file.get("name", "")
+        rel_path = file.get("rel_path", "")
+        
+        # Show module info if requested
+        if show_module:
+            display = f"{rel_path} ({modified_date})"
+        else:
+            display = f"{name} ({modified_date})"
+        
+        # Add to choices
+        choices.append((display, file.get("path")))
+    
+    # Add a cancel option
+    choices.append(("Cancel", None))
+    
+    # Create the selection prompt
+    selection = [
+        inquirer.List('file',
+                     message=message,
+                     choices=choices)
+    ]
+    
+    # Get the selected file path
+    result = inquirer.prompt(selection)
+    return result['file'] if result else None
+
+
+def select_multiple_input_files(pattern: str, 
+                               message: str = "Select input files (space to select, enter when done):", 
+                               show_module: bool = True) -> List[str]:
+    """
+    Universal file multi-selection utility that allows selecting multiple files
+    from the entire input-data directory.
+    
+    Args:
+        pattern: File pattern to match (e.g., "*.json", "wallets.txt")
+        message: Prompt message to display
+        show_module: Whether to show the module path in the selection
+        
+    Returns:
+        List of paths to the selected files (empty list if no selection was made)
+    """
+    # Import inquirer for the UI
+    import inquirer
+    
+    # Find all matching files
+    files = find_all_matching_files(pattern)
+    
+    if not files:
+        console.print(f"[yellow]No files matching '{pattern}' found in the input-data directory.[/yellow]")
+        return []
+    
+    # Create a list of choices for the user
+    choices = []
+    for file in files:
+        # Format each file nicely for display
+        modified_date = datetime.fromisoformat(file.get("modified", "")).strftime("%Y-%m-%d %H:%M")
+        module_name = file.get("module", "")
+        name = file.get("name", "")
+        rel_path = file.get("rel_path", "")
+        
+        # Show module info if requested
+        if show_module:
+            display = f"{rel_path} ({modified_date})"
+        else:
+            display = f"{name} ({modified_date})"
+        
+        # Add to choices
+        choices.append((display, file.get("path")))
+    
+    # Create the selection prompt
+    selection = [
+        inquirer.Checkbox('files',
+                        message=message,
+                        choices=choices)
+    ]
+    
+    # Get the selected file paths
+    result = inquirer.prompt(selection)
+    return result['files'] if result else []
+
 
 
 def process_multiple_inputs(inputs: List[str], 

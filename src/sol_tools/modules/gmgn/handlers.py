@@ -44,41 +44,20 @@ async def fetch_mcap_data_handler():
     input_method = prompt_user(input_selection)['input_method']
     
     if input_method == 'saved':
-        # Use our new list_saved_data function to get a nice display of saved configurations
-        from ...utils.common import list_saved_data, load_unified_data
+        # Use our new universal file selection utility
+        from ...utils.common import select_input_file, load_unified_data
         
-        saved_configs = list_saved_data(
-            module="gmgn", 
-            data_type="input",
-            pattern="token_configs_*.json"
+        # Allow user to select any token_configs file from any module
+        selected_file = select_input_file(
+            pattern="token_configs_*.json",
+            message="Select a saved token configuration file:",
+            show_module=True
         )
         
-        if not saved_configs:
-            print("No saved inputs found. You'll need to enter new token details.")
+        if not selected_file:
+            print("No file selected. You'll need to enter new token details.")
             input_method = 'new'
         else:
-            # Create formatted choices for display
-            choices = []
-            for config in saved_configs:
-                # Format the display string with item count and date
-                item_count = config.get("item_count", 0)
-                modified = datetime.fromisoformat(config.get("modified", "")).strftime("%Y-%m-%d %H:%M")
-                name = config.get("name", "").replace(".json", "")
-                
-                # Add item count and date to the display
-                display = f"{name} ({item_count} tokens, {modified})"
-                choices.append((display, config.get("path")))
-            
-            # Prompt for selection
-            input_select = [
-                List('saved_input',
-                     message="Select a saved input configuration:",
-                     choices=choices)
-            ]
-            
-            # Get the selected file path
-            selected_file = prompt_user(input_select)['saved_input']
-            
             # Load the selected file
             config_data = load_unified_data(selected_file)
             
