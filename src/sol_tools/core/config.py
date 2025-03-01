@@ -129,14 +129,14 @@ def load_config() -> Dict[str, Any]:
     (OUTPUT_DATA_DIR / "ethereum" / "dragon" / "top-holders").mkdir(parents=True, exist_ok=True)
     (OUTPUT_DATA_DIR / "ethereum" / "dragon" / "early-buyers").mkdir(parents=True, exist_ok=True)
     
-    # Sharp modules
-    (OUTPUT_DATA_DIR / "sharp").mkdir(parents=True, exist_ok=True)
-    (OUTPUT_DATA_DIR / "sharp" / "wallets").mkdir(parents=True, exist_ok=True)
-    (OUTPUT_DATA_DIR / "sharp" / "csv").mkdir(parents=True, exist_ok=True)
-    (OUTPUT_DATA_DIR / "sharp" / "csv" / "merged").mkdir(parents=True, exist_ok=True)
-    (OUTPUT_DATA_DIR / "sharp" / "csv" / "unmerged").mkdir(parents=True, exist_ok=True)
-    (OUTPUT_DATA_DIR / "sharp" / "csv" / "filtered").mkdir(parents=True, exist_ok=True)
-    (OUTPUT_DATA_DIR / "sharp" / "csv" / "unfiltered").mkdir(parents=True, exist_ok=True)
+    # Sharp Tools modules
+    (OUTPUT_DATA_DIR / "sharp-tools").mkdir(parents=True, exist_ok=True)
+    (OUTPUT_DATA_DIR / "sharp-tools" / "wallets").mkdir(parents=True, exist_ok=True)
+    (OUTPUT_DATA_DIR / "sharp-tools" / "csv").mkdir(parents=True, exist_ok=True)
+    (OUTPUT_DATA_DIR / "sharp-tools" / "csv" / "merged").mkdir(parents=True, exist_ok=True)
+    (OUTPUT_DATA_DIR / "sharp-tools" / "csv" / "unmerged").mkdir(parents=True, exist_ok=True)
+    (OUTPUT_DATA_DIR / "sharp-tools" / "csv" / "filtered").mkdir(parents=True, exist_ok=True)
+    (OUTPUT_DATA_DIR / "sharp-tools" / "csv" / "unfiltered").mkdir(parents=True, exist_ok=True)
     
     # API modules
     (OUTPUT_DATA_DIR / "api").mkdir(parents=True, exist_ok=True)
@@ -152,7 +152,7 @@ def load_config() -> Dict[str, Any]:
     (OUTPUT_DATA_DIR / "api" / "gmgn" / "market-cap-data").mkdir(parents=True, exist_ok=True)
     (OUTPUT_DATA_DIR / "api" / "gmgn" / "token-info").mkdir(parents=True, exist_ok=True)
     
-    # Remove old dragon directory if it exists in output-data
+    # Check if dragon directory exists in output-data and remove it
     import shutil
     if (OUTPUT_DATA_DIR / "dragon").exists():
         shutil.rmtree(OUTPUT_DATA_DIR / "dragon")

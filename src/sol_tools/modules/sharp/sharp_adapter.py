@@ -20,7 +20,7 @@ class SharpAdapter:
             data_dir: Path to the data directory
         """
         self.data_dir = Path(data_dir)
-        self.sharp_dir = self.data_dir / "output-data" / "sharp"
+        self.sharp_dir = self.data_dir / "output-data" / "sharp-tools"
         
         # Create necessary directories
         # Wallet directories
