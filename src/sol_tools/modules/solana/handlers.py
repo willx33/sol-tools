@@ -24,13 +24,8 @@ def token_monitor():
     print("🚧 Solana Token Monitor 🚧")
     
     # Check for required environment variables
-    env_vars = check_env_vars("solana")
-    if not all(env_vars.values()):
-        missing = [var for var, present in env_vars.items() if not present]
-        print(f"❌ Missing required environment variables: {', '.join(missing)}")
-        print("Please set them in the .env file before using this feature.")
-        print("\nPress Enter to return to the main menu...")
-        input()
+    from ...utils.common import validate_credentials
+    if not validate_credentials("solana"):
         return
     
     # Import custom NoTruncationText and prompt function for better paste handling
@@ -142,13 +137,8 @@ def wallet_monitor():
     print("🚧 Solana Wallet Monitor 🚧")
     
     # Check for required environment variables
-    env_vars = check_env_vars("solana")
-    if not all(env_vars.values()):
-        missing = [var for var, present in env_vars.items() if not present]
-        print(f"❌ Missing required environment variables: {', '.join(missing)}")
-        print("Please set them in the .env file before using this feature.")
-        print("\nPress Enter to return to the main menu...")
-        input()
+    from ...utils.common import validate_credentials
+    if not validate_credentials("solana"):
         return
     
     # Setup directory for wallets
@@ -307,11 +297,8 @@ def telegram_scraper():
     print("🚧 Solana Telegram Scraper 🚧")
     
     # Check for Telegram API credentials
-    if not get_env_var("TELEGRAM_BOT_TOKEN") or not get_env_var("TELEGRAM_CHAT_ID"):
-        print("❌ Missing Telegram API credentials")
-        print("Please set TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID in your .env file.")
-        print("\nPress Enter to return to the main menu...")
-        input()
+    from ...utils.common import validate_credentials
+    if not validate_credentials("telegram"):
         return
     
     # Setup directory
@@ -409,6 +396,11 @@ def dragon_solana_bundle():
     clear_terminal()
     print("🐲 Dragon Solana Bundle Checker")
     
+    # Check for required environment variables
+    from ...utils.common import validate_credentials
+    if not validate_credentials("solana"):
+        return
+    
     # Initialize Solana adapter (which will also try to initialize Dragon)
     data_dir = ensure_data_dir("").parent
     adapter = SolanaAdapter(data_dir)
@@ -419,7 +411,8 @@ def dragon_solana_bundle():
         print("This functionality requires the Dragon library.")
         print("Please check that all dependencies are installed correctly.")
         print("Contact the administrator for installation instructions.")
-        input("\nPress Enter to continue...")
+        print("\nPress Enter to return to the main menu...")
+        input()
         return
     
     # Import NoTruncationText and prompt_user for better display and paste handling

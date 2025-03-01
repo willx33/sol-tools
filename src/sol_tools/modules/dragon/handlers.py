@@ -25,14 +25,8 @@ def solana_bundle_checker():
     print("🐲 Dragon Solana Bundle Checker")
     
     # Check for required environment variables
-    from ...core.config import check_env_vars
-    env_vars = check_env_vars("solana")
-    if not all(env_vars.values()):
-        missing = [var for var, present in env_vars.items() if not present]
-        print(f"❌ Missing required environment variables: {', '.join(missing)}")
-        print("Please set them in the .env file before using this feature.")
-        print("\nPress Enter to return to the main menu...")
-        input()
+    from ...utils.common import validate_credentials
+    if not validate_credentials("solana"):
         return
     
     # Import NoTruncationText and prompt_user for better display and paste handling
@@ -101,14 +95,8 @@ def solana_wallet_checker():
     print("🐲 Dragon Solana Wallet Checker")
     
     # Check for required environment variables
-    from ...core.config import check_env_vars
-    env_vars = check_env_vars("solana")
-    if not all(env_vars.values()):
-        missing = [var for var, present in env_vars.items() if not present]
-        print(f"❌ Missing required environment variables: {', '.join(missing)}")
-        print("Please set them in the .env file before using this feature.")
-        print("\nPress Enter to return to the main menu...")
-        input()
+    from ...utils.common import validate_multiple_credentials
+    if not validate_multiple_credentials(["solana", "telegram"]):
         return
     
     # Setup wallet directory
@@ -331,6 +319,11 @@ def gmgn_new_tokens():
     clear_terminal()
     print("🐲 Dragon GMGN New Tokens")
     
+    # Check for required environment variables
+    from ...utils.common import validate_credentials
+    if not validate_credentials("gmgn"):
+        return
+        
     # Set up data directories
     output_dir = ensure_data_dir("output-data/dragon", "GMGN")
     
@@ -370,6 +363,11 @@ def gmgn_completing_tokens():
     clear_terminal()
     print("🐲 Dragon GMGN Completing Tokens")
     
+    # Check for required environment variables
+    from ...utils.common import validate_credentials
+    if not validate_credentials("gmgn"):
+        return
+        
     # Set up data directories
     output_dir = ensure_data_dir("output-data/dragon", "GMGN")
     
@@ -409,6 +407,11 @@ def gmgn_soaring_tokens():
     clear_terminal()
     print("🐲 Dragon GMGN Soaring Tokens")
     
+    # Check for required environment variables
+    from ...utils.common import validate_credentials
+    if not validate_credentials("gmgn"):
+        return
+        
     # Set up data directories
     output_dir = ensure_data_dir("output-data/dragon", "GMGN")
     
@@ -448,6 +451,11 @@ def gmgn_bonded_tokens():
     clear_terminal()
     print("🐲 Dragon GMGN Bonded Tokens")
     
+    # Check for required environment variables
+    from ...utils.common import validate_credentials
+    if not validate_credentials("gmgn"):
+        return
+        
     # Set up data directories
     output_dir = ensure_data_dir("output-data/dragon", "GMGN")
     
@@ -487,6 +495,11 @@ def gmgn_token_info():
     clear_terminal()
     print("🐲 Dragon GMGN Token Information")
     
+    # Check for required environment variables
+    from ...utils.common import validate_credentials
+    if not validate_credentials("gmgn"):
+        return
+        
     # Import NoTruncationText and prompt_user for better display and paste handling
     from ...utils.common import NoTruncationText, prompt_user
     

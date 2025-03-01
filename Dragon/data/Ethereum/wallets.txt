@@ -1,1 +1,0 @@
-/Users/will/Developer/sol-tools/data/input-data/dragon/ethereum/wallet_lists/wallets.txt
