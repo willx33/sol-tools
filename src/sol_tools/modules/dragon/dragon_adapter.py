@@ -544,14 +544,14 @@ class DragonAdapter:
         """
         proxy_path = self.proxies_dir / "proxies.txt"
         
-        if not os.path.exists(proxy_path) and create_if_missing:
+        if not proxy_path.exists() and create_if_missing:
             # Create the directory and empty file
-            os.makedirs(os.path.dirname(proxy_path), exist_ok=True)
-            with open(proxy_path, 'w') as f:
-                pass
+            from ...utils.common import ensure_file_dir
+            ensure_file_dir(proxy_path)
+            proxy_path.touch()
                 
         # Check if the file has content
-        if os.path.exists(proxy_path):
+        if proxy_path.exists():
             with open(proxy_path, 'r') as f:
                 proxies = [line.strip() for line in f if line.strip()]
             return len(proxies) > 0
