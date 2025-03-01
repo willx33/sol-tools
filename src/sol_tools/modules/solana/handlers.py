@@ -29,6 +29,8 @@ def token_monitor():
         missing = [var for var, present in env_vars.items() if not present]
         print(f"❌ Missing required environment variables: {', '.join(missing)}")
         print("Please set them in the .env file before using this feature.")
+        print("\nPress Enter to return to the main menu...")
+        input()
         return
     
     # Import custom NoTruncationText and prompt function for better paste handling
@@ -145,6 +147,8 @@ def wallet_monitor():
         missing = [var for var, present in env_vars.items() if not present]
         print(f"❌ Missing required environment variables: {', '.join(missing)}")
         print("Please set them in the .env file before using this feature.")
+        print("\nPress Enter to return to the main menu...")
+        input()
         return
     
     # Setup directory for wallets
@@ -267,7 +271,29 @@ def wallet_monitor():
                 truncated = wallet[:6] + "..." + wallet[-6:]
                 print(f"⚡ New transaction for wallet {truncated}: ${event['amount']:.2f} at {event['timestamp']}")
             
+            # Save monitoring results to a file
+            from ...utils.common import save_unified_data
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            
+            # Create data structure for saving
+            monitoring_data = {
+                "timestamp": timestamp,
+                "wallets_monitored": len(wallets),
+                "events_detected": len(events),
+                "events": events
+            }
+            
+            # Save to unified data file
+            output_path = save_unified_data(
+                module="solana",
+                data_items=[monitoring_data],
+                filename_prefix=f"wallet_monitoring_{timestamp}",
+                data_type="output",
+                subdir="wallet_data"
+            )
+            
             print(f"\n✅ Monitoring complete. Detected {len(events)} transactions.")
+            print(f"Results saved to: {output_path}")
         else:
             print(f"\n❌ Monitoring failed: {result.get('error', 'Unknown error')}")
             
@@ -284,6 +310,8 @@ def telegram_scraper():
     if not get_env_var("TELEGRAM_BOT_TOKEN") or not get_env_var("TELEGRAM_CHAT_ID"):
         print("❌ Missing Telegram API credentials")
         print("Please set TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID in your .env file.")
+        print("\nPress Enter to return to the main menu...")
+        input()
         return
     
     # Setup directory
@@ -595,9 +623,22 @@ def dragon_solana_wallet():
     if result.get("success", False):
         print(f"\n✅ Wallet analysis completed")
         if "data" in result:
-            # Handle success response with data summary
-            # In a real implementation we would display summary stats
+            # Save the wallet analysis data to a file
+            wallet_data = result["data"]
+            from ...utils.common import save_unified_data
+            
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            output_file = save_unified_data(
+                module="dragon",
+                data_items=wallet_data if isinstance(wallet_data, list) else [wallet_data],
+                filename_prefix=f"wallet_analysis_{timestamp}",
+                data_type="output",
+                subdir="solana/wallet_analysis"
+            )
+            
+            # Display summary stats
             print(f"Processed {len(wallets)} wallets")
+            print(f"Results saved to: {output_file}")
     else:
         print(f"\n❌ Wallet analysis failed: {result.get('error', 'Unknown error')}")
     

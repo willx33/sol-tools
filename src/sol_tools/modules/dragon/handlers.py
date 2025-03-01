@@ -24,6 +24,17 @@ def solana_bundle_checker():
     clear_terminal()
     print("🐲 Dragon Solana Bundle Checker")
     
+    # Check for required environment variables
+    from ...core.config import check_env_vars
+    env_vars = check_env_vars("solana")
+    if not all(env_vars.values()):
+        missing = [var for var, present in env_vars.items() if not present]
+        print(f"❌ Missing required environment variables: {', '.join(missing)}")
+        print("Please set them in the .env file before using this feature.")
+        print("\nPress Enter to return to the main menu...")
+        input()
+        return
+    
     # Import NoTruncationText and prompt_user for better display and paste handling
     from ...utils.common import NoTruncationText, prompt_user
     
@@ -88,6 +99,17 @@ def solana_wallet_checker():
     """Analyze PnL and win rates for multiple wallets."""
     clear_terminal()
     print("🐲 Dragon Solana Wallet Checker")
+    
+    # Check for required environment variables
+    from ...core.config import check_env_vars
+    env_vars = check_env_vars("solana")
+    if not all(env_vars.values()):
+        missing = [var for var, present in env_vars.items() if not present]
+        print(f"❌ Missing required environment variables: {', '.join(missing)}")
+        print("Please set them in the .env file before using this feature.")
+        print("\nPress Enter to return to the main menu...")
+        input()
+        return
     
     # Setup wallet directory
     wallet_dir = ensure_data_dir("dragon", "solana/wallet_lists", data_type="input")
@@ -202,9 +224,22 @@ def solana_wallet_checker():
     if result.get("success", False):
         print(f"\n✅ Wallet analysis completed")
         if "data" in result:
-            # Handle success response with data summary
-            # In a real implementation we would display summary stats
+            # Save the wallet analysis data to a file
+            wallet_data = result["data"]
+            from ...utils.common import save_unified_data
+            
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            output_file = save_unified_data(
+                module="dragon",
+                data_items=wallet_data if isinstance(wallet_data, list) else [wallet_data],
+                filename_prefix=f"wallet_analysis_{timestamp}",
+                data_type="output",
+                subdir="solana/wallet_analysis"
+            )
+            
+            # Display summary stats
             print(f"Processed {len(wallets)} wallets")
+            print(f"Results saved to: {output_file}")
     else:
         print(f"\n❌ Wallet analysis failed: {result.get('error', 'Unknown error')}")
 

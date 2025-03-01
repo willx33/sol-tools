@@ -195,36 +195,13 @@ class SolanaAdapter:
                 "error": f"Invalid Solana token address: {token_address}"
             }
             
-        # This is a stub implementation - in a real implementation,
-        # we would set up a WebSocket connection to Helius and monitor transactions
-        # For now, just simulate some activity
-        self.logger.info(f"Monitoring token: {token_address}")
-        self.logger.info(f"Alert threshold: ${min_amount:.2f}")
-        
-        # Simulated events for demonstration
-        # Generate different events based on the token address to show variety for multiple tokens
-        import hashlib
-        
-        # Use hash of token address to deterministically generate different events
-        token_hash = int(hashlib.md5(token_address.encode()).hexdigest(), 16) % 10000
-        base_amount = 500.0 + (token_hash % 2000)
-        num_events = 1 + (token_hash % 4)  # 1-4 events
-        
-        events = []
-        for i in range(num_events):
-            # Create a transaction amount based on token hash
-            amount = base_amount * (1 + (i * 0.2)) 
-            events.append({
-                "timestamp": datetime.now().strftime("%H:%M:%S"),
-                "amount": amount,
-                "token": token_address
-            })
-        
+        # In a real implementation, we would set up a WebSocket connection to Helius
+        # and monitor transactions. Since this functionality requires the Helius API key
+        # which was already checked above, we'll simply return an error indicating
+        # that the functionality is incomplete or unavailable.
         return {
-            "success": True,
-            "token_address": token_address,
-            "threshold": min_amount,
-            "events": [e for e in events if e["amount"] >= min_amount]
+            "success": False,
+            "error": "Token monitoring requires Helius API integration which is not yet implemented"
         }
     
     def wallet_monitor(self, wallet_addresses: List[str]) -> Dict[str, Any]:
@@ -262,25 +239,13 @@ class SolanaAdapter:
             for wallet in wallet_addresses:
                 f.write(f"{wallet}\n")
         
-        # This is a stub implementation - in a real implementation,
-        # we would set up WebSocket connections to monitor these wallets
-        # For now, just simulate some activity
-        self.logger.info(f"Monitoring {len(wallet_addresses)} wallets")
-        
-        # Simulated events for demonstration
-        events = []
-        for i, wallet in enumerate(wallet_addresses[:3]):  # Just use the first 3 for demo
-            events.append({
-                "wallet": wallet,
-                "timestamp": datetime.now().strftime("%H:%M:%S"),
-                "amount": 100.0 * (i + 1)
-            })
-        
+        # In a real implementation, we would set up WebSocket connections to monitor 
+        # these wallets. Since this functionality requires the Helius API key
+        # which was already checked above, we'll simply return an error indicating
+        # that the functionality is incomplete or unavailable.
         return {
-            "success": True,
-            "wallets_monitored": len(wallet_addresses),
-            "wallets_file": str(wallet_file),
-            "events": events
+            "success": False,
+            "error": "Wallet monitoring requires Helius API integration which is not yet implemented"
         }
     
     def telegram_scraper(self, 
@@ -306,42 +271,17 @@ class SolanaAdapter:
                 "error": "Telegram credentials not set"
             }
             
-        # This is a stub implementation - in a real implementation,
-        # we would use Telethon or similar to scrape messages from the channel
-        # For now, just simulate some results
+        # In a real implementation, we would use Telethon or similar to scrape
+        # messages from the channel. Since this functionality requires Telegram
+        # credentials which were already checked above, we'll simply return an error
+        # indicating that the functionality is incomplete or unavailable.
         self.logger.info(f"Scraping channel: @{channel}")
         self.logger.info(f"Limit: {limit} messages")
         self.logger.info(f"Filter: {filter_type}")
         
-        # Simulated results for demonstration
-        token_count = 5
-        link_count = 12
-        
-        # Create output file
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_file = None
-        
-        if export_csv:
-            from ...utils.common import ensure_file_dir
-            
-            # Save in the proper output directory location
-            output_file = self.telegram_dir / f"scrape_{channel}_{timestamp}.csv"
-            # Ensure parent directory exists
-            ensure_file_dir(output_file)
-            # In a real implementation, we would write actual data to this file
-            with open(output_file, "w") as f:
-                f.write("timestamp,message_id,text,tokens,links\n")
-                # Add some dummy data for demonstration
-                for i in range(5):
-                    f.write(f"{timestamp},{i},Example message {i},,https://example.com\n")
-        
         return {
-            "success": True,
-            "channel": channel,
-            "messages_processed": limit,
-            "tokens_found": token_count,
-            "links_found": link_count,
-            "output_file": str(output_file) if output_file else None
+            "success": False,
+            "error": "Telegram scraping requires the python-telegram-bot or Telethon library which is not yet implemented"
         }
     
     def _validate_solana_address(self, address: str) -> bool:

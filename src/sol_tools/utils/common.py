@@ -1173,3 +1173,72 @@ def check_proxy_file(proxy_path: Optional[str] = None) -> List[str]:
     except Exception as e:
         console.print(f"[red]❌ Error reading proxy file: {e}[/red]")
         return []
+
+
+def validate_credentials(module_name: str) -> bool:
+    """
+    Check if all required environment variables for a module are present.
+    Shows error message and returns False if any are missing.
+    
+    Args:
+        module_name: Module name to check credentials for (e.g., 'solana', 'dragon')
+        
+    Returns:
+        True if all required credentials are present, False otherwise
+    """
+    # Import here to avoid circular imports
+    from ..core.config import check_env_vars
+    
+    # Check for required environment variables
+    env_vars = check_env_vars(module_name)
+    
+    # If no vars required (like some Sharp tools), return True
+    if not env_vars:
+        return True
+        
+    if not all(env_vars.values()):
+        missing = [var for var, present in env_vars.items() if not present]
+        clear_terminal()
+        console.print(f"[bold red]❌ Missing required credentials for this module[/bold red]")
+        console.print(f"The following environment variables are not set: {', '.join(missing)}")
+        console.print("\nPlease set them in Settings > Edit Environment Variables")
+        console.print("\nPress Enter to return to main menu...")
+        input()
+        return False
+        
+    return True
+
+
+def validate_multiple_credentials(modules: List[str]) -> bool:
+    """
+    Check if all required environment variables for multiple modules are present.
+    Shows error message and returns False if any are missing.
+    
+    Args:
+        modules: List of module names to check credentials for
+        
+    Returns:
+        True if all required credentials are present, False otherwise
+    """
+    # Import here to avoid circular imports
+    from ..core.config import check_env_vars
+    
+    all_missing = []
+    
+    # Check each module's credentials
+    for module in modules:
+        env_vars = check_env_vars(module)
+        missing = [var for var, present in env_vars.items() if not present]
+        all_missing.extend(missing)
+    
+    # If any credentials are missing, show error and return False
+    if all_missing:
+        clear_terminal()
+        console.print(f"[bold red]❌ Missing required credentials for this module[/bold red]")
+        console.print(f"The following environment variables are not set: {', '.join(set(all_missing))}")
+        console.print("\nPlease set them in Settings > Edit Environment Variables")
+        console.print("\nPress Enter to return to main menu...")
+        input()
+        return False
+        
+    return True

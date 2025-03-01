@@ -790,13 +790,25 @@ class DragonAdapter:
             # Check proxies if requested
             if use_proxies and not self.check_proxy_file():
                 return {"success": False, "error": "Proxy file empty or not found"}
+            
+            # Use the real wallet checker - if unavailable or fails, return error
+            if not self.wallet_checker:
+                return {"success": False, "error": "Wallet checker functionality not available"}
                 
-            data = self.wallet_checker.fetchWalletData(
-                valid_wallets, 
-                threads=threads,
-                skipWallets=skip_wallets,
-                useProxies=use_proxies
-            )
-            return {"success": True, "data": data}
+            try:
+                data = self.wallet_checker.fetchWalletData(
+                    valid_wallets, 
+                    threads=threads,
+                    skipWallets=skip_wallets,
+                    useProxies=use_proxies
+                )
+                
+                if data:
+                    return {"success": True, "data": data}
+                else:
+                    return {"success": False, "error": "No data returned from wallet checker"}
+            except Exception as e:
+                return {"success": False, "error": f"Error during wallet analysis: {str(e)}"}
+            
         except Exception as e:
             return {"success": False, "error": str(e)}
