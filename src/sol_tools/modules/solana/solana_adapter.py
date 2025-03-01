@@ -22,7 +22,6 @@ class SolanaAdapter:
             config: Additional configuration parameters (optional)
         """
         self.data_dir = Path(data_dir)
-        self.solana_dir = self.data_dir / "solana"
         self.logger = logging.getLogger(__name__)
         self.config = config or {}
         
@@ -31,11 +30,19 @@ class SolanaAdapter:
         self.telegram_bot_token = os.environ.get("TELEGRAM_BOT_TOKEN")
         self.telegram_chat_id = os.environ.get("TELEGRAM_CHAT_ID")
         
-        # Create necessary directories
-        (self.solana_dir / "wallets").mkdir(parents=True, exist_ok=True)
-        (self.solana_dir / "tokens").mkdir(parents=True, exist_ok=True)
-        (self.solana_dir / "telegram").mkdir(parents=True, exist_ok=True)
-        (self.solana_dir / "cache").mkdir(parents=True, exist_ok=True)
+        # Get proper directories using the ensure_data_dir utility
+        from ...utils.common import ensure_data_dir
+        
+        # Use proper input/output directories
+        self.input_dir = ensure_data_dir("solana", data_type="input")
+        self.output_dir = ensure_data_dir("solana", data_type="output")
+        
+        # Create specific subdirectories under proper structure
+        self.wallet_dir = ensure_data_dir("solana", "wallet_lists", data_type="input")
+        self.token_dir = ensure_data_dir("solana", "token_lists", data_type="input")
+        self.telegram_dir = ensure_data_dir("solana", "telegram", data_type="output")
+        self.cache_dir = Path(self.data_dir) / "cache" / "solana"
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
         
         # Initialize components conditionally based on environment variables
         self._init_telegram()
@@ -247,8 +254,8 @@ class SolanaAdapter:
         # Import ensure_file_dir from utils
         from ...utils.common import ensure_file_dir
         
-        # Save wallet addresses to file for later use
-        wallet_file = self.solana_dir / "wallets/monitor-wallets.txt"
+        # Save wallet addresses to file in the proper location
+        wallet_file = self.wallet_dir / "monitor-wallets.txt"
         # Ensure parent directory exists
         ensure_file_dir(wallet_file)
         with open(wallet_file, "w") as f:
@@ -317,7 +324,8 @@ class SolanaAdapter:
         if export_csv:
             from ...utils.common import ensure_file_dir
             
-            output_file = self.solana_dir / f"telegram/scrape_{channel}_{timestamp}.csv"
+            # Save in the proper output directory location
+            output_file = self.telegram_dir / f"scrape_{channel}_{timestamp}.csv"
             # Ensure parent directory exists
             ensure_file_dir(output_file)
             # In a real implementation, we would write actual data to this file

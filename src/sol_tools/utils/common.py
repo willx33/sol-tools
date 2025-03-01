@@ -807,18 +807,27 @@ def find_all_matching_files(pattern: str, recursive: bool = True) -> List[Dict[s
     # Set up search pattern
     search_pattern = "**/" + pattern if recursive else pattern
     
-    # Find all matching files in the input-data directory
-    files = list(INPUT_DATA_DIR.glob(search_pattern))
+    # Find all matching files in the input-data directory - convert to set to eliminate duplicates
+    # This is important because the glob search might find the same file through different paths
+    file_paths = set()
+    for file in INPUT_DATA_DIR.glob(search_pattern):
+        file_paths.add(str(file.resolve()))
     
-    # Sort by modification time (newest first)
+    # Create file objects from resolved paths and sort
+    files = [Path(path) for path in file_paths]
     files.sort(key=lambda x: x.stat().st_mtime, reverse=True)
     
     # Create file information
     file_info = []
     for file in files:
         # Determine relative module path
-        rel_path = file.relative_to(INPUT_DATA_DIR)
-        module_path = str(rel_path.parts[0] if len(rel_path.parts) > 0 else "")
+        try:
+            rel_path = file.relative_to(INPUT_DATA_DIR)
+            module_path = str(rel_path.parts[0] if len(rel_path.parts) > 0 else "")
+        except ValueError:
+            # If the file doesn't have a relative path to INPUT_DATA_DIR, use the full path
+            rel_path = file.name
+            module_path = ""
         
         # Try to load metadata if it's a JSON file
         metadata = {"type": "unknown"}
@@ -867,6 +876,7 @@ def select_input_file(pattern: str,
     """
     # Import inquirer for the UI
     import inquirer
+    from blessed import Terminal
     
     # Find all matching files
     files = find_all_matching_files(pattern)
@@ -875,9 +885,18 @@ def select_input_file(pattern: str,
         console.print(f"[yellow]No files matching '{pattern}' found in the input-data directory.[/yellow]")
         return None
     
-    # Create a list of choices for the user
-    choices = []
+    # Create a list of choices for the user - deduplicate by path
+    seen_paths = set()
+    choice_items = []
+    
     for file in files:
+        path = file.get("path", "")
+        # Skip duplicates - this prevents the same file appearing multiple times
+        if path in seen_paths:
+            continue
+        
+        seen_paths.add(path)
+        
         # Format each file nicely for display
         modified_date = datetime.fromisoformat(file.get("modified", "")).strftime("%Y-%m-%d %H:%M")
         module_name = file.get("module", "")
@@ -891,21 +910,50 @@ def select_input_file(pattern: str,
             display = f"{name} ({modified_date})"
         
         # Add to choices
-        choices.append((display, file.get("path")))
+        choice_items.append((display, path))
     
     # Add a cancel option
-    choices.append(("Cancel", None))
+    choice_items.append(("Cancel", None))
     
-    # Create the selection prompt
-    selection = [
-        inquirer.List('file',
-                     message=message,
-                     choices=choices)
-    ]
+    # Manual selection to avoid repeated prompts
+    term = Terminal()
     
-    # Get the selected file path
-    result = inquirer.prompt(selection)
-    return result['file'] if result else None
+    print(f"\n{message}")
+    
+    selected_index = 0
+    choice_count = len(choice_items)
+    
+    # Handle key presses and navigation
+    with term.cbreak(), term.hidden_cursor():
+        while True:
+            # Clear the screen and display the current options
+            print(term.clear)
+            print(f"{message}")
+            
+            for i, (display, _) in enumerate(choice_items):
+                if i == selected_index:
+                    print(f"{term.bold}{term.blue}> {display}{term.normal}")
+                else:
+                    print(f"  {display}")
+            
+            # Get key press
+            key = term.inkey()
+            
+            if key.name == 'KEY_UP':
+                selected_index = (selected_index - 1) % choice_count
+            elif key.name == 'KEY_DOWN':
+                selected_index = (selected_index + 1) % choice_count
+            elif key.name == 'KEY_ENTER':
+                break
+            elif key.name == 'KEY_ESCAPE':
+                selected_index = choice_count - 1  # Select Cancel
+                break
+    
+    # Return the selected choice
+    _, selected_value = choice_items[selected_index]
+    print(f"\nSelected: {choice_items[selected_index][0]}\n")
+    
+    return selected_value
 
 
 def select_multiple_input_files(pattern: str, 
@@ -923,8 +971,8 @@ def select_multiple_input_files(pattern: str,
     Returns:
         List of paths to the selected files (empty list if no selection was made)
     """
-    # Import inquirer for the UI
-    import inquirer
+    # Import terminal UI components
+    from blessed import Terminal
     
     # Find all matching files
     files = find_all_matching_files(pattern)
@@ -933,9 +981,18 @@ def select_multiple_input_files(pattern: str,
         console.print(f"[yellow]No files matching '{pattern}' found in the input-data directory.[/yellow]")
         return []
     
-    # Create a list of choices for the user
-    choices = []
+    # Create a list of choices for the user - deduplicate by path
+    seen_paths = set()
+    choice_items = []
+    
     for file in files:
+        path = file.get("path", "")
+        # Skip duplicates
+        if path in seen_paths:
+            continue
+        
+        seen_paths.add(path)
+        
         # Format each file nicely for display
         modified_date = datetime.fromisoformat(file.get("modified", "")).strftime("%Y-%m-%d %H:%M")
         module_name = file.get("module", "")
@@ -948,19 +1005,82 @@ def select_multiple_input_files(pattern: str,
         else:
             display = f"{name} ({modified_date})"
         
-        # Add to choices
-        choices.append((display, file.get("path")))
+        # Add to choices with selection status
+        choice_items.append((display, path, False))  # False means not selected
     
-    # Create the selection prompt
-    selection = [
-        inquirer.Checkbox('files',
-                        message=message,
-                        choices=choices)
-    ]
+    # Add a done option
+    choice_items.append(("Done", None, False))
     
-    # Get the selected file paths
-    result = inquirer.prompt(selection)
-    return result['files'] if result else []
+    # Manual selection to avoid repeated prompts
+    term = Terminal()
+    
+    print(f"\n{message}")
+    print("Press Space to select/deselect, Enter when done, Esc to cancel")
+    
+    cursor_index = 0
+    choice_count = len(choice_items)
+    
+    # Handle key presses and navigation
+    with term.cbreak(), term.hidden_cursor():
+        while True:
+            # Clear the screen and display the current options
+            print(term.clear)
+            print(f"{message}")
+            print("Press Space to select/deselect, Enter when done, Esc to cancel\n")
+            
+            for i, (display, _, selected) in enumerate(choice_items):
+                # Different display for Done option
+                if i == choice_count - 1:  # Done option
+                    if i == cursor_index:
+                        print(f"{term.bold}{term.blue}> {display}{term.normal}")
+                    else:
+                        print(f"  {display}")
+                else:
+                    prefix = "[x]" if selected else "[ ]"
+                    if i == cursor_index:
+                        print(f"{term.bold}{term.blue}> {prefix} {display}{term.normal}")
+                    else:
+                        print(f"  {prefix} {display}")
+            
+            # Count selected items
+            selected_count = sum(1 for _, _, selected in choice_items[:-1] if selected)
+            print(f"\n{selected_count} item(s) selected")
+            
+            # Get key press
+            key = term.inkey()
+            
+            if key.name == 'KEY_UP':
+                cursor_index = (cursor_index - 1) % choice_count
+            elif key.name == 'KEY_DOWN':
+                cursor_index = (cursor_index + 1) % choice_count
+            elif key == ' ':  # Space
+                # Toggle selection for current item (except Done option)
+                if cursor_index < choice_count - 1:
+                    display, path, selected = choice_items[cursor_index]
+                    choice_items[cursor_index] = (display, path, not selected)
+            elif key.name == 'KEY_ENTER':
+                if cursor_index == choice_count - 1:  # Done selected
+                    break
+                # Otherwise toggle current item
+                if cursor_index < choice_count - 1:
+                    display, path, selected = choice_items[cursor_index]
+                    choice_items[cursor_index] = (display, path, not selected)
+            elif key.name == 'KEY_ESCAPE':
+                # Clear all selections and exit
+                for i in range(len(choice_items) - 1):
+                    display, path, _ = choice_items[i]
+                    choice_items[i] = (display, path, False)
+                break
+    
+    # Return the selected file paths
+    selected_paths = [path for _, path, selected in choice_items[:-1] if selected]
+    
+    if selected_paths:
+        print(f"\nSelected {len(selected_paths)} file(s)")
+    else:
+        print("\nNo files selected")
+    
+    return selected_paths
 
 
 

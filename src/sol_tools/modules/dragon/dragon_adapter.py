@@ -31,22 +31,15 @@ logger = logging.getLogger(__name__)
 _gmgn_threadpool = ThreadPoolExecutor(max_workers=20)
 _wallet_threadpool = ThreadPoolExecutor(max_workers=40)
 
-# Create directories for logs and data
-LOGS_DIR = Path(__file__).parent.parent.parent.parent.parent / "logs" / "dragon"
+# Properly use the logs directory structure
+from ...core.config import LOG_DIR
+LOGS_DIR = LOG_DIR / "dragon"
 LOGS_DIR.mkdir(parents=True, exist_ok=True)
 
 # Fallback paths for original Dragon modules
 DRAGON_PATH = Path(__file__).parents[4] / "Dragon"
 if str(DRAGON_PATH) not in sys.path:
     sys.path.append(str(DRAGON_PATH))
-
-# Create a directory if it doesn't exist to help with fallback operations
-if not DRAGON_PATH.exists():
-    try:
-        DRAGON_PATH.mkdir(parents=True, exist_ok=True)
-        logger.info(f"Created Dragon directory: {DRAGON_PATH}")
-    except Exception as e:
-        logger.warning(f"Could not create Dragon directory: {e}")
 
 # Import Dragon modules without showing warnings
 import Dragon
@@ -525,59 +518,29 @@ class DragonAdapter:
     
     def ensure_dragon_paths(self) -> bool:
         """
-        Create and return paths to match Dragon's expected directory structure.
+        Ensure proper paths for Dragon operations within the input-data/output-data structure.
         
         Returns:
             True if paths were successfully created, False otherwise
         """
         try:
-            # Make sure the Dragon module can find its data directories
-            original_dragon_data = DRAGON_PATH / "data"
+            # Make sure our input/output directories for Dragon exist
+            self.input_data_dir.mkdir(parents=True, exist_ok=True)
+            self.output_data_dir.mkdir(parents=True, exist_ok=True)
             
-            # Use symbolic links or copy directory structure as needed
-            if not os.path.exists(original_dragon_data):
-                os.makedirs(original_dragon_data, exist_ok=True)
-                
-                # Create the necessary directory structure for Dragon
-                chains = {
-                    "Solana": {
-                        "input": self.solana_input_dir,
-                        "output": self.solana_output_dirs
-                    },
-                    "Ethereum": {
-                        "input": self.ethereum_input_dir,
-                        "output": self.ethereum_output_dirs
-                    },
-                    "Proxies": {
-                        "input": self.proxies_dir,
-                        "output": None
-                    }
-                }
-                
-                # Create the destination directories and try to link them
-                for chain, paths in chains.items():
-                    dst = original_dragon_data / chain
-                    
-                    # Create the destination chain directory if it doesn't exist
-                    if not os.path.exists(dst):
-                        # Make sure directories exist
-                        os.makedirs(dst, exist_ok=True)
-                        
-                        # Try to create symlinks for input directory
-                        if paths["input"] and os.path.exists(paths["input"]):
-                            for subdir in paths["input"].glob("*"):
-                                try:
-                                    dst_subdir = dst / subdir.name
-                                    if not os.path.exists(dst_subdir):
-                                        os.symlink(subdir, dst_subdir)
-                                except (OSError, NotImplementedError):
-                                    # Fall back to just creating the directory
-                                    pass
+            # Make sure specific directories exist
+            self.ethereum_input_dir.mkdir(parents=True, exist_ok=True)
+            self.solana_input_dir.mkdir(parents=True, exist_ok=True)
+            self.proxies_dir.mkdir(parents=True, exist_ok=True)
             
-            # Make sure the Dragon directory is in Python's module search path
-            if str(DRAGON_PATH) not in sys.path and DRAGON_PATH.exists():
-                sys.path.append(str(DRAGON_PATH))
-                # Don't log this information
+            # Create the output directories
+            for dir_path in self.ethereum_output_dirs.values():
+                dir_path.mkdir(parents=True, exist_ok=True)
+                
+            for dir_path in self.solana_output_dirs.values():
+                dir_path.mkdir(parents=True, exist_ok=True)
+                
+            self.token_info_dir.mkdir(parents=True, exist_ok=True)
             
             return True
         except Exception as e:
