@@ -1,16 +1,15 @@
 [build-system]
-requires = ["setuptools>=61.0", "wheel"]
+requires = ["setuptools>=42", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "sol-tools"
 version = "1.0.0"
-description = "Ultimate CLI toolkit for crypto analysis and operations"
+description = "Ultimate Crypto Analysis Toolkit"
+authors = [{name = "Will", email = "will@example.com"}]
 readme = "README.md"
-authors = [
-    {name = "Will", email = "will@example.com"}
-]
 requires-python = ">=3.9"
+license = {text = "MIT"}
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",
@@ -41,8 +40,8 @@ sol-tools = "sol_tools.cli:main"
 start = "sol_tools.cli:main"
 sol-tools-clean = "sol_tools.utils.cleanup:clean_caches"
 
-[tool.setuptools.packages.find]
-where = ["src"]
+[tool.setuptools]
+package-dir = {"" = "src"}
 
 [tool.black]
 line-length = 88

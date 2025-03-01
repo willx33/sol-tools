@@ -19,10 +19,8 @@ rm -rf data/__pycache__/*
 echo "✅ __pycache__ directory cleared"
 
 # Find and remove all __pycache__ directories except in venv
-echo "Finding and removing all other __pycache__ directories..."
-find . -type d -name "__pycache__" ! -path "*/venv/*" -exec rm -rf {} +
-# The plus sign might cause the command to fail to delete directories themselves, just their content
-# This is fine as the directories will be recreated with the correct permissions when needed
-find . -type d -name "__pycache__" ! -path "*/venv/*" -exec echo "  Removed: {}" \;
+echo "Finding and removing additional __pycache__ directories..."
+find . -type d -name "__pycache__" | grep -v "venv" | xargs rm -rf
+echo "✅ Additional __pycache__ directories cleared"
 
-echo "✅ Done! All cache directories have been cleared."
+echo "✨ Cleanup complete"

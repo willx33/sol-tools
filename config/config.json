@@ -1,5 +1,5 @@
 {
-  "proxy_enabled": false,
+  "log_level": "INFO",
   "proxy_file": "data/input-data/proxies/proxies.txt",
   "data_dir": "data",
   "cache_dir": "data/cache",
