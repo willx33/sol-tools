@@ -13,15 +13,13 @@ from pathlib import Path
 class SolanaAdapter:
     """Adapter for Solana monitoring functionality."""
     
-    def __init__(self, data_dir: Union[str, Path], config: Optional[Dict[str, Any]] = None):
+    def __init__(self, config: Optional[Dict[str, Any]] = None):
         """
         Initialize the Solana adapter.
         
         Args:
-            data_dir: Path to the data directory
             config: Additional configuration parameters (optional)
         """
-        self.data_dir = Path(data_dir)
         self.logger = logging.getLogger(__name__)
         self.config = config or {}
         
@@ -32,6 +30,7 @@ class SolanaAdapter:
         
         # Get proper directories using the ensure_data_dir utility
         from ...utils.common import ensure_data_dir
+        from ...core.config import CACHE_DIR
         
         # Use proper input/output directories
         self.input_dir = ensure_data_dir("solana", data_type="input")
@@ -41,7 +40,7 @@ class SolanaAdapter:
         self.wallet_dir = ensure_data_dir("solana", "wallet_lists", data_type="input")
         self.token_dir = ensure_data_dir("solana", "token_lists", data_type="input")
         self.telegram_dir = ensure_data_dir("solana", "telegram", data_type="output")
-        self.cache_dir = Path(self.data_dir) / "cache" / "solana"
+        self.cache_dir = CACHE_DIR / "solana"
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         
         # Initialize components conditionally based on environment variables
@@ -52,20 +51,14 @@ class SolanaAdapter:
         self._init_dragon()
     
     def _init_dragon(self):
-        """Initialize Dragon functionality if available."""
-        try:
-            # Only import dragon_adapter here to prevent circular imports
-            from ..dragon.dragon_adapter import DragonAdapter
-            self.dragon = DragonAdapter(self.data_dir)
-            self.dragon_available = True
-            
-            # Try to ensure dragon paths if dragon modules are available
-            self.dragon.ensure_dragon_paths()
-                
-        except (ImportError, Exception) as e:
-            # Silent initialization - don't show warnings
-            self.dragon = None
-            self.dragon_available = False
+        """Initialize Dragon functionality."""
+        # Import dragon_adapter here to prevent circular imports
+        from ..dragon.dragon_adapter import DragonAdapter
+        self.dragon = DragonAdapter()
+        self.dragon_available = True
+        
+        # Ensure dragon paths are created
+        self.dragon.ensure_dragon_paths()
     
     def _init_telegram(self) -> bool:
         """

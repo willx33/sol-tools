@@ -26,11 +26,9 @@ def run_query():
     clear_terminal()
     print("📊 Dune Analytics Query Runner")
     
-    # Check for API key
-    env_vars = check_env_vars("dune")
-    if not env_vars.get("DUNE_API_KEY", False):
-        print("❌ DUNE_API_KEY environment variable is not set.")
-        print("Please set it in the .env file before using this feature.")
+    # Check for required environment variables
+    from ...utils.common import validate_credentials
+    if not validate_credentials("dune"):
         return
     
     # Get Dune adapter
@@ -112,6 +110,11 @@ def parse_csv():
     """Parse token addresses from Dune query CSV results."""
     clear_terminal()
     print("📊 Dune CSV Parser")
+    
+    # Check for required environment variables
+    from ...utils.common import validate_credentials
+    if not validate_credentials("dune"):
+        return
     
     # Get Dune adapter
     adapter = _get_dune_adapter()

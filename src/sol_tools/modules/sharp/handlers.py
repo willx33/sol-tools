@@ -49,6 +49,11 @@ def wallet_checker(export_format: str = None):
     console.print("[bold blue]🔍 Sharp Wallet Checker[/bold blue]")
     console.print("Analyze wallet performance data from BullX API\n")
     
+    # Check for required environment variables
+    from ...utils.common import validate_credentials
+    if not validate_credentials("bullx"):
+        return
+    
     # Setup directories
     sharp_dir = ensure_data_dir("sharp")
     wallet_dir = ensure_data_dir("sharp", "wallets")

@@ -15,8 +15,7 @@ from .dragon_adapter import DragonAdapter
 # Initialize the dragon adapter for all handlers
 def _get_dragon_adapter():
     """Get initialized Dragon adapter."""
-    data_dir = ensure_data_dir("").parent
-    return DragonAdapter(data_dir)
+    return DragonAdapter()
 
 
 def solana_bundle_checker():

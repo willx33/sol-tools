@@ -57,8 +57,7 @@ def token_monitor():
         min_amount = 1000
     
     # Initialize Solana adapter
-    data_dir = ensure_data_dir("").parent
-    adapter = SolanaAdapter(data_dir)
+    adapter = SolanaAdapter()
     
     # Start monitoring
     print(f"\n🔎 Monitoring transactions for {len(token_addresses)} tokens")
@@ -243,8 +242,7 @@ def wallet_monitor():
         return
     
     # Initialize Solana adapter
-    data_dir = ensure_data_dir("").parent
-    adapter = SolanaAdapter(data_dir)
+    adapter = SolanaAdapter()
     
     # Start monitoring
     print(f"\n🔎 Monitoring transactions for {len(wallets)} wallets")
@@ -345,8 +343,7 @@ def telegram_scraper():
     export_csv = answers["export_csv"]
     
     # Initialize Solana adapter
-    data_dir = ensure_data_dir("").parent
-    adapter = SolanaAdapter(data_dir)
+    adapter = SolanaAdapter()
     
     # Start scraping
     print(f"\n🔎 Scraping Telegram channel: @{channel}")
@@ -376,8 +373,7 @@ def test_telegram():
     print("🧪 Testing Telegram Connection...")
     
     # Initialize Solana adapter
-    data_dir = ensure_data_dir("").parent
-    adapter = SolanaAdapter(data_dir)
+    adapter = SolanaAdapter()
     
     # Run test
     result = adapter.test_telegram()
@@ -402,8 +398,7 @@ def dragon_solana_bundle():
         return
     
     # Initialize Solana adapter (which will also try to initialize Dragon)
-    data_dir = ensure_data_dir("").parent
-    adapter = SolanaAdapter(data_dir)
+    adapter = SolanaAdapter()
     
     # Check for Dragon modules via adapter
     if not adapter.check_dragon_availability():
@@ -430,8 +425,7 @@ def dragon_solana_bundle():
     contract_address = answers["contract_address"]
     
     # Use the adapter
-    data_dir = ensure_data_dir("").parent
-    adapter = SolanaAdapter(data_dir)
+    adapter = SolanaAdapter()
     result = adapter.solana_bundle_checker(contract_address)
     
     if result.get("success", False):
@@ -483,9 +477,13 @@ def dragon_solana_wallet():
     clear_terminal()
     print("🐲 Dragon Solana Wallet Checker")
     
+    # Check for required environment variables
+    from ...utils.common import validate_credentials
+    if not validate_credentials("solana"):
+        return
+    
     # Initialize Solana adapter (which will also try to initialize Dragon)
-    data_dir = ensure_data_dir("").parent
-    adapter = SolanaAdapter(data_dir)
+    adapter = SolanaAdapter()
     
     # Check for Dragon modules via adapter
     if not adapter.check_dragon_availability():
@@ -604,8 +602,7 @@ def dragon_solana_wallet():
             answers["use_proxies"] = False
     
     # Use the adapter
-    data_dir = ensure_data_dir("").parent
-    adapter = SolanaAdapter(data_dir)
+    adapter = SolanaAdapter()
     result = adapter.solana_wallet_checker(
         wallets, 
         threads=threads,
@@ -643,9 +640,13 @@ def dragon_solana_traders():
     clear_terminal()
     print("🐲 Dragon Solana Top Traders")
     
+    # Check for required environment variables
+    from ...utils.common import validate_credentials
+    if not validate_credentials("solana"):
+        return
+    
     # Initialize Solana adapter (which will also try to initialize Dragon)
-    data_dir = ensure_data_dir("").parent
-    adapter = SolanaAdapter(data_dir)
+    adapter = SolanaAdapter()
     
     # Check for Dragon modules via adapter
     if not adapter.check_dragon_availability():
@@ -666,9 +667,13 @@ def dragon_solana_scan():
     clear_terminal()
     print("🐲 Dragon Solana Scan Transactions")
     
+    # Check for required environment variables
+    from ...utils.common import validate_credentials
+    if not validate_credentials("solana"):
+        return
+    
     # Initialize Solana adapter (which will also try to initialize Dragon)
-    data_dir = ensure_data_dir("").parent
-    adapter = SolanaAdapter(data_dir)
+    adapter = SolanaAdapter()
     
     # Check for Dragon modules via adapter
     if not adapter.check_dragon_availability():
@@ -689,9 +694,13 @@ def dragon_solana_copy():
     clear_terminal()
     print("🐲 Dragon Solana Copy Wallet Finder")
     
+    # Check for required environment variables
+    from ...utils.common import validate_credentials
+    if not validate_credentials("solana"):
+        return
+    
     # Initialize Solana adapter (which will also try to initialize Dragon)
-    data_dir = ensure_data_dir("").parent
-    adapter = SolanaAdapter(data_dir)
+    adapter = SolanaAdapter()
     
     # Check for Dragon modules via adapter
     if not adapter.check_dragon_availability():
@@ -712,9 +721,13 @@ def dragon_solana_holders():
     clear_terminal()
     print("🐲 Dragon Solana Top Holders")
     
+    # Check for required environment variables
+    from ...utils.common import validate_credentials
+    if not validate_credentials("solana"):
+        return
+    
     # Initialize Solana adapter (which will also try to initialize Dragon)
-    data_dir = ensure_data_dir("").parent
-    adapter = SolanaAdapter(data_dir)
+    adapter = SolanaAdapter()
     
     # Check for Dragon modules via adapter
     if not adapter.check_dragon_availability():
@@ -735,9 +748,13 @@ def dragon_solana_buyers():
     clear_terminal()
     print("🐲 Dragon Solana Early Buyers")
     
+    # Check for required environment variables
+    from ...utils.common import validate_credentials
+    if not validate_credentials("solana"):
+        return
+    
     # Initialize Solana adapter (which will also try to initialize Dragon)
-    data_dir = ensure_data_dir("").parent
-    adapter = SolanaAdapter(data_dir)
+    adapter = SolanaAdapter()
     
     # Check for Dragon modules via adapter
     if not adapter.check_dragon_availability():

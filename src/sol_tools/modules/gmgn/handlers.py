@@ -19,6 +19,11 @@ async def fetch_mcap_data_handler():
     
     print("\n==== GMGN Market Cap Data Fetcher ====\n")
     
+    # Check for required environment variables
+    from sol_tools.utils.common import validate_credentials
+    if not validate_credentials("gmgn"):
+        return
+    
     # Import utility functions
     from sol_tools.utils.common import ensure_data_dir
     

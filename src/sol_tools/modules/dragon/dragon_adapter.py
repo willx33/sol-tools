@@ -36,12 +36,7 @@ from ...core.config import LOG_DIR
 LOGS_DIR = LOG_DIR / "dragon"
 LOGS_DIR.mkdir(parents=True, exist_ok=True)
 
-# Fallback paths for original Dragon modules
-DRAGON_PATH = Path(__file__).parents[4] / "Dragon"
-if str(DRAGON_PATH) not in sys.path:
-    sys.path.append(str(DRAGON_PATH))
-
-# Import Dragon modules without showing warnings
+# Import Dragon modules
 import Dragon
 from Dragon import (
     utils, BundleFinder, ScanAllTx, BulkWalletChecker, TopTraders,
@@ -434,13 +429,8 @@ class TokenDataHandler:
 class DragonAdapter:
     """Adapter for Dragon functionality to work within Sol Tools framework."""
     
-    def __init__(self, data_dir: Union[str, Path] = None):
-        """
-        Initialize the Dragon adapter.
-        
-        Args:
-            data_dir: Path to the data directory for storing Dragon outputs
-        """
+    def __init__(self):
+        """Initialize the Dragon adapter."""
         from ...core.config import INPUT_DATA_DIR, OUTPUT_DATA_DIR
         
         # Setup input and output directories
@@ -480,72 +470,45 @@ class DragonAdapter:
         self._init_dragon_components()
     
     def _init_dragon_components(self):
-        """Initialize components from original Dragon modules if available."""
-        # Initialize empty attributes to prevent attribute errors
-        self.bundle = None
-        self.scan = None 
-        self.wallet_checker = None
-        self.top_traders = None
-        self.timestamp = None
-        self.copy_wallet = None
-        self.top_holders = None
-        self.early_buyers = None
-        self.eth_wallet = None
-        self.eth_traders = None
-        self.eth_timestamp = None
-        self.eth_scan = None
+        """Initialize components from Dragon modules."""
+        # Initialize Dragon components
+        # Solana components
+        self.bundle = BundleFinder()
+        self.scan = ScanAllTx()
+        self.wallet_checker = BulkWalletChecker()
+        self.top_traders = TopTraders()
+        self.timestamp = TimestampTransactions()
+        self.copy_wallet = CopyTradeWalletFinder()
+        self.top_holders = TopHolders()
+        self.early_buyers = EarlyBuyers()
         
-        # Attempt to initialize with real implementations
-        try:
-            # Solana components
-            self.bundle = BundleFinder()
-            self.scan = ScanAllTx()
-            self.wallet_checker = BulkWalletChecker()
-            self.top_traders = TopTraders()
-            self.timestamp = TimestampTransactions()
-            self.copy_wallet = CopyTradeWalletFinder()
-            self.top_holders = TopHolders()
-            self.early_buyers = EarlyBuyers()
-            
-            # Ethereum components
-            self.eth_wallet = EthBulkWalletChecker()
-            self.eth_traders = EthTopTraders()
-            self.eth_timestamp = EthTimestampTransactions()
-            self.eth_scan = EthScanAllTx()
-        except Exception:
-            # Don't log any errors
-            pass
+        # Ethereum components
+        self.eth_wallet = EthBulkWalletChecker()
+        self.eth_traders = EthTopTraders()
+        self.eth_timestamp = EthTimestampTransactions()
+        self.eth_scan = EthScanAllTx()
     
-    def ensure_dragon_paths(self) -> bool:
+    def ensure_dragon_paths(self) -> None:
         """
         Ensure proper paths for Dragon operations within the input-data/output-data structure.
-        
-        Returns:
-            True if paths were successfully created, False otherwise
         """
-        try:
-            # Make sure our input/output directories for Dragon exist
-            self.input_data_dir.mkdir(parents=True, exist_ok=True)
-            self.output_data_dir.mkdir(parents=True, exist_ok=True)
+        # Make sure our input/output directories for Dragon exist
+        self.input_data_dir.mkdir(parents=True, exist_ok=True)
+        self.output_data_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Make sure specific directories exist
+        self.ethereum_input_dir.mkdir(parents=True, exist_ok=True)
+        self.solana_input_dir.mkdir(parents=True, exist_ok=True)
+        self.proxies_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Create the output directories
+        for dir_path in self.ethereum_output_dirs.values():
+            dir_path.mkdir(parents=True, exist_ok=True)
             
-            # Make sure specific directories exist
-            self.ethereum_input_dir.mkdir(parents=True, exist_ok=True)
-            self.solana_input_dir.mkdir(parents=True, exist_ok=True)
-            self.proxies_dir.mkdir(parents=True, exist_ok=True)
+        for dir_path in self.solana_output_dirs.values():
+            dir_path.mkdir(parents=True, exist_ok=True)
             
-            # Create the output directories
-            for dir_path in self.ethereum_output_dirs.values():
-                dir_path.mkdir(parents=True, exist_ok=True)
-                
-            for dir_path in self.solana_output_dirs.values():
-                dir_path.mkdir(parents=True, exist_ok=True)
-                
-            self.token_info_dir.mkdir(parents=True, exist_ok=True)
-            
-            return True
-        except Exception as e:
-            # Don't log errors
-            return False
+        self.token_info_dir.mkdir(parents=True, exist_ok=True)
 
     def check_proxy_file(self, create_if_missing: bool = True) -> bool:
         """
