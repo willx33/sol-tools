@@ -130,6 +130,7 @@ def parse_args():
     parser.add_argument('--text-menu', action='store_true', help='Use text-based menu (inquirer) instead of curses')
     parser.add_argument('--test', action='store_true', help='Run file system tests')
     parser.add_argument('--clean', action='store_true', help='Clean cache and __pycache__ directories before starting')
+    parser.add_argument('--help', action='help', help='Show this help message and exit')
     
     return parser.parse_args()
 

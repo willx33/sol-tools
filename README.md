@@ -48,11 +48,20 @@ pip install -e .
 # Launch the CLI with curses interface (default)
 sol-tools
 
-# Launch with text-based menu
+# Show help information and available commands
+sol-tools --help  # Shows usage, all available flags and their descriptions
+
+# Launch with text-based menu instead of curses interface
 sol-tools --text-menu
 
 # Check version
 sol-tools --version
+
+# Run in test mode (no API calls or real transactions)
+sol-tools --test
+
+# Clean cache and temporary files
+sol-tools --clean
 ```
 
 ## Configuration
