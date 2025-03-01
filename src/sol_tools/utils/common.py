@@ -1293,3 +1293,23 @@ def validate_multiple_credentials(modules: List[str]) -> bool:
         return False
         
     return True
+
+
+def print_success(message):
+    """Print a success message."""
+    success_color = 'bright_green'
+    console.print(f"[bold {success_color}]✓[/bold {success_color}] {message}")
+
+
+def print_result(message, success=True):
+    """Print an operation result with appropriate styling."""
+    success_color = 'bright_green'
+    icon = "✓" if success else "✗"
+    style = f"bold {success_color}" if success else "bold bright_red"
+    console.print(f"[{style}]{icon}[/{style}] {message}")
+
+
+def print_warning(message):
+    """Print a warning message."""
+    warning_color = 'bright_red'
+    console.print(f"[bold {warning_color}]![/bold {warning_color}] {message}")
