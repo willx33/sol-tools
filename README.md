@@ -75,8 +75,8 @@ Required environment variables by module:
 - **Ethereum**: `ETHEREUM_RPC_URL`, `ETHERSCAN_API_KEY`
 - **Dune**: `DUNE_API_KEY`
 - **Telegram**: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`
-- **GMGN**: `PUMPFUN_API_KEY`, `MOONSHOT_API_KEY`
-- **BullX**: `BULLX_API_KEY`
+- **GMGN**: No API key required
+- **BullX**: No API key required
 
 ## Requirements
 

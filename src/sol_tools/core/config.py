@@ -40,15 +40,12 @@ REQUIRED_ENV_VARS = {
         "ETHERSCAN_API_KEY"
     ],
     "gmgn": [
-        "PUMPFUN_API_KEY", 
-        "MOONSHOT_API_KEY"
     ],
     "telegram": [
         "TELEGRAM_BOT_TOKEN", 
         "TELEGRAM_CHAT_ID"
     ],
     "bullx": [
-        "BULLX_API_KEY"
     ],
     "sharp": []
 }
