@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Dict, Any, Optional, List
 import inquirer
 from dotenv import load_dotenv, set_key
+from rich.console import Console
 
 # Base paths
 ROOT_DIR = Path(__file__).parents[3]
@@ -213,13 +214,18 @@ def check_env_vars(module: str) -> Dict[str, bool]:
 
 def edit_env_variables() -> None:
     """Interactive menu to edit environment variables."""
+    console = Console()
+    
     # Load existing .env file if it exists
     env_vars = {}
+    env_comments = []
     if ENV_FILE.exists():
         with open(ENV_FILE, "r") as f:
             for line in f:
-                if line.strip() and not line.startswith("#"):
-                    if "=" in line:
+                if line.strip():
+                    if line.startswith("#"):
+                        env_comments.append(line.strip())
+                    elif "=" in line:
                         key, value = line.strip().split("=", 1)
                         env_vars[key] = value
     
@@ -279,6 +285,19 @@ def edit_env_variables() -> None:
                 elif module == "sharp":
                     organized_vars["Sharp"].append(var)
     
+    # Function to get a censored view of a value
+    def get_censored_value(value, length=20):
+        if not value:
+            return ""
+        if len(value) <= 8:
+            return "********"
+        
+        # For longer values, show first 4 and last 4 characters
+        return f"{value[:4]}{'*' * min(12, len(value) - 8)}{value[-4:]}"
+    
+    # Track if any changes were made
+    changes_made = False
+    
     # First, choose a category
     while True:
         category_choices = []
@@ -320,27 +339,94 @@ def edit_env_variables() -> None:
             
             # Get current value and prompt for new value
             current_value = env_vars.get(selected, "")
-            masked_value = "********" if current_value and ("KEY" in selected or "TOKEN" in selected) else current_value
+            is_sensitive = "KEY" in selected or "TOKEN" in selected or "SECRET" in selected
+            
+            # If there's an existing value, show a censored version
+            if current_value:
+                censored_value = get_censored_value(current_value) if is_sensitive else current_value
+                console.print(f"[yellow]Current value: {censored_value}[/yellow]")
+            
+            # For sensitive values like API keys, don't show as default
+            if is_sensitive:
+                default_value = ""
+                placeholder = "(Enter new value)"
+            else:
+                default_value = current_value
+                placeholder = "(Enter new value)"
             
             questions2 = [
                 inquirer.Text(
                     "value",
                     message=f"Enter value for {selected}",
-                    default=masked_value
+                    default=placeholder if not default_value else default_value
                 ),
             ]
             value_answer = inquirer.prompt(questions2)
+            new_value = value_answer["value"]
             
-            # Only update if user changed the value
-            if value_answer["value"] != masked_value:
-                env_vars[selected] = value_answer["value"]
+            # Check if they entered the placeholder text by mistake
+            if new_value == placeholder:
+                new_value = ""
+            
+            # If current value exists and new value is different, confirm overwrite
+            if current_value and new_value and new_value != current_value:
+                confirm_questions = [
+                    inquirer.Confirm(
+                        "confirm",
+                        message=f"Overwrite existing value for {selected}?",
+                        default=True
+                    ),
+                ]
+                confirm = inquirer.prompt(confirm_questions)
+                
+                if not confirm["confirm"]:
+                    console.print("[yellow]No changes made.[/yellow]")
+                    continue
+            
+            # Update the value if changed
+            if new_value != current_value:
+                env_vars[selected] = new_value
+                changes_made = True
+                
+                # Show success message
+                if new_value:
+                    censored_new = get_censored_value(new_value) if is_sensitive else new_value
+                    console.print(f"[green]✓ Set {selected} to {censored_new}[/green]")
+                else:
+                    console.print(f"[yellow]⚠ Cleared {selected}[/yellow]")
+                
+                # Save immediately after each change
+                save_env_file(env_vars, env_comments)
     
-    # Save .env file
+    # Only show final success message if changes were made
+    if changes_made:
+        console.print("\n[green]✓ Environment variables saved successfully![/green]")
+        console.print("[green]✓ Configuration has been reloaded.[/green]")
+        # Reload environment variables
+        load_dotenv(ENV_FILE)
+
+
+def save_env_file(env_vars, comments=None):
+    """
+    Save environment variables to .env file.
+    
+    Args:
+        env_vars: Dictionary of environment variables
+        comments: List of comment lines to preserve
+    """
     # Ensure parent directory exists
     ENV_FILE.parent.mkdir(parents=True, exist_ok=True)
+    
     with open(ENV_FILE, "w") as f:
+        # Write comments first if provided
+        if comments:
+            for comment in comments:
+                f.write(f"{comment}\n")
+            
+            # Add a blank line after comments
+            if comments and env_vars:
+                f.write("\n")
+        
+        # Write environment variables
         for key, value in env_vars.items():
             f.write(f"{key}={value}\n")
-    
-    # Reload environment variables
-    load_dotenv(ENV_FILE)

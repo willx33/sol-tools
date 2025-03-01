@@ -103,7 +103,37 @@ try:
                     result.update(temp_result)
         
         return result
+    
+    # ======= MONKEY PATCHING FOR SYSTEM-WIDE FIX ========
+    # Save original inquirer Text class for reference
+    _original_inquirer_text = inquirer.Text
+    
+    # This function will replace the standard inquirer.prompt for our enhanced version
+    _original_inquirer_prompt = inquirer.prompt
+    
+    def _paste_safe_prompt(questions, *args, **kwargs):
+        """
+        Replacement for inquirer.prompt that automatically handles Text inputs
+        in a paste-safe manner, without requiring manual changes throughout the codebase.
+        """
+        # Convert standard Text questions to NoTruncationText
+        for i, question in enumerate(questions):
+            if isinstance(question, _original_inquirer_text):
+                # Create a NoTruncationText with the same attributes
+                new_question = NoTruncationText(
+                    question.name,
+                    message=question.message,
+                    default=question.default,
+                    validate=question.validate
+                )
+                questions[i] = new_question
         
+        # Use our prompt_user function which handles the mix of question types
+        return prompt_user(questions)
+
+    # Replace the prompt method system-wide
+    inquirer.prompt = _paste_safe_prompt
+    
 except ImportError:
     # Fallback if inquirer isn't available
     class NoTruncationText:
