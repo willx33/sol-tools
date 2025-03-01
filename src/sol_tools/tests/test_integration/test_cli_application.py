@@ -73,9 +73,9 @@ def test_menu_initialization():
          patch('src.sol_tools.cli.setup_application') as mock_setup_app, \
          patch('src.sol_tools.cli.logging.basicConfig') as mock_logging:
         
-        # Configure mock to return args with use_curses=True
+        # Configure mock to return args with text_menu=False to use CursesMenu
         mock_args = MagicMock()
-        mock_args.use_curses = True
+        mock_args.text_menu = False  # Changed from use_curses=True
         mock_args.verbose = False
         mock_args.test = False
         mock_parse_args.return_value = mock_args
@@ -105,8 +105,8 @@ def test_menu_initialization():
         mock_curses_menu.reset_mock()
         mock_wrapper.reset_mock()
         
-        # Configure mock to return args with use_curses=False
-        mock_args.use_curses = False
+        # Configure mock to return args with text_menu=True to use InquirerMenu
+        mock_args.text_menu = True  # Changed from use_curses=False
         
         # Call the main function again
         main()
