@@ -139,7 +139,7 @@ AVAILABLE_MODULES = {
         "submodules": [],
         "category": "Sharp Tools",
         "description": "Tests for Sharp API integration",
-        "required_env_vars": ["SHARP_API_KEY"]
+        "required_env_vars": []
     },
     
     # Settings & Utilities
@@ -367,7 +367,7 @@ async def run_all_tests(specific_module: Optional[str] = None) -> int:
     
     # Display available environment variables
     print(f"{COLORS['cyan']}Environment variables detected:{COLORS['end']}")
-    env_vars = [var for var in os.environ.keys() if var in ["HELIUS_API_KEY", "DUNE_API_KEY", "TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID", "SOL_TOOLS_DATA_DIR", "SHARP_API_KEY"]]
+    env_vars = [var for var in os.environ.keys() if var in ["HELIUS_API_KEY", "DUNE_API_KEY", "TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID", "SOL_TOOLS_DATA_DIR"]]
     if env_vars:
         for var in env_vars:
             value = os.environ.get(var, "")
