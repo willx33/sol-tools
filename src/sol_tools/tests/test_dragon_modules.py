@@ -471,10 +471,23 @@ class DragonTestSuite:
         except Exception as e:
             self.log_test_result(test_name, False, str(e))
             
-    async def run_all_tests(self):
-        """Run all tests."""
+    async def run_all_tests(self, options: Optional[Dict[str, Any]] = None):
+        """
+        Run all tests.
+        
+        Args:
+            options: Dictionary of test options
+                - verbose: Show detailed output
+                - mock_only: Only run tests with mock data
+                - quick: Run only quick tests
+                - live: Run tests with real API calls
+        """
+        if options is None:
+            options = {}
+        
         try:
             # Initialize the adapter
+            test_mode = not options.get('live', False)
             if not await self.initialize_adapter():
                 logger.error("Failed to initialize adapter. Aborting tests.")
                 return False
@@ -492,13 +505,15 @@ class DragonTestSuite:
             # Token listings tests
             self.test_token_listings()
             
-            # Wallet tests
-            self.test_solana_wallet_checker_single()
-            self.test_solana_wallet_checker_multiple()
-            self.test_import_wallets()
-            
-            # Utility function tests
-            self.test_validate_addresses()
+            # Skip time-consuming tests if quick mode is enabled
+            if not options.get('quick', False):
+                # Wallet tests
+                self.test_solana_wallet_checker_single()
+                self.test_solana_wallet_checker_multiple()
+                self.test_import_wallets()
+                
+                # Utility function tests
+                self.test_validate_addresses()
             
             # Clean up the adapter
             await self.cleanup_adapter()
@@ -518,24 +533,64 @@ class DragonTestSuite:
             self.cleanup_test_environment()
             
 
-async def main():
-    """Main function to run tests."""
+async def main(options: Optional[Dict[str, Any]] = None):
+    """
+    Main function to run tests.
+    
+    Args:
+        options: Dictionary of test options
+            - verbose: Show detailed output
+            - mock_only: Only run tests with mock data
+            - quick: Run only quick tests
+            - live: Run tests with real API calls
+            
+    Returns:
+        int: 0 if all tests passed, 1 otherwise
+    """
+    if options is None:
+        options = {}
+        
     try:
         logger.info("Starting Dragon module tests")
+        
+        # Configure logging level based on verbose option
+        if options.get('verbose', False):
+            logger.setLevel(logging.DEBUG)
+            for handler in logger.handlers:
+                handler.setLevel(logging.DEBUG)
+        
         test_suite = DragonTestSuite()
-        await test_suite.run_all_tests()
+        success = await test_suite.run_all_tests(options)
+        return 0 if success else 1
     except Exception as e:
         logger.error(f"Error in main: {e}")
         return 1
-    return 0
     
 
 if __name__ == "__main__":
+    # Parse command-line arguments
+    import argparse
+    parser = argparse.ArgumentParser(description="Test Dragon and GMGN modules")
+    parser.add_argument("--verbose", action="store_true", help="Show detailed test output")
+    parser.add_argument("--quick", action="store_true", help="Run only quick tests")
+    parser.add_argument("--mock-only", action="store_true", help="Only run tests with mock data")
+    parser.add_argument("--live", action="store_true", help="Run tests with real API calls")
+    args = parser.parse_args()
+    
+    # Convert args to options
+    options = {
+        'verbose': args.verbose,
+        'quick': args.quick,
+        'mock_only': args.mock_only,
+        'live': args.live
+    }
+    
     # Run the async main function
     if sys.version_info >= (3, 7):
-        asyncio.run(main())
+        result = asyncio.run(main(options))
     else:
         # Fallback for Python 3.6
         loop = asyncio.get_event_loop()
-        result = loop.run_until_complete(main())
-        sys.exit(result) 
+        result = loop.run_until_complete(main(options))
+    
+    sys.exit(result) 

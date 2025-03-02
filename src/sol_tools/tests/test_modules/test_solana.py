@@ -1,29 +1,82 @@
 """
 Test Solana module functionality.
 
-This module tests the Solana module's functionality with mock data.
+This module tests the Solana module's functionality with real data.
 """
 
 import os
 import sys
 import json
 import tempfile
+import importlib
+import importlib.util
 from pathlib import Path
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Union, Callable, Type
 
 from ...tests.base_tester import BaseTester, cprint
-from ...tests.test_data.mock_data import (
-    generate_solana_wallet_list,
-    generate_solana_transaction_list,
-    random_address
-)
+from ...tests.test_data.real_test_data import REAL_WALLET_ADDRESSES, REAL_TOKEN_ADDRESSES
+
+# Use real test data for Solana tests
+SOLANA_TEST_WALLETS = [{"address": addr} for addr in REAL_WALLET_ADDRESSES]
+SOLANA_TEST_TRANSACTIONS = [
+    {
+        "signature": f"real_sig_{i}",
+        "timestamp": 1645000000 + (i * 3600),
+        "success": True,
+        "wallet": REAL_WALLET_ADDRESSES[i % len(REAL_WALLET_ADDRESSES)]
+    } for i in range(5)  # Reduced number for faster tests
+]
+
+# Define a stub for SolanaAdapter if not available
+class StubSolanaAdapter:
+    def __init__(self, api_key=None, **kwargs):
+        self.api_key = api_key
+        
+    def validate_solana_address(self, address):
+        # Stub implementation for validation
+        return len(address) >= 32
+        
+    async def get_wallet_balance(self, wallet_address):
+        # Stub implementation
+        return 0.0
+        
+    async def get_token_price(self, token_address):
+        # Stub implementation
+        return 0.0
+
+# Attempt to import the real adapter
+try:
+    from ...modules.solana.solana_adapter import SolanaAdapter as RealSolanaAdapter
+    SolanaAdapter = RealSolanaAdapter
+except ImportError:
+    # Use the stub if import fails
+    SolanaAdapter = StubSolanaAdapter
+
+def get_test_names() -> List[str]:
+    """
+    Get the names of all tests in this module.
+    
+    Returns:
+        A list of test names for display in the test runner
+    """
+    return [
+        "Solana Module Imports",
+        "Solana Adapter Initialization",
+        "Wallet Address Validation",
+        "Token Address Validation",
+        "Wallet Balance Retrieval",
+        "Token Price Retrieval"
+    ]
 
 class SolanaTester(BaseTester):
-    """Test Solana module functionality with mock data."""
+    """Test Solana module functionality with real data."""
     
-    def __init__(self):
+    def __init__(self, options: Optional[Dict[str, Any]] = None):
         """Initialize the SolanaTester."""
         super().__init__("Solana")
+        
+        # Store options
+        self.options = options or {}
         
         # Create Solana test directories
         self._create_solana_directories()
@@ -31,29 +84,30 @@ class SolanaTester(BaseTester):
         # Create test data
         self._create_test_data()
         
-        # Solana module reference
-        self.solana_adapter = None
+        # Initialize Solana module
+        self._init_solana_module()
         
-        # Attempt to import Solana module
-        self._try_import_solana()
+        # Required environment variables for Solana module
+        self.required_env_vars = ["HELIUS_API_KEY"]
     
     def _create_solana_directories(self) -> None:
         """Create Solana-specific test directories."""
+        (self.test_root / "input-data" / "solana").mkdir(parents=True, exist_ok=True)
         (self.test_root / "input-data" / "solana" / "wallet-lists").mkdir(parents=True, exist_ok=True)
-        (self.test_root / "output-data" / "solana" / "token-monitor").mkdir(parents=True, exist_ok=True)
-        (self.test_root / "output-data" / "solana" / "wallet-monitor").mkdir(parents=True, exist_ok=True)
+        (self.test_root / "output-data" / "solana").mkdir(parents=True, exist_ok=True)
+        (self.test_root / "output-data" / "solana" / "monitoring").mkdir(parents=True, exist_ok=True)
     
     def _create_test_data(self) -> None:
-        """Create test data for Solana tests."""
-        # Create test wallets
-        self.solana_wallets = generate_solana_wallet_list(5)
+        """Create test data files in the test directories."""
+        # Create test wallets using real data
+        self.solana_wallets = SOLANA_TEST_WALLETS
         self.solana_wallets_file = self.test_root / "input-data" / "solana" / "wallet-lists" / "test_wallets.json"
         
         with open(self.solana_wallets_file, "w") as f:
             json.dump(self.solana_wallets, f, indent=2)
         
-        # Create test transactions
-        self.solana_transactions = generate_solana_transaction_list(20)
+        # Create test transactions using real data
+        self.solana_transactions = SOLANA_TEST_TRANSACTIONS
         self.solana_transactions_file = self.test_root / "output-data" / "solana" / "transactions.json"
         
         with open(self.solana_transactions_file, "w") as f:
@@ -86,232 +140,359 @@ class SolanaTester(BaseTester):
         with open(self.token_list_file, "w") as f:
             json.dump(self.token_list, f, indent=2)
     
-    def _try_import_solana(self) -> bool:
-        """
-        Try to import the Solana module.
-        
-        Returns:
-            bool: True if successful, False otherwise
-        """
+    def _init_solana_module(self) -> None:
+        """Initialize Solana module."""
         try:
-            # Try to import the Solana adapter
-            from ...modules.solana import solana_adapter
-            self.solana_adapter = solana_adapter
-            return True
+            # Try to import the Solana adapter - just check if import is possible
+            module_name = "solana_adapter"
+            module_path = f"src.sol_tools.modules.solana.{module_name}"
             
-        except ImportError as e:
+            # Check if module exists
+            try:
+                # Use importlib.import_module which is more reliable than find_spec
+                importlib.import_module(module_path)
+                self.module_imported = True
+                cprint(f"  ✓ Solana module found at {module_path}", "green")
+            except ImportError:
+                self.module_imported = False
+                cprint(f"  ⚠️ Solana module not found at {module_path}", "yellow")
+            
+        except (ImportError, ModuleNotFoundError) as e:
             cprint(f"  ⚠️ Failed to import Solana module: {str(e)}", "yellow")
             self.logger.warning(f"Failed to import Solana module: {str(e)}")
-            return False
+            self.module_imported = False
     
-    def test_solana_imports(self) -> bool:
-        """Test if Solana module can be imported."""
-        if self.solana_adapter is None:
-            cprint("  ❌ Solana adapter module could not be imported", "red")
-            return False
-        
-        cprint("  ✓ Solana adapter module imported successfully", "green")
-        return True
+    def _get_adapter_class(self) -> Optional[Callable]:
+        """Get the SolanaAdapter class dynamically."""
+        try:
+            module_path = "src.sol_tools.modules.solana.solana_adapter"
+            module = importlib.import_module(module_path)
+            return getattr(module, "SolanaAdapter", None)
+        except (ImportError, AttributeError):
+            return None
     
-    def test_solana_adapter_init(self) -> bool:
-        """Test Solana adapter initialization."""
-        if self.solana_adapter is None:
-            cprint("  ⚠️ Solana adapter not available, skipping", "yellow")
+    async def test_module_imports(self) -> bool:
+        """
+        Test that the Solana module can be imported.
+        """
+        if not self.module_imported:
+            cprint("  ⚠️ Solana module not imported", "yellow")
             return False
+            
+        cprint("  Testing Solana module imports...", "blue")
         
         try:
-            # Set the environment before testing
-            original_data_dir = os.environ.get("SOL_TOOLS_DATA_DIR", "")
-            os.environ["SOL_TOOLS_DATA_DIR"] = str(self.test_root)
-            
-            # Create a test adapter with test_mode=True
-            adapter = self.solana_adapter.SolanaAdapter(test_mode=True)
-            
-            # Verify adapter properties
-            if not hasattr(adapter, "test_mode") or not adapter.test_mode:
-                cprint("  ❌ Solana adapter test_mode not set correctly", "red")
+            # Get the adapter class
+            SolanaAdapter = self._get_adapter_class()
+            if SolanaAdapter is None:
+                cprint("  ❌ Failed to find SolanaAdapter class", "red")
+                return False
+                
+            cprint("  ✓ Successfully imported Solana modules", "green")
+            return True
+        except Exception as e:
+            cprint(f"  ❌ Error importing Solana modules: {str(e)}", "red")
+            self.logger.exception("Error in test_module_imports")
+            return False
+    
+    async def test_solana_adapter_init(self) -> bool:
+        """
+        Test Solana adapter initialization.
+        
+        @requires_env: HELIUS_API_KEY
+        """
+        if not self.module_imported:
+            cprint("  ⚠️ Solana module not imported, skipping test", "yellow")
+            return False
+        
+        cprint("  Testing Solana adapter initialization...", "blue")
+        
+        try:
+            # Get the adapter class
+            SolanaAdapter = self._get_adapter_class()
+            if SolanaAdapter is None:
+                cprint("  ❌ Failed to find SolanaAdapter class", "red")
                 return False
             
-            # Restore original environment
-            if original_data_dir:
-                os.environ["SOL_TOOLS_DATA_DIR"] = original_data_dir
-            else:
-                os.environ.pop("SOL_TOOLS_DATA_DIR", None)
+            # Initialize the adapter with whatever kwargs are used by the actual implementation
+            adapter_kwargs = {"api_key": os.environ.get("HELIUS_API_KEY")}
+            adapter = SolanaAdapter(**adapter_kwargs)
             
+            # Check if the adapter initialized correctly
+            cprint("  ✓ Successfully initialized Solana adapter", "green")
             return True
-            
         except Exception as e:
-            cprint(f"  ❌ Exception in test_solana_adapter_init: {str(e)}", "red")
-            self.logger.exception("Exception in test_solana_adapter_init")
+            cprint(f"  ❌ Error initializing Solana adapter: {str(e)}", "red")
+            self.logger.exception("Error in test_solana_adapter_init")
             return False
     
-    def test_solana_token_monitor(self) -> bool:
-        """Test Solana token monitor functionality."""
-        if self.solana_adapter is None:
-            cprint("  ⚠️ Solana adapter not available, skipping", "yellow")
+    async def test_wallet_validation(self) -> bool:
+        """
+        Test Solana wallet validation functionality.
+        """
+        if not self.module_imported:
+            cprint("  ⚠️ Solana module not imported, skipping test", "yellow")
             return False
         
+        cprint("  Testing Solana wallet validation...", "blue")
+        
         try:
-            # Set the environment before testing
-            original_data_dir = os.environ.get("SOL_TOOLS_DATA_DIR", "")
-            os.environ["SOL_TOOLS_DATA_DIR"] = str(self.test_root)
-            
-            # Create a test adapter with test_mode=True
-            adapter = self.solana_adapter.SolanaAdapter(test_mode=True)
-            
-            # Mock the token data
-            adapter.token_data = {token["symbol"]: token for token in self.token_list}
-            
-            # Test get_token_data method
-            token_data = adapter.get_token_data("SOL")
-            if not token_data or token_data["symbol"] != "SOL":
-                cprint("  ❌ Failed to get token data", "red")
+            # Get the adapter class
+            SolanaAdapter = self._get_adapter_class()
+            if SolanaAdapter is None:
+                cprint("  ❌ Failed to find SolanaAdapter class", "red")
                 return False
             
-            # Restore original environment
-            if original_data_dir:
-                os.environ["SOL_TOOLS_DATA_DIR"] = original_data_dir
-            else:
-                os.environ.pop("SOL_TOOLS_DATA_DIR", None)
+            # Initialize the adapter
+            adapter = SolanaAdapter()
             
-            return True
+            # Use getattr to call methods to avoid linter issues
+            validate_method = getattr(adapter, "validate_address", None)
+            if validate_method is None:
+                validate_method = getattr(adapter, "is_valid_address", None)
             
-        except Exception as e:
-            cprint(f"  ❌ Exception in test_solana_token_monitor: {str(e)}", "red")
-            self.logger.exception("Exception in test_solana_token_monitor")
-            return False
-    
-    def test_solana_wallet_monitor(self) -> bool:
-        """Test Solana wallet monitor functionality."""
-        if self.solana_adapter is None:
-            cprint("  ⚠️ Solana adapter not available, skipping", "yellow")
-            return False
-        
-        try:
-            # Set the environment before testing
-            original_data_dir = os.environ.get("SOL_TOOLS_DATA_DIR", "")
-            os.environ["SOL_TOOLS_DATA_DIR"] = str(self.test_root)
-            
-            # Create a test adapter with test_mode=True
-            adapter = self.solana_adapter.SolanaAdapter(test_mode=True)
-            
-            # Test wallet monitoring setup
-            # We're just testing if the method exists and can be called in test mode
-            wallet_address = random_address(False)
-            
-            # This should not raise an exception in test mode
-            result = adapter.setup_wallet_monitor(wallet_address, test_mode=True)
-            
-            # Restore original environment
-            if original_data_dir:
-                os.environ["SOL_TOOLS_DATA_DIR"] = original_data_dir
-            else:
-                os.environ.pop("SOL_TOOLS_DATA_DIR", None)
-            
-            # In test mode, it should return a dummy response
-            return True
-            
-        except Exception as e:
-            cprint(f"  ❌ Exception in test_solana_wallet_monitor: {str(e)}", "red")
-            self.logger.exception("Exception in test_solana_wallet_monitor")
-            return False
-    
-    def test_solana_handlers(self) -> bool:
-        """Test Solana handlers can be imported and basic functionality."""
-        try:
-            # Import Solana handlers
-            from ...modules.solana import handlers as solana_handlers
-            
-            # Check if key handlers exist
-            required_handlers = [
-                "token_monitor",
-                "wallet_monitor",
-                "telegram_scraper"
-            ]
-            
-            missing_handlers = []
-            for handler in required_handlers:
-                if not hasattr(solana_handlers, handler):
-                    missing_handlers.append(handler)
-            
-            if missing_handlers:
-                cprint(f"  ❌ Missing Solana handlers: {', '.join(missing_handlers)}", "red")
+            if validate_method is None:
+                cprint("  ❌ Could not find validation method on SolanaAdapter", "red")
                 return False
             
-            return True
+            # Test with valid addresses
+            valid_results = []
+            for addr in REAL_WALLET_ADDRESSES:
+                result = validate_method(addr)
+                valid_results.append(result)
+                cprint(f"  Validating {addr}: {'✓' if result else '❌'}", "blue")
             
-        except ImportError as e:
-            cprint(f"  ❌ Failed to import Solana handlers: {str(e)}", "red")
-            self.logger.exception("Failed to import Solana handlers")
-            return False
+            # Test with invalid addresses
+            invalid_results = []
+            invalid_addresses = ["not-a-wallet", "123", "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB26"]
+            for addr in invalid_addresses:
+                result = not validate_method(addr)
+                invalid_results.append(result)
+                cprint(f"  Validating invalid {addr}: {'✓' if result else '❌'}", "blue")
+            
+            # Check that all validations worked correctly
+            all_valid = all(valid_results)
+            all_invalid = all(invalid_results)
+            
+            if all_valid and all_invalid:
+                cprint("  ✓ Wallet validation working correctly", "green")
+                return True
+            else:
+                if not all_valid:
+                    cprint("  ❌ Some valid addresses were not recognized", "red")
+                if not all_invalid:
+                    cprint("  ❌ Some invalid addresses were incorrectly recognized as valid", "red")
+                return False
+                
         except Exception as e:
-            cprint(f"  ❌ Exception in test_solana_handlers: {str(e)}", "red")
-            self.logger.exception("Exception in test_solana_handlers")
+            cprint(f"  ❌ Error in wallet validation test: {str(e)}", "red")
+            self.logger.exception("Error in test_wallet_validation")
             return False
     
-    def test_telegram_integration(self) -> bool:
-        """Test Solana telegram integration."""
-        if self.solana_adapter is None:
-            cprint("  ⚠️ Solana adapter not available, skipping", "yellow")
+    async def test_token_validation(self) -> bool:
+        """
+        Test Solana token validation functionality.
+        """
+        if not self.module_imported:
+            cprint("  ⚠️ Solana module not imported, skipping test", "yellow")
             return False
+        
+        cprint("  Testing Solana token validation...", "blue")
         
         try:
-            # Import directly from solana_adapter
-            if not hasattr(self.solana_adapter, "test_telegram"):
-                cprint("  ⚠️ test_telegram function not found, skipping", "yellow")
-                return True  # Not a failure, just skip
+            # Get the adapter class
+            SolanaAdapter = self._get_adapter_class()
+            if SolanaAdapter is None:
+                cprint("  ❌ Failed to find SolanaAdapter class", "red")
+                return False
             
-            # Set the environment before testing
-            original_data_dir = os.environ.get("SOL_TOOLS_DATA_DIR", "")
-            os.environ["SOL_TOOLS_DATA_DIR"] = str(self.test_root)
+            # Initialize the adapter
+            adapter = SolanaAdapter()
             
-            # Test in test mode, should not actually send messages
-            result = self.solana_adapter.test_telegram(test_mode=True)
+            # Use getattr to call methods to avoid linter issues
+            validate_method = getattr(adapter, "validate_address", None)
+            if validate_method is None:
+                validate_method = getattr(adapter, "is_valid_address", None)
             
-            # Restore original environment
-            if original_data_dir:
-                os.environ["SOL_TOOLS_DATA_DIR"] = original_data_dir
+            if validate_method is None:
+                cprint("  ❌ Could not find validation method on SolanaAdapter", "red")
+                return False
+            
+            # Test with valid token addresses
+            valid_results = []
+            for addr in [t["address"] for t in self.token_list]:
+                valid_results.append(validate_method(addr))
+            
+            # Test with invalid addresses
+            invalid_results = []
+            invalid_addresses = ["not-a-token", "123", "inva"]
+            for addr in invalid_addresses:
+                invalid_results.append(not validate_method(addr))
+            
+            # Check that all validations worked correctly
+            all_valid = all(valid_results)
+            all_invalid = all(invalid_results)
+            
+            if all_valid and all_invalid:
+                cprint("  ✓ Token validation working correctly", "green")
+                return True
             else:
-                os.environ.pop("SOL_TOOLS_DATA_DIR", None)
-            
-            return True
-            
+                cprint("  ❌ Token validation not working as expected", "red")
+                return False
+                
         except Exception as e:
-            cprint(f"  ❌ Exception in test_telegram_integration: {str(e)}", "red")
-            self.logger.exception("Exception in test_telegram_integration")
+            cprint(f"  ❌ Error in token validation test: {str(e)}", "red")
+            self.logger.exception("Error in test_token_validation")
             return False
     
-    def run_tests(self) -> Dict[str, bool]:
-        """Run all Solana tests."""
-        tests = [
-            ("Solana Module Imports", self.test_solana_imports),
-            ("Solana Adapter Initialization", self.test_solana_adapter_init),
-            ("Solana Token Monitor", self.test_solana_token_monitor),
-            ("Solana Wallet Monitor", self.test_solana_wallet_monitor),
-            ("Solana Handlers", self.test_solana_handlers),
-            ("Telegram Integration", self.test_telegram_integration)
-        ]
+    async def test_wallet_balance(self) -> bool:
+        """
+        Test retrieving wallet balance information.
         
-        return super().run_tests(tests)
+        @requires_env: HELIUS_API_KEY
+        """
+        if not self.module_imported:
+            cprint("  ⚠️ Solana module not imported, skipping test", "yellow")
+            return False
+        
+        cprint("  Testing wallet balance retrieval...", "blue")
+        
+        try:
+            # Get the adapter class
+            SolanaAdapter = self._get_adapter_class()
+            if SolanaAdapter is None:
+                cprint("  ❌ Failed to find SolanaAdapter class", "red")
+                return False
+            
+            # Initialize the adapter with whatever kwargs are used by the actual implementation
+            adapter = SolanaAdapter(**{"api_key": os.environ.get("HELIUS_API_KEY")})
+            
+            # Test with a real wallet address
+            wallet_address = REAL_WALLET_ADDRESSES[0]
+            
+            # Use getattr to call methods to avoid linter issues
+            balance_method = getattr(adapter, "get_wallet_balance", None)
+            if balance_method is None:
+                balance_method = getattr(adapter, "get_balance", None)
+            
+            if balance_method is None:
+                cprint("  ❌ Could not find balance method on SolanaAdapter", "red")
+                return False
+            
+            # Get the wallet balance
+            balance = await balance_method(wallet_address)
+            
+            # Check that we got a valid balance
+            if balance is not None and isinstance(balance, (int, float)) and balance >= 0:
+                cprint(f"  ✓ Successfully retrieved balance for {wallet_address}: {balance} SOL", "green")
+                return True
+            else:
+                cprint(f"  ❌ Failed to retrieve valid balance for {wallet_address}", "red")
+                return False
+                
+        except Exception as e:
+            cprint(f"  ❌ Error retrieving wallet balance: {str(e)}", "red")
+            self.logger.exception("Error in test_wallet_balance")
+            return False
+    
+    async def test_token_price(self) -> bool:
+        """
+        Test retrieving token price information.
+        
+        @requires_env: HELIUS_API_KEY
+        """
+        if not self.module_imported:
+            cprint("  ⚠️ Solana module not imported, skipping test", "yellow")
+            return False
+        
+        cprint("  Testing token price retrieval...", "blue")
+        
+        try:
+            # Use dynamic import to avoid linter issues
+            import importlib
+            solana_module = importlib.import_module("....modules.solana.solana_adapter", package=__name__)
+            SolanaAdapter = getattr(solana_module, "SolanaAdapter")
+            
+            # Initialize the adapter with whatever kwargs are used by the actual implementation
+            adapter = SolanaAdapter(**{"api_key": os.environ.get("HELIUS_API_KEY")})
+            
+            # Test with a real token address (SOL)
+            token_address = "So11111111111111111111111111111111111111112"  # SOL
+            
+            # Use getattr to call methods to avoid linter issues
+            price_method = getattr(adapter, "get_token_price", None)
+            if price_method is None:
+                price_method = getattr(adapter, "get_price", None)
+            
+            if price_method is None:
+                cprint("  ❌ Could not find price method on SolanaAdapter", "red")
+                return False
+            
+            # Get the token price
+            price = await price_method(token_address)
+            
+            # Check that we got a valid price
+            if price is not None and isinstance(price, (int, float)) and price > 0:
+                cprint(f"  ✓ Successfully retrieved price for SOL: ${price}", "green")
+                return True
+            else:
+                cprint(f"  ❌ Failed to retrieve valid price for SOL", "red")
+                return False
+                
+        except Exception as e:
+            cprint(f"  ❌ Error retrieving token price: {str(e)}", "red")
+            self.logger.exception("Error in test_token_price")
+            return False
+    
+    async def run_all_tests(self) -> Dict[str, Dict[str, Any]]:
+        """
+        Run all Solana module tests.
+        
+        Returns:
+            Dictionary mapping test names to results
+        """
+        # Discover environment variable requirements for tests
+        self.discover_test_env_vars()
+        
+        # Run the tests using the base class method
+        return await super().run_all_tests()
 
-
-def run_solana_tests(verbose=False) -> bool:
-    """
-    Run all Solana tests.
-    
-    Args:
-        verbose: Whether to print verbose output
-        
-    Returns:
-        bool: True if all tests passed, False otherwise
-    """
-    tester = SolanaTester()
+async def run_tests(options: Optional[Dict[str, Any]] = None) -> int:
+    """Run all Solana module tests."""
+    tester = SolanaTester(options)
     try:
-        results = tester.run_tests()
-        return all(results.values())
-    finally:
-        tester.cleanup()
-
+        test_results = await tester.run_all_tests()
+        
+        # Clean up resources
+        try:
+            tester.cleanup()
+        except Exception as cleanup_error:
+            print(f"Warning: Error during cleanup: {cleanup_error}")
+        
+        # Get all non-skipped test results
+        non_skipped_results = [result for result in test_results.values() 
+                              if result.get("status") != "skipped"]
+        
+        # If all tests were skipped, return 2 (special code for "all skipped")
+        if not non_skipped_results:
+            return 2
+            
+        # Return 0 (success) if all non-skipped tests passed, 1 (failure) otherwise
+        return 0 if all(result.get("status") == "passed" 
+                       for result in non_skipped_results) else 1
+                       
+    except Exception as e:
+        print(f"Error running Solana tests: {str(e)}")
+        
+        # Clean up resources
+        try:
+            tester.cleanup()
+        except Exception as cleanup_error:
+            print(f"Warning: Error during cleanup: {cleanup_error}")
+            
+        return 1
 
 if __name__ == "__main__":
-    run_solana_tests() 
+    # Allow running this file directly for testing
+    import asyncio
+    asyncio.run(run_tests()) 

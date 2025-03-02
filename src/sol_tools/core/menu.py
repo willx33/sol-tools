@@ -230,8 +230,8 @@ def create_main_menu(handlers: Dict[str, Callable]) -> List[MenuOption]:
     
     # GMGN tools
     gmgn_menu = [
-        MenuOption("Token Info", handlers.get('dragon_gmgn_info'),
-                  description="Gets detailed information for a specific token. Output: data/output-data/api/gmgn/token-info/.",
+        MenuOption("Token Data", handlers.get('dragon_gmgn_token_data'),
+                  description="Gets detailed information for Solana tokens. Output: data/output-data/api/gmgn/token-data/.",
                   missing_env_vars=gmgn_env_vars_missing or dragon_env_vars_missing),
         MenuOption("New Tokens", handlers.get('dragon_gmgn_new'),
                   description="Gets new listings from GMGN. Output: data/output-data/api/gmgn/token-listings/.",

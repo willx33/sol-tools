@@ -53,11 +53,67 @@ if TYPE_CHECKING:
         EthTimestampTransactions, EthScanAllTx, GMGN
     )
 
-# Flag to indicate if Dragon imports were successful
+# Flag for tracking Dragon import success
 DRAGON_IMPORTS_SUCCESS = False
 
-# At runtime, try to import the real Dragon module or use the mock
+# Function to check if Dragon is available
+def check_dragon_availability() -> bool:
+    """
+    Check if the Dragon module is available in the Python path.
+    
+    Returns:
+        bool: True if Dragon is available, False otherwise
+    """
+    # Check if Dragon is in sys.modules
+    if "Dragon" in sys.modules:
+        logger.info("Dragon module already imported")
+        return True
+    
+    # Look for Dragon in PYTHONPATH
+    potential_paths = []
+    
+    # 1. Check in standard Python path locations
+    for path in sys.path:
+        if not os.path.exists(path) or not os.path.isdir(path):
+            continue
+            
+        dragon_path = os.path.join(path, "Dragon")
+        if os.path.exists(dragon_path) and os.path.isdir(dragon_path):
+            potential_paths.append(dragon_path)
+    
+    # 2. Check in parent directories
+    cwd = os.getcwd()
+    parent_dir = os.path.dirname(cwd)
+    dragon_parent_path = os.path.join(parent_dir, "Dragon")
+    if os.path.exists(dragon_parent_path) and os.path.isdir(dragon_parent_path):
+        potential_paths.append(dragon_parent_path)
+    
+    # 3. Check next to the current directory
+    dragon_sibling_path = os.path.join(os.path.dirname(cwd), "Dragon")
+    if os.path.exists(dragon_sibling_path) and os.path.isdir(dragon_sibling_path):
+        potential_paths.append(dragon_sibling_path)
+    
+    if potential_paths:
+        logger.info(f"Found Dragon module at: {potential_paths[0]}")
+        return True
+    
+    logger.error("ERROR: Dragon module not found. Real implementation is required.")
+    logger.error("Please ensure the Dragon module is properly installed.")
+    logger.error("Python path: " + str(sys.path))
+    return False
+
+# Try to import the real Dragon module - no fallbacks
+if not check_dragon_availability():
+    # Raising the ImportError for clarity when the module is not found
+    raise ImportError("ERROR: Dragon module not found. Real implementation is required. No mock implementations are available or supported.")
+
 try:
+    # Add potential paths to sys.path
+    dragon_module_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), '..')
+    if dragon_module_path not in sys.path:
+        sys.path.append(dragon_module_path)
+    
+    # Import real implementation only - no fallbacks to mocks
     import Dragon
     from Dragon import (
         utils, BundleFinder, ScanAllTx, BulkWalletChecker, TopTraders,
@@ -66,18 +122,16 @@ try:
         EthTimestampTransactions, EthScanAllTx, GMGN
     )
     DRAGON_IMPORTS_SUCCESS = True
-except ImportError:
-    # Use our mock implementation for development/testing
-    from . import dragon_mock as Dragon
-    from .dragon_mock import (
-        utils, BundleFinder, ScanAllTx, BulkWalletChecker, TopTraders,
-        TimestampTransactions, purgeFiles, CopyTradeWalletFinder, TopHolders,
-        EarlyBuyers, checkProxyFile, EthBulkWalletChecker, EthTopTraders,
-        EthTimestampTransactions, EthScanAllTx, GMGN
-    )
-    DRAGON_IMPORTS_SUCCESS = False
-    logger.warning("Using mock Dragon implementation - functionality will be limited")
+    logger.info("Successfully imported real Dragon implementation")
+except ImportError as e:
+    logger.error(f"ERROR: Failed to import Dragon module. Error: {e}")
+    logger.error("Please ensure the Dragon module is properly installed.")
+    # Make it clear that we require the real Dragon implementation
+    raise ImportError("ERROR: Dragon module not found. Real implementation is required. No mock implementations are available or supported.")
 
+# If we're here, we've successfully imported Dragon
+if not DRAGON_IMPORTS_SUCCESS:
+    raise ImportError("ERROR: Dragon module imports failed. Real implementation is required. No mock implementations are available or supported.")
 
 def save_dragon_log(category: str, data_key: str, response_data: Dict[str, Any], error: Optional[str] = None):
     """Save API response data to log files for debugging and analysis."""
@@ -245,7 +299,7 @@ class GMGN_Client:
         response = None
         try:
             # Determine network based on address format
-            network = "sol" if len(contract_addr) in [43, 44] else "eth"
+            network = "solana" if len(contract_addr) in [43, 44] else "ethereum"
             
             # Use the correct endpoint for the network type
             url = f"https://api.geckoterminal.com/api/v2/networks/{network}/tokens/{contract_addr}"
@@ -305,27 +359,27 @@ class GMGN_Client:
         
         if token_type == "new":
             if site_choice == "Pump.Fun":
-                return f"{base}/rank/sol/pump/1h?limit=100&orderby=created_timestamp&direction=desc&new_creation=true"
+                return f"{base}/rank/solana/pump/1h?limit=100&orderby=created_timestamp&direction=desc&new_creation=true"
             else:
-                return f"{base}/rank/sol/moonshot/1h?limit=100&orderby=created_timestamp&direction=desc&new_creation=true"
+                return f"{base}/rank/solana/moonshot/1h?limit=100&orderby=created_timestamp&direction=desc&new_creation=true"
         
         elif token_type == "completing":
             if site_choice == "Pump.Fun":
-                return f"{base}/rank/sol/pump/1h?limit=100&orderby=progress&direction=desc&pump=true"
+                return f"{base}/rank/solana/pump/1h?limit=100&orderby=progress&direction=desc&pump=true"
             else:
-                return f"{base}/rank/sol/moonshot/1h?limit=100&orderby=progress&direction=desc&moonshot=true"
+                return f"{base}/rank/solana/moonshot/1h?limit=100&orderby=progress&direction=desc&moonshot=true"
         
         elif token_type == "soaring":
             if site_choice == "Pump.Fun":
-                return f"{base}/rank/sol/pump/1h?limit=100&orderby=market_cap_5m&direction=desc&soaring=true"
+                return f"{base}/rank/solana/pump/1h?limit=100&orderby=market_cap_5m&direction=desc&soaring=true"
             else:
-                return f"{base}/rank/sol/moonshot/1h?limit=100&orderby=market_cap_5m&direction=desc&soaring=true"
+                return f"{base}/rank/solana/moonshot/1h?limit=100&orderby=market_cap_5m&direction=desc&soaring=true"
         
         elif token_type == "bonded":
             if site_choice == "Pump.Fun":
-                return f"{base}/pairs/sol/new_pairs/1h?limit=100&orderby=market_cap&direction=desc&launchpad=pump&period=1h&filters[]=not_honeypot&filters[]=pump"
+                return f"{base}/pairs/solana/new_pairs/1h?limit=100&orderby=market_cap&direction=desc&launchpad=pump&period=1h&filters[]=not_honeypot&filters[]=pump"
             else:
-                return f"{base}/pairs/sol/new_pairs/1h?limit=100&orderby=open_timestamp&direction=desc&launchpad=moonshot&period=1h&filters[]=not_honeypot&filters[]=moonshot"
+                return f"{base}/pairs/solana/new_pairs/1h?limit=100&orderby=open_timestamp&direction=desc&launchpad=moonshot&period=1h&filters[]=not_honeypot&filters[]=moonshot"
         
         return ""
     
@@ -526,242 +580,96 @@ def _ensure_dir_exists(dir_path):
 
 
 class DragonAdapter(BaseAdapter):
-    """
-    DragonDEX adapter for interacting with the Dragon ecosystem.
+    """Adapter for the Dragon module."""
     
-    Attributes:
-        ethereum_input_dir: Directory for Ethereum input files
-        solana_input_dir: Directory for Solana input files
-        proxies_dir: Directory for proxy configuration
-        ethereum_output_dirs: Directories for Ethereum output
-        solana_output_dirs: Directories for Solana output
-        token_info_dir: Directory for token information
-        max_threads: Maximum number of threads for concurrent operations
-        bundle: Bundle configuration
-        solana_wallets: Solana wallet configurations
-    """
-    
-    def __init__(self, 
-                 ethereum_input_dir: Optional[Path] = None,
-                 solana_input_dir: Optional[Path] = None,
-                 proxies_dir: Optional[Path] = None,
-                 ethereum_output_dirs: Optional[Dict[str, Path]] = None,
-                 solana_output_dirs: Optional[Dict[str, Path]] = None,
-                 token_info_dir: Optional[Path] = None,
-                 max_threads: int = 10,
-                 bundle: Any = None,
-                 solana_wallets: Optional[List[Dict[str, Any]]] = None,
-                 **kwargs):
-        """Initialize DragonAdapter."""
-        super().__init__(**kwargs)
-        
-        # Initialize directory paths
-        self.ethereum_input_dir = ethereum_input_dir
-        self.solana_input_dir = solana_input_dir
-        self.proxies_dir = proxies_dir
-        self.ethereum_output_dirs = ethereum_output_dirs or {}
-        self.solana_output_dirs = solana_output_dirs or {}
-        self.token_info_dir = token_info_dir
-        self.max_threads = max_threads
-        self.bundle = bundle
-        self.solana_wallets = solana_wallets or []
-        
-        # Ensure directories exist
-        for dir_path in [ethereum_input_dir, solana_input_dir, proxies_dir, token_info_dir]:
-            _ensure_dir_exists(dir_path)
-            
-        for dirs in [ethereum_output_dirs or {}, solana_output_dirs or {}]:
-            for dir_path in dirs.values():
-                _ensure_dir_exists(dir_path)
-        
-        # Set up internal state
-        self.dragon_available = False
-        self.dragon_components = {}
-        self.proxy_list = []
-        self.gmgn_client = None
-        self.token_data_handler = None
-        
-        # Paths will be set during initialization
-        self.wallets_dir = None
-        self.export_dir = None
-        self.proxy_file = None
-        
-        # Override default threads if specified in config
-        self.default_threads = 10
-        
-    async def initialize(self) -> bool:
+    def __init__(self, **kwargs):
         """
         Initialize the Dragon adapter.
         
-        This method:
-        1. Loads configuration
-        2. Sets up directories
-        3. Initializes Dragon components
-        
-        Returns:
-            True if initialization succeeded, False otherwise
+        Args:
+            **kwargs: Additional configuration options
         """
-        try:
-            self.set_state(self.STATE_INITIALIZING)
-            self.logger.debug("Initializing Dragon adapter...")
-            
-            # Get module-specific configuration
-            module_config = self.get_module_config()
-            
-            # Apply configuration overrides for demonstration
-            if "default_threads" in module_config:
-                self.default_threads = module_config["default_threads"]
-                self.logger.debug(f"Using configured default_threads: {self.default_threads}")
-            
-            # Override from direct config_override if provided
-            if "default_threads" in self.config_override:
-                self.default_threads = self.config_override["default_threads"]
-                self.logger.debug(f"Using override default_threads: {self.default_threads}")
-            
-            # Set up directories
-            self.wallets_dir = self.get_module_data_dir("wallets")
-            self.export_dir = self.get_module_data_dir("export")
-            self.proxy_file = self.get_module_data_dir("input") / "proxies.txt"
-            
-            # Ensure directories exist
-            self.wallets_dir.mkdir(parents=True, exist_ok=True)
-            self.export_dir.mkdir(parents=True, exist_ok=True)
-            
-            # Initialize Dragon components
-            self._init_dragon_components()
-            
-            # Initialize GMGN client with proxy setting from config
-            use_proxies = module_config.get("use_proxies", False)
-            self.gmgn_client = GMGN_Client(use_proxies=use_proxies)
-            self.token_data_handler = TokenDataHandler(use_proxies=use_proxies)
-            
-            # Validate required resources
-            if await self.validate():
-                self.set_state(self.STATE_READY)
-                self.logger.info("Dragon adapter initialized successfully")
-                return True
-            else:
-                self.set_state(self.STATE_ERROR, 
-                               ConfigError("Validation failed during initialization"))
-                return False
-            
-        except Exception as e:
-            self.set_state(self.STATE_ERROR, e)
-            self.logger.error(f"Failed to initialize Dragon adapter: {e}")
-            return False
-    
-    async def validate(self) -> bool:
-        """
-        Validate that the adapter is properly configured and operational.
+        super().__init__(**kwargs)
         
-        This method checks:
-        1. Required directories are accessible
-        2. Dragon components are available or properly mocked
+        # Set default threads
+        self.default_threads = kwargs.get('default_threads', 10)
         
-        Returns:
-            True if validation succeeded, False otherwise
-        """
-        # Check that data directories are accessible
-        for dir_path in [self.wallets_dir, self.export_dir]:
-            if dir_path is not None and not dir_path.exists():
-                try:
-                    if dir_path is not None:
-                        dir_path.mkdir(parents=True, exist_ok=True)
-                except Exception as e:
-                    self.logger.error(f"Failed to create directory {dir_path}: {e}")
-                    return False
+        # Initialize components
+        self._initialize_dragon_components()
         
-        # In test mode, we don't need actual Dragon components
-        if self.test_mode:
-            return True
+        # Solana wallets storage
+        self.solana_wallets = kwargs.get('solana_wallets') or []
         
-        # Check if proxy file exists if use_proxies is enabled
-        if self.get_module_config().get("use_proxies", False):
-            proxy_exists = self.check_proxy_file(create_if_missing=True)
-            if not proxy_exists:
-                self.logger.warning("Proxy file doesn't exist but use_proxies is enabled")
-                # We'll continue anyway since this isn't critical
+        # Ethereum wallets storage
+        self.ethereum_wallets = kwargs.get('ethereum_wallets') or []
+        
+        # Token metrics cache
+        self.token_metrics_cache = {}
+        
+        # Check Dragon imports
+        if not DRAGON_IMPORTS_SUCCESS:
+            error_msg = "Dragon implementation is required but not available. No mock implementations are supported."
+            self.logger.error(error_msg)
+            raise ImportError(error_msg)
+        
+        # Initialize directory paths
+        self.ethereum_input_dir = kwargs.get('ethereum_input_dir')
+        self.solana_input_dir = kwargs.get('solana_input_dir')
+        self.proxies_dir = kwargs.get('proxies_dir')
+        self.ethereum_output_dirs = kwargs.get('ethereum_output_dirs') or {}
+        self.solana_output_dirs = kwargs.get('solana_output_dirs') or {}
+        self.token_info_dir = kwargs.get('token_info_dir')
+        self.max_threads = kwargs.get('max_threads', 10)
+        self.bundle = kwargs.get('bundle')
+        
+        # Initialize GMGN client
+        self.gmgn_client = GMGN_Client(use_proxies=kwargs.get('use_proxies', False))
+        
+        # Set up token data handler
+        self._token_data_handler = None
+        self._token_data_handler_initialized = False
+        self._use_proxies = kwargs.get('use_proxies', False)
+        
+        # Ensure directories exist
+        for dir_path in [self.ethereum_input_dir, self.solana_input_dir, self.proxies_dir, self.token_info_dir]:
+            _ensure_dir_exists(dir_path)
+            
+        for dirs in [self.ethereum_output_dirs or {}, self.solana_output_dirs or {}]:
+            for dir_path in dirs.values():
+                _ensure_dir_exists(dir_path)
                 
-        # Check Dragon availability - if required but not available, fail validation
-        if not self.dragon_available and self.get_module_config().get("require_dragon", False):
-            self.logger.error("Dragon functionality is required but not available")
-            return False
-            
-        return True
+        self.logger.info("Dragon adapter initialized successfully with real implementation")
     
-    async def cleanup(self) -> None:
-        """
-        Clean up resources used by the adapter.
-        
-        This method releases any resources acquired during initialization
-        and operation, such as thread pools and network connections.
-        """
-        self.set_state(self.STATE_CLEANING_UP)
-        self.logger.debug("Cleaning up Dragon adapter resources...")
-        
-        # Close threadpools
-        if hasattr(self, '_gmgn_threadpool') and _gmgn_threadpool:
-            _gmgn_threadpool.shutdown(wait=False)
-        
-        if hasattr(self, '_wallet_threadpool') and _wallet_threadpool:
-            _wallet_threadpool.shutdown(wait=False)
-        
-        # Close GMGN client if it exists
-        if self.gmgn_client is not None and hasattr(self.gmgn_client, 'session') and getattr(self.gmgn_client, 'session', None) is not None:
-            try:
-                # Using getattr with default to avoid attribute error
-                session = getattr(self.gmgn_client, 'session', None)
-                if session is not None and hasattr(session, 'close'):
-                    session.close()
-            except Exception as e:
-                self.logger.warning(f"Error closing GMGN client: {e}")
-                
-        # Clear any cached data
-        if not self.test_mode:
-            try:
-                # Only delete temporary files in non-test mode
-                temp_files = list(LOGS_DIR.glob("*.json"))
-                for temp_file in temp_files:
-                    try:
-                        if temp_file.is_file():
-                            temp_file.unlink()
-                    except Exception as e:
-                        self.logger.warning(f"Failed to delete temp file {temp_file}: {e}")
-            except Exception as e:
-                self.logger.warning(f"Error cleaning up temporary files: {e}")
-        
-        self.set_state(self.STATE_CLEANED_UP)
-        self.logger.debug("Dragon adapter cleanup completed")
-        
-    def _init_dragon_components(self):
-        """Initialize Dragon components or create placeholders if not available."""
-        try:
-            # Store references to Dragon components
-            self.dragon_components = {
-                "BundleFinder": BundleFinder,
-                "ScanAllTx": ScanAllTx,
-                "BulkWalletChecker": BulkWalletChecker,
-                "TopTraders": TopTraders,
-                "TimestampTransactions": TimestampTransactions,
-                "purgeFiles": purgeFiles,
-                "CopyTradeWalletFinder": CopyTradeWalletFinder,
-                "TopHolders": TopHolders,
-                "EarlyBuyers": EarlyBuyers,
-                "checkProxyFile": checkProxyFile,
-                "EthBulkWalletChecker": EthBulkWalletChecker, 
-                "EthTopTraders": EthTopTraders,
-                "EthTimestampTransactions": EthTimestampTransactions,
-                "EthScanAllTx": EthScanAllTx,
-                "GMGN": GMGN
-            }
+    def _initialize_dragon_components(self) -> None:
+        """Initialize all Dragon components."""
+        # Verify Dragon is properly imported
+        if not DRAGON_IMPORTS_SUCCESS:
+            error_msg = "Dragon implementation is required but not available. No mock implementations are supported."
+            self.logger.error(error_msg)
+            raise ImportError(error_msg)
             
-            self.dragon_available = DRAGON_IMPORTS_SUCCESS
-            self.logger.debug(f"Dragon components loaded successfully (using {'actual' if DRAGON_IMPORTS_SUCCESS else 'mock'} implementation)")
-            
-        except Exception as e:
-            self.logger.error(f"Failed to initialize Dragon components: {e}")
-            self.dragon_available = False
-            self.dragon_components = {}
+        # Initialize components with real Dragon implementations
+        self.utils = utils
+        self.purge_files = purgeFiles
+        self.check_proxy_file = checkProxyFile
+        
+        # Initialize Dragon classes
+        self.bundle_finder = BundleFinder
+        self.scan_all_tx = ScanAllTx
+        self.bulk_wallet_checker = BulkWalletChecker
+        self.top_traders = TopTraders
+        self.timestamp_transactions = TimestampTransactions
+        self.copy_trade_wallet_finder = CopyTradeWalletFinder
+        self.top_holders = TopHolders
+        self.early_buyers = EarlyBuyers
+        self.eth_bulk_wallet_checker = EthBulkWalletChecker
+        self.eth_top_traders = EthTopTraders
+        self.eth_timestamp_transactions = EthTimestampTransactions
+        self.eth_scan_all_tx = EthScanAllTx
+        self.gmgn = GMGN
+        
+        # Initialize BundleFinder instance
+        self.bundle = BundleFinder
 
     def ensure_dragon_paths(self) -> None:
         """
@@ -875,17 +783,17 @@ class DragonAdapter(BaseAdapter):
     # GMGN Implementation
     async def get_token_info(self, contract_address: str) -> Dict[str, Any]:
         """
-        Get token information from GMGN.
+        Get token information for a contract address.
         
         Args:
-            contract_address: Token contract address
+            contract_address: Contract address to get information for
             
         Returns:
             Token information
         """
-        if self.token_data_handler is None:
+        if self.get_token_data_handler() is None:
             return {}
-        return await self.token_data_handler.get_token_data(contract_address)  # type: ignore
+        return await self.get_token_data_handler().get_token_data(contract_address)  # type: ignore
     
     def get_token_info_sync(self, contract_address: str) -> Dict[str, Any]:
         """
@@ -897,13 +805,13 @@ class DragonAdapter(BaseAdapter):
         Returns:
             Token information
         """
-        if not hasattr(self, 'token_data_handler') or self.token_data_handler is None:
+        if not hasattr(self, 'get_token_data_handler') or self.get_token_data_handler() is None:
             self.logger.warning("Token data handler is not initialized")
             return {}
             
         try:
             # Check if we have a method to get token info
-            token_data_handler = getattr(self, 'token_data_handler', None)
+            token_data_handler = self.get_token_data_handler()
             if token_data_handler is not None and hasattr(token_data_handler, '_get_token_info_sync'):
                 return token_data_handler._get_token_info_sync(contract_address)
             else:
@@ -977,15 +885,28 @@ class DragonAdapter(BaseAdapter):
                 
             try:
                 self.ensure_dragon_paths()
-                tx_hashes = self.bundle.teamTrades(address)
-                data = self.bundle.checkBundle(tx_hashes[0], tx_hashes[1])
-                formatted = self.bundle.prettyPrint(data, address)
-                return {
-                    "success": True,
-                    "address": address,
-                    "data": data,
-                    "formatted": formatted
-                }
+                # Make sure bundle is initialized
+                if self.bundle is None:
+                    self.bundle = BundleFinder
+                    
+                # Call static methods on the BundleFinder class
+                tx_hashes = BundleFinder.teamTrades(address)
+                # Ensure we have at least two transaction hashes
+                if len(tx_hashes) >= 2:
+                    data = BundleFinder.checkBundle(tx_hashes[0], tx_hashes[1])
+                    formatted = BundleFinder.prettyPrint(data, address)
+                    return {
+                        "success": True,
+                        "address": address,
+                        "data": data,
+                        "formatted": formatted
+                    }
+                else:
+                    return {
+                        "success": False,
+                        "address": address,
+                        "error": "Not enough transaction hashes found"
+                    }
             except Exception as e:
                 return {
                     "success": False,
@@ -1050,12 +971,22 @@ class DragonAdapter(BaseAdapter):
                 mock_wallet = next((w for w in self.solana_wallets if w["address"] == wallet), None)
                 if not mock_wallet:
                     # Use the first wallet as a template
-                    from ...tests.test_data.mock_data import random_token_amount
-                    mock_wallet = self.solana_wallets[0].copy()
+                    mock_wallet = self.solana_wallets[0].copy() if self.solana_wallets else {
+                        "address": wallet,
+                        "tokens": [
+                            {
+                                "symbol": "SOL",
+                                "name": "Solana",
+                                "balance": 2.5,  # Static value instead of random
+                                "price_usd": 125.45,
+                                "value_usd": 313.63  # 2.5 * 125.45
+                            }
+                        ]
+                    }
                     mock_wallet["address"] = wallet
-                    # Randomize some values
+                    # Use static values instead of random
                     for token in mock_wallet["tokens"]:
-                        token["balance"] = random_token_amount()
+                        token["balance"] = 2.5  # Static value instead of random
                         token["value_usd"] = round(token["balance"] * token["price_usd"], 2)
                 
                 result["wallet_data"][wallet] = mock_wallet
@@ -1156,36 +1087,35 @@ class DragonAdapter(BaseAdapter):
             True if successful, False otherwise
         """
         dir_path = directory or ""  # Use empty string if None
+        logger.debug(f"Importing Solana wallets from file: {filename} in directory: {directory}")
 
-        if self.test_mode:
-            # In test mode, just pretend we imported the wallets
-            try:
-                # If directory is not provided, use the default input directory
-                if not directory:
-                    directory = str(self.solana_input_dir)
-                
-                # Construct the full path
-                file_path = Path(directory) / filename
-                
-                # Check if the file exists
-                if not Path(file_path).exists():
-                    logger.warning(f"Wallet file not found: {file_path}")
-                    return False
-                
-                # Pretend we processed the file - no actual file read in test mode
-                logger.info(f"Test mode: Simulating import of Solana wallets from {file_path}")
-                
-                # Return success
-                return True
-                
-            except Exception as e:
-                logger.exception(f"Error in import_solana_wallets: {str(e)}")
-                return False
-        
-        # Real mode implementation would go here
         try:
-            # Import wallets using Dragon functionality if available
-            # For now, just return success
+            # If directory is not provided, use the default input directory
+            if not directory:
+                directory = str(self.solana_input_dir)
+            
+            # Construct the full path
+            file_path = Path(directory) / filename
+            logger.debug(f"Full path to wallet file: {file_path}")
+            
+            # Check if the file exists
+            if not Path(file_path).exists():
+                logger.warning(f"Wallet file not found: {file_path}")
+                return False
+            
+            # Read the file to populate solana_wallets
+            try:
+                with open(file_path, 'r') as f:
+                    wallets_data = json.load(f)
+                    # Store the wallets in memory
+                    self.solana_wallets = wallets_data
+                    logger.debug(f"Loaded wallets data: {wallets_data}")
+                    logger.info(f"Imported {len(self.solana_wallets)} Solana wallets from {file_path}")
+            except Exception as e:
+                logger.error(f"Error reading wallet file {file_path}: {e}")
+                return False
+            
+            # Return success
             return True
             
         except Exception as e:
@@ -1204,38 +1134,102 @@ class DragonAdapter(BaseAdapter):
             True if successful, False otherwise
         """
         dir_path = directory or ""  # Use empty string if None
+        logger.debug(f"Importing Ethereum wallets from file: {filename} in directory: {directory}")
 
-        if self.test_mode:
-            # In test mode, just pretend we imported the wallets
-            try:
-                # If directory is not provided, use the default input directory
-                if not directory:
-                    directory = str(self.ethereum_input_dir)
-                
-                # Construct the full path
-                file_path = Path(directory) / filename
-                
-                # Check if the file exists
-                if not Path(file_path).exists():
-                    logger.warning(f"Wallet file not found: {file_path}")
-                    return False
-                
-                # Pretend we processed the file - no actual file read in test mode
-                logger.info(f"Test mode: Simulating import of Ethereum wallets from {file_path}")
-                
-                # Return success
-                return True
-                
-            except Exception as e:
-                logger.exception(f"Error in import_ethereum_wallets: {str(e)}")
-                return False
-        
-        # Real mode implementation would go here
         try:
-            # Import wallets using Dragon functionality if available
-            # For now, just return success
+            # If directory is not provided, use the default input directory
+            if not directory:
+                directory = str(self.ethereum_input_dir)
+            
+            # Construct the full path
+            file_path = Path(directory) / filename
+            logger.debug(f"Full path to wallet file: {file_path}")
+            
+            # Check if the file exists
+            if not Path(file_path).exists():
+                logger.warning(f"Wallet file not found: {file_path}")
+                return False
+            
+            # Read the file to populate ethereum_wallets
+            try:
+                with open(file_path, 'r') as f:
+                    wallets_data = json.load(f)
+                    # Store the wallets in memory
+                    self._ethereum_wallets = wallets_data
+                    logger.debug(f"Loaded wallets data: {wallets_data}")
+                    logger.info(f"Imported {len(self._ethereum_wallets)} Ethereum wallets from {file_path}")
+            except Exception as e:
+                logger.error(f"Error reading wallet file {file_path}: {e}")
+                return False
+            
+            # Return success
             return True
             
         except Exception as e:
             logger.exception(f"Error in import_ethereum_wallets: {str(e)}")
             return False
+
+    def get_token_data_handler(self):
+        """
+        Get the token data handler, initializing it if necessary.
+        
+        Returns:
+            The token data handler instance
+        """
+        # Only initialize once to avoid recursion
+        if not self._token_data_handler_initialized:
+            # Create token handler directly without import to avoid circular dependencies
+            if hasattr(self, 'gmgn_client') and self.gmgn_client is not None:
+                self._token_data_handler = TokenDataHandler(use_proxies=self._use_proxies)
+            else:
+                self.logger.error("Cannot initialize token data handler: gmgn_client is None")
+                self._token_data_handler = None
+            
+            # Mark as initialized regardless of outcome to prevent future initialization attempts
+            self._token_data_handler_initialized = True
+                
+        return self._token_data_handler
+
+    def initialize(self):
+        """Initialize the Dragon adapter for use."""
+        # This method is already effectively implemented in __init__
+        self.logger.info("Dragon adapter initialization complete")
+        return True
+    
+    def cleanup(self):
+        """Clean up resources used by the Dragon adapter."""
+        # Close any open resources
+        if hasattr(self, 'gmgn_client') and self.gmgn_client is not None:
+            # Clean up the GMGN client if needed
+            pass
+            
+        # Close thread pools
+        if '_gmgn_threadpool' in globals():
+            _gmgn_threadpool.shutdown(wait=False)
+        if '_wallet_threadpool' in globals():
+            _wallet_threadpool.shutdown(wait=False)
+            
+        self.logger.info("Dragon adapter cleaned up")
+        return True
+    
+    def validate(self, request_type: str, data: Any) -> bool:
+        """
+        Validate the input data.
+        
+        Args:
+            request_type: Type of request to validate
+            data: Data to validate
+            
+        Returns:
+            True if valid, False otherwise
+        """
+        if request_type == "solana_address":
+            return self.validate_solana_address(data)
+        elif request_type == "ethereum_address":
+            return self.validate_ethereum_address(data)
+        elif request_type == "token_address":
+            # Validate either Solana or Ethereum token address
+            return self.validate_solana_address(data) or self.validate_ethereum_address(data)
+        
+        # Default fallback for unknown validation types
+        return False

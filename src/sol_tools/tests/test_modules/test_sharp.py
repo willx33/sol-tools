@@ -1,22 +1,44 @@
 """
 Test Sharp module functionality.
 
-This module tests the Sharp module's functionality with mock data.
+This module tests the Sharp API integration for wallet portfolio analysis.
 """
 
 import os
 import json
+import inspect
+import asyncio
+import logging
+import importlib
 from pathlib import Path
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Mapping, Optional, Tuple
 
-from ...tests.base_tester import BaseTester, cprint
+from ...tests.base_tester import BaseTester, cprint, STATUS_INDICATORS
+from ...tests.test_data.real_test_data import REAL_SHARP_PORTFOLIO, REAL_ETH_ADDRESSES, REAL_WALLET_ADDRESSES
+
+def get_test_names() -> List[str]:
+    """
+    Get the names of all tests in this module.
+    
+    Returns:
+        A list of test names for display in the test runner
+    """
+    return [
+        "Sharp Module Imports",
+        "Portfolio Data Retrieval",
+        "Wallet Address Splitter",
+        "Sharp Adapter Initialization"
+    ]
 
 class SharpTester(BaseTester):
-    """Test Sharp module functionality with mock data."""
+    """Test Sharp module functionality with real data."""
     
-    def __init__(self):
+    def __init__(self, options: Optional[Dict[str, Any]] = None):
         """Initialize the SharpTester."""
         super().__init__("Sharp")
+        
+        # Store options
+        self.options = options or {}
         
         # Create Sharp test directories
         self._create_sharp_directories()
@@ -24,8 +46,11 @@ class SharpTester(BaseTester):
         # Create test data
         self._create_test_data()
         
-        # Initialize Sharp module (with test_mode=True)
+        # Initialize Sharp module
         self._init_sharp_module()
+        
+        # Required environment variables for this module
+        self.required_env_vars = ["SHARP_API_KEY"]
     
     def _create_sharp_directories(self) -> None:
         """Create Sharp-specific test directories."""
@@ -34,49 +59,40 @@ class SharpTester(BaseTester):
     
     def _create_test_data(self) -> None:
         """Create test data for Sharp tests."""
-        from ...tests.test_data.mock_data import generate_mock_sharp_portfolio
-        
-        # Create mock portfolio data
-        self.mock_portfolio = generate_mock_sharp_portfolio()
+        # Use real portfolio data
+        self.portfolio = REAL_SHARP_PORTFOLIO
         self.portfolio_file = self.test_root / "output-data" / "sharp" / "portfolios" / "test_portfolio.json"
         
         with open(self.portfolio_file, "w") as f:
-            json.dump(self.mock_portfolio, f, indent=2)
+            json.dump(self.portfolio, f, indent=2)
         
-        # Create wallet list for testing
-        self.test_wallets = [
-            "0x1234567890123456789012345678901234567890",
-            "0x0987654321098765432109876543210987654321",
-            "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd"
-        ]
+        # Create wallet list for testing using real Ethereum addresses
+        self.test_wallets = REAL_ETH_ADDRESSES["wallets"]
         
         self.wallet_list_file = self.test_root / "input-data" / "sharp" / "test_wallets.txt"
         with open(self.wallet_list_file, "w") as f:
             f.write("\n".join(self.test_wallets))
     
     def _init_sharp_module(self) -> None:
-        """Initialize Sharp module with test mode."""
+        """Initialize Sharp module."""
         try:
             # Import Sharp module
             from ...modules.sharp import sharp_adapter
             
-            # Initialize the adapter with test_mode if it has such parameter
+            # Initialize the adapter with appropriate parameters
             if hasattr(sharp_adapter, "SharpAdapter"):
-                try:
-                    # First try with test_mode and data_dir
-                    self.sharp_adapter = sharp_adapter.SharpAdapter(
-                        test_mode=True, 
-                        data_dir=str(self.test_root)
-                    )
-                except TypeError:
-                    try:
-                        # Next try with just data_dir
-                        self.sharp_adapter = sharp_adapter.SharpAdapter(
-                            data_dir=str(self.test_root)
-                        )
-                    except TypeError:
-                        # Finally try without any parameters
-                        self.sharp_adapter = sharp_adapter.SharpAdapter()
+                # Check the adapter's init method parameters
+                params = inspect.signature(sharp_adapter.SharpAdapter.__init__).parameters
+                
+                # Determine the required parameters and provide them
+                required_params = {}
+                if "data_dir" in params:
+                    required_params["data_dir"] = str(self.test_root)
+                if "api_key" in params:
+                    required_params["api_key"] = os.environ.get("SHARP_API_KEY", "")
+                
+                # Create the adapter with the required parameters
+                self.sharp_adapter = sharp_adapter.SharpAdapter(**required_params)
             else:
                 self.sharp_adapter = None
             
@@ -85,15 +101,18 @@ class SharpTester(BaseTester):
             self.sharp_handlers = sharp_handlers
             
             self.module_available = True
+            cprint("  ✓ Sharp module imported successfully", "green")
             
         except ImportError as e:
             self.logger.warning(f"Failed to import Sharp module: {str(e)}")
             self.module_available = False
+            cprint(f"  ❌ Failed to import Sharp module: {str(e)}", "red")
         except Exception as e:
             self.logger.warning(f"Error initializing Sharp module: {str(e)}")
             self.module_available = False
+            cprint(f"  ❌ Error initializing Sharp module: {str(e)}", "red")
     
-    def test_sharp_imports(self) -> bool:
+    async def test_sharp_imports(self) -> bool:
         """Test if Sharp module can be imported."""
         if not self.module_available:
             cprint("  ❌ Sharp module could not be imported", "red")
@@ -102,8 +121,12 @@ class SharpTester(BaseTester):
         cprint("  ✓ Sharp module imported successfully", "green")
         return True
     
-    def test_portfolio_fetch(self) -> bool:
-        """Test fetching portfolio data."""
+    async def test_portfolio_fetch(self) -> bool:
+        """
+        Test fetching portfolio data.
+        
+        @requires_env: SHARP_API_KEY
+        """
         if not self.module_available:
             cprint("  ⚠️ Sharp module not available, skipping", "yellow")
             return False
@@ -131,7 +154,7 @@ class SharpTester(BaseTester):
             self.logger.exception("Exception in test_portfolio_fetch")
             return False
     
-    def test_wallet_splitter(self) -> bool:
+    async def test_wallet_splitter(self) -> bool:
         """Test wallet splitter functionality."""
         if not self.module_available:
             cprint("  ⚠️ Sharp module not available, skipping", "yellow")
@@ -159,34 +182,65 @@ class SharpTester(BaseTester):
             self.logger.exception("Exception in test_wallet_splitter")
             return False
     
-    def run_tests(self) -> Dict[str, bool]:
-        """Run all Sharp tests."""
-        tests = [
-            ("Sharp Module Imports", self.test_sharp_imports),
-            ("Portfolio Fetch", self.test_portfolio_fetch),
-            ("Wallet Splitter", self.test_wallet_splitter)
-        ]
+    async def test_sharp_adapter_init(self) -> bool:
+        """
+        Test Sharp adapter initialization.
         
-        return super().run_tests(tests)
-
-
-def run_sharp_tests(verbose=False) -> bool:
-    """
-    Run all Sharp tests.
+        @requires_env: SHARP_API_KEY
+        """
+        if not self.module_available or not hasattr(self, 'sharp_adapter') or self.sharp_adapter is None:
+            cprint("  ⚠️ Sharp adapter not available, skipping", "yellow")
+            return False
+            
+        try:
+            # If we successfully got here, the adapter is initialized
+            cprint("  ✓ Successfully verified Sharp adapter initialization", "green")
+            return True
+            
+        except Exception as e:
+            cprint(f"  ❌ Exception in test_sharp_adapter_init: {str(e)}", "red")
+            self.logger.exception("Exception in test_sharp_adapter_init")
+            return False
     
-    Args:
-        verbose: Whether to print verbose output
+    async def run_all_tests(self) -> Dict[str, Dict[str, Any]]:
+        """
+        Run all Sharp module tests.
         
-    Returns:
-        bool: True if all tests passed, False otherwise
-    """
-    tester = SharpTester()
-    try:
-        results = tester.run_tests()
-        return all(results.values())
-    finally:
-        tester.cleanup()
+        Returns:
+            Dictionary mapping test names to results
+        """
+        # Discover environment variable requirements for tests
+        self.discover_test_env_vars()
+        
+        # Run the tests using the base class method
+        return await super().run_all_tests()
 
+async def run_sharp_tests(options: Optional[Dict[str, Any]] = None) -> int:
+    """Run all Sharp tests."""
+    tester = SharpTester(options)
+    try:
+        test_results = await tester.run_all_tests()
+        
+        # Clean up
+        tester.cleanup()
+        
+        # Get all non-skipped test results
+        non_skipped_results = [result for result in test_results.values() 
+                              if result.get("status") != "skipped"]
+        
+        # If all tests were skipped, return 2 (special code for "all skipped")
+        if not non_skipped_results:
+            return 2
+            
+        # Return 0 (success) if all non-skipped tests passed, 1 (failure) otherwise
+        return 0 if all(result.get("status") == "passed" 
+                       for result in non_skipped_results) else 1
+                       
+    except Exception as e:
+        print(f"Error running Sharp tests: {str(e)}")
+        # Clean up
+        tester.cleanup()
+        return 1
 
 if __name__ == "__main__":
-    run_sharp_tests() 
+    asyncio.run(run_sharp_tests()) 

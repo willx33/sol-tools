@@ -5,13 +5,88 @@ import sys
 import json
 import asyncio
 import inquirer
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Union
 from datetime import datetime
 import logging
+import time
 
 from ...utils.common import clear_terminal, ensure_data_dir, check_proxy_file
 from ...core.config import check_env_vars
 from .dragon_adapter import DragonAdapter
+
+logger = logging.getLogger(__name__)
+
+class DragonHandlers:
+    """Handlers for Dragon module functionality."""
+    
+    @staticmethod
+    def handle_bundle_check(contract_address: str) -> Dict[str, Any]:
+        """
+        Handle checking bundles for a contract address.
+        
+        Args:
+            contract_address: Contract address to check
+            
+        Returns:
+            Response data
+        """
+        logger.info(f"Handling bundle check for {contract_address}")
+        
+        # Import the adapter
+        try:
+            adapter = DragonAdapter()
+            return adapter.solana_bundle_checker(contract_address)
+        except Exception as e:
+            logger.error(f"Error in handle_bundle_check: {e}")
+            return {"success": False, "error": str(e)}
+    
+    @staticmethod
+    def handle_wallet_check(wallets: Union[str, List[str]], **kwargs) -> Dict[str, Any]:
+        """
+        Handle checking wallets.
+        
+        Args:
+            wallets: Wallet address or list of addresses
+            **kwargs: Additional parameters
+            
+        Returns:
+            Response data
+        """
+        logger.info(f"Handling wallet check for {len(wallets) if isinstance(wallets, list) else 1} wallets")
+        
+        # Import the adapter
+        try:
+            adapter = DragonAdapter()
+            return adapter.solana_wallet_checker(wallets, **kwargs)
+        except Exception as e:
+            logger.error(f"Error in handle_wallet_check: {e}")
+            return {"success": False, "error": str(e)}
+    
+    @staticmethod
+    def handle_token_info(contract_address: str) -> Dict[str, Any]:
+        """
+        Handle getting token information.
+        
+        Args:
+            contract_address: Contract address to get information for
+            
+        Returns:
+            Token information
+        """
+        logger.info(f"Handling token info request for {contract_address}")
+        
+        # Import the adapter
+        try:
+            adapter = DragonAdapter()
+            return adapter.get_token_info_sync(contract_address)
+        except Exception as e:
+            logger.error(f"Error in handle_token_info: {e}")
+            return {"success": False, "error": str(e)}
+
+# Expose handlers for direct import
+bundle_check_handler = DragonHandlers.handle_bundle_check
+wallet_check_handler = DragonHandlers.handle_wallet_check
+token_info_handler = DragonHandlers.handle_token_info
 
 # Initialize the dragon adapter for all handlers
 def _get_dragon_adapter():
@@ -19,10 +94,15 @@ def _get_dragon_adapter():
     try:
         adapter = DragonAdapter()
         # Initialize the adapter asynchronously
-        asyncio.run(adapter.initialize())
-        if adapter.token_data_handler is None:
+        async def _initialize():
+            return await adapter.initialize()
+            
+        # Run the async initialization in a proper coroutine
+        asyncio.run(_initialize())
+        
+        if not hasattr(adapter, 'get_token_data_handler') or adapter.get_token_data_handler() is None:
             logger = logging.getLogger(__name__)
-            logger.warning("token_data_handler is None after initialization")
+            logger.warning("Token data handler is None after initialization")
         return adapter
     except Exception as e:
         logger = logging.getLogger(__name__)
@@ -510,13 +590,13 @@ def gmgn_bonded_tokens():
     input("\nPress Enter to continue...")
 
 
-def gmgn_token_info():
-    """Get token information from GMGN."""
+def gmgn_token_data():
+    """Get token data from GMGN."""
     clear_terminal()
-    print("🐲 Dragon GMGN Token Info")
+    print("🐲 Dragon GMGN Token Data")
     
     # Set up data directories
-    output_dir = ensure_data_dir("api/gmgn", "token-info", data_type="output")
+    output_dir = ensure_data_dir("api/gmgn", "token-data", data_type="output")
     
     # Import NoTruncationText and prompt_user for better display and paste handling
     from ...utils.common import NoTruncationText, prompt_user
@@ -535,46 +615,125 @@ def gmgn_token_info():
         input("\nPress Enter to continue...")
         return
         
-    contract_address = answers["contract_address"]
+    contract_addresses_input = answers["contract_address"]
+    contract_addresses = [addr.strip() for addr in contract_addresses_input.split() if addr.strip()]
+    
+    # Check if we have valid addresses
+    if not contract_addresses:
+        print("\n❌ No valid addresses provided")
+        input("\nPress Enter to continue...")
+        return
     
     # Use the adapter to get token information
     try:
         adapter = _get_dragon_adapter()
         
-        if adapter.token_data_handler is None:
+        if not hasattr(adapter, 'get_token_data_handler') or adapter.get_token_data_handler() is None:
             print("\n❌ Error: Token data handler not properly initialized")
             input("\nPress Enter to continue...")
             return
-            
-        # Print a message to show that we're fetching data
-        print(f"\nFetching token information for {contract_address}...")
-            
-        token_info = adapter.get_token_info_sync(contract_address)
         
-        if token_info and "error" not in token_info:
-            # Save token info to file
-            output_file = output_dir / f"token_info_{contract_address}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-            with open(output_file, 'w') as f:
-                json.dump(token_info, f, indent=2)
+        # Display loading message based on number of tokens
+        token_count = len(contract_addresses)
+        if token_count == 1:
+            print(f"\n🔍 Fetching token data for {contract_addresses[0]}...")
+        else:
+            print(f"\n🔍 Fetching token data for {token_count} tokens...")
+        
+        # Get the current time for timestamp in filename
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        
+        # Fetch token data - handle both single and multiple tokens
+        if token_count == 1:
+            # Single token
+            token_address = contract_addresses[0]
+            token_info = adapter.get_token_info_sync(token_address)
             
-            # Display results
-            print("\n✅ Successfully fetched token information")
+            if token_info and "error" not in token_info:
+                # Save token info to file
+                output_file = output_dir / f"token_data_{token_address}_{timestamp}.json"
+                with open(output_file, 'w') as f:
+                    json.dump(token_info, f, indent=2)
+                
+                # Display results
+                print("\n✅ Successfully fetched token data")
+                print(f"Results saved to {output_file}")
+                
+                # Format and display token info
+                print("\n📊 Token Information:")
+                print(f"Name:             {token_info.get('name', 'Unknown')}")
+                print(f"Symbol:           {token_info.get('symbol', 'Unknown')}")
+                print(f"Price:            ${token_info.get('priceUsd', 0):.8f}")
+                print(f"Market Cap:       ${token_info.get('marketCap', 0):,.2f}")
+                print(f"Liquidity:        ${token_info.get('liquidityUsd', 0):,.2f}")
+                print(f"24h Volume:       ${token_info.get('volume24h', 0):,.2f}")
+                print(f"24h Change:       {token_info.get('priceChange24h', 0):.2f}%")
+                print(f"Holders:          {token_info.get('holders', 0):,}")
+            else:
+                error_msg = token_info.get('error', 'Unknown error') if token_info else "No data returned"
+                print(f"\n❌ Failed to get token data: {error_msg}")
+        else:
+            # Multiple tokens
+            start_time = time.time()
+            all_results = {}
+            success_count = 0
+            error_count = 0
+            
+            # Fetch data for each token
+            for token_address in contract_addresses:
+                print(f"  ⏳ Fetching data for {token_address}...")
+                token_info = adapter.get_token_info_sync(token_address)
+                
+                if token_info and "error" not in token_info:
+                    all_results[token_address] = token_info
+                    print(f"  ✅ Successfully fetched data for {token_info.get('name', 'Unknown')} ({token_info.get('symbol', 'Unknown')})")
+                    success_count += 1
+                else:
+                    error_msg = token_info.get('error', 'Unknown error') if token_info else "No data returned"
+                    all_results[token_address] = {"error": error_msg, "address": token_address}
+                    print(f"  ❌ Failed to fetch data for {token_address}: {error_msg}")
+                    error_count += 1
+            
+            # Calculate elapsed time
+            elapsed = time.time() - start_time
+            
+            # Save all results to a single file
+            output_file = output_dir / f"token_data_multiple_{len(contract_addresses)}tokens_{timestamp}.json"
+            with open(output_file, 'w') as f:
+                json.dump({
+                    "timestamp": datetime.now().isoformat(),
+                    "token_count": len(contract_addresses),
+                    "success_count": success_count,
+                    "error_count": error_count,
+                    "data": all_results
+                }, f, indent=2)
+            
+            # Display summary
+            print(f"\n📊 Summary: {success_count} successful, {error_count} failed, completed in {elapsed:.2f} seconds")
             print(f"Results saved to {output_file}")
             
-            # Format and display token info
-            print("\n📊 Token Information:")
-            print(f"Name:             {token_info.get('name', 'Unknown')}")
-            print(f"Symbol:           {token_info.get('symbol', 'Unknown')}")
-            print(f"Price:            ${token_info.get('priceUsd', 0):.8f}")
-            print(f"Market Cap:       ${token_info.get('marketCap', 0):,.2f}")
-            print(f"Liquidity:        ${token_info.get('liquidityUsd', 0):,.2f}")
-            print(f"24h Volume:       ${token_info.get('volume24h', 0):,.2f}")
-            print(f"24h Change:       {token_info.get('priceChange24h', 0):.2f}%")
-            print(f"Holders:          {token_info.get('holders', 0):,}")
-        else:
-            error_msg = token_info.get('error', 'Unknown error') if token_info else "No data returned"
-            print(f"\n❌ Failed to get token information: {error_msg}")
+            # Display some details for successful tokens if there are any
+            if success_count > 0:
+                print("\nToken Details (successful tokens):")
+                for token_address, data in all_results.items():
+                    if "error" not in data:
+                        print(f"\n--- {data.get('name', 'Unknown')} ({data.get('symbol', 'Unknown')}) ---")
+                        print(f"Address:          {token_address}")
+                        print(f"Price:            ${data.get('priceUsd', 0):.8f}")
+                        print(f"Market Cap:       ${data.get('marketCap', 0):,.2f}")
+                        print(f"Liquidity:        ${data.get('liquidityUsd', 0):,.2f}")
+                        print(f"24h Volume:       ${data.get('volume24h', 0):,.2f}")
+                        print(f"24h Change:       {data.get('priceChange24h', 0):.2f}%")
+                        print(f"Holders:          {data.get('holders', 0):,}")
+                        print(f"Network:          {data.get('network', 'Unknown')}")
+                        if data.get('ath', 0) > 0:
+                            print(f"All-time High:   ${data.get('ath', 0):.8f}")
+                        if data.get('atl', 0) > 0:
+                            print(f"All-time Low:    ${data.get('atl', 0):.8f}")
+        
     except Exception as e:
         print(f"\n❌ Handler error: {e}")
+        import traceback
+        traceback.print_exc()
     
     input("\nPress Enter to continue...")

@@ -11,7 +11,7 @@ import json
 import os
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Dict, List, Any, Optional, Union
+from typing import Dict, List, Any, Optional, Union, Iterable
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -38,27 +38,32 @@ class Config:
 class GMGNAdapter:
     """Adapter for GMGN functionality within Sol Tools framework."""
     
-    def __init__(self, test_mode: bool = False):
+    def __init__(self, 
+                 output_dir: Optional[Path] = None,
+                 test_mode: bool = False):
         """
         Initialize the GMGN adapter.
         
         Args:
-            test_mode: If True, operate in test mode without external API calls
+            output_dir: Directory for saving output data
+            test_mode: NOT SUPPORTED - will raise an error
         """
-        self.test_mode = test_mode
-        self.logger = logging.getLogger(__name__)
+        # If test_mode is True, raise an error
+        if test_mode:
+            raise ValueError("Test mode is not supported in GMGN adapter. Use real implementations.")
         
-        # Set up directories
-        from ...core.config import INPUT_DATA_DIR, OUTPUT_DATA_DIR
-        self.input_dir = INPUT_DATA_DIR / "api" / "gmgn"
-        self.output_dir = OUTPUT_DATA_DIR / "api" / "gmgn"
-        self.token_info_dir = self.output_dir / "token-info"
+        # Set up output directory
+        if output_dir is None:
+            # Use default directory
+            base_dir = Path(os.path.expanduser("~")) / ".sol_tools"
+            self.output_dir = base_dir / "gmgn_data"
+        else:
+            self.output_dir = output_dir / "gmgn_data"
+            
+        # Create directory if it doesn't exist
+        self.output_dir.mkdir(parents=True, exist_ok=True)
         
-        # Create directories if they don't exist
-        for directory in [self.input_dir, self.output_dir, self.token_info_dir]:
-            directory.mkdir(parents=True, exist_ok=True)
-        
-        # Set up token information (basic info in test mode, initialized later in real mode)
+        # Set up token information (basic info, initialized later in real mode)
         self.token_info = {
             "GMGN": {
                 "name": "Magic Eden Token",
@@ -67,103 +72,151 @@ class GMGNAdapter:
                 "decimals": 9
             }
         }
-        
-        # Initialize mock data for test mode
-        if self.test_mode:
-            self._setup_test_data()
     
-    def _setup_test_data(self):
-        """Set up mock data for testing"""
-        from ...tests.test_data.mock_data import generate_mock_gmgn_data
-        
-        # Generate mock GMGN token data
-        self.mock_gmgn_data = generate_mock_gmgn_data()
-        
-        # Set up mock token lists
-        self.mock_token_lists = {
-            "new": [
-                {"symbol": "NEW1", "name": "New Token 1", "address": "NewAddr1"},
-                {"symbol": "NEW2", "name": "New Token 2", "address": "NewAddr2"}
-            ],
-            "completing": [
-                {"symbol": "COMP1", "name": "Completing Token 1", "address": "CompAddr1"},
-                {"symbol": "COMP2", "name": "Completing Token 2", "address": "CompAddr2"}
-            ],
-            "soaring": [
-                {"symbol": "SOAR1", "name": "Soaring Token 1", "address": "SoarAddr1"},
-                {"symbol": "SOAR2", "name": "Soaring Token 2", "address": "SoarAddr2"}
-            ],
-            "bonded": [
-                {"symbol": "BOND1", "name": "Bonded Token 1", "address": "BondAddr1"},
-                {"symbol": "BOND2", "name": "Bonded Token 2", "address": "BondAddr2"}
-            ]
-        }
-    
-    async def fetch_token_mcap_data(self, token_address: str, days: int = 7) -> Dict[str, Any]:
+    async def fetch_token_mcap_data(self, token_address: str, days: int = 7) -> Union[List[Dict[str, Any]], Dict[str, List[Dict[str, Any]]]]:
         """
         Fetch market cap data for a token.
         
         Args:
-            token_address: Token address to fetch data for
-            days: Number of days of data to fetch
+            token_address: Token contract address
+            days: Number of days of data to retrieve
             
         Returns:
-            Dictionary with token market cap data
+            List of market cap data or dictionary mapping token addresses to lists of market cap data
         """
-        if self.test_mode:
-            # Return mock data in test mode
-            return self.mock_gmgn_data
-        
-        # In real mode, use the async function
-        end_time = datetime.now()
-        start_time = end_time - timedelta(days=days)
-        return await fetch_token_mcaps_async(token_address, start_time, end_time)
+        try:
+            # Try to import the standalone implementation
+            from .standalone_mcap import standalone_fetch_token_mcaps
+            
+            # Calculate start timestamp from days
+            start_time = datetime.now() - timedelta(days=days)
+            
+            # Call the function
+            return await standalone_fetch_token_mcaps(token_address, start_time)
+            
+        except (ImportError, AttributeError) as e:
+            logger.error(f"Error importing standalone_fetch_token_mcaps: {e}")
+            raise NotImplementedError("Market cap data API implementation not available")
     
-    def get_token_info(self, token_address: str) -> Dict[str, Any]:
+    def get_token_info_sync(self, contract_address: str) -> Dict[str, Any]:
         """
-        Get information about a token.
+        Get token information synchronously.
         
         Args:
-            token_address: Token address to get info for
+            contract_address: Contract address
             
         Returns:
-            Dictionary with token information
+            Token information
         """
-        if self.test_mode:
-            # Return mock data in test mode
-            return self.mock_gmgn_data["token"]
+        try:
+            # Import the entire module instead of a specific function
+            from . import standalone_token_data
+            
+            # Call the function through the module
+            return standalone_token_data.get_token_info_sync(contract_address)
+            
+        except (ImportError, AttributeError) as e:
+            logger.error(f"Error importing get_token_info_sync: {e}")
+            raise NotImplementedError("API implementation not available in this version")
+    
+    async def get_token_info(self, contract_address: str) -> Dict[str, Any]:
+        """
+        Get token information asynchronously.
         
-        # In real mode, this would call the API
-        raise NotImplementedError("API implementation not available in this version")
+        Args:
+            contract_address: Contract address
+            
+        Returns:
+            Token information
+        """
+        try:
+            # Import the entire module instead of a specific function
+            from . import standalone_token_data
+            
+            # Call the function through the module
+            return await standalone_token_data.get_token_info(contract_address)
+            
+        except (ImportError, AttributeError) as e:
+            logger.error(f"Error importing get_token_info: {e}")
+            # Try falling back to synchronous version
+            return self.get_token_info_sync(contract_address)
     
-    def get_new_tokens(self) -> List[Dict[str, Any]]:
-        """Get list of new tokens."""
-        if self.test_mode:
-            return self.mock_token_lists["new"]
-        raise NotImplementedError("API implementation not available in this version")
+    async def get_new_tokens(self) -> List[Dict[str, Any]]:
+        """
+        Get new tokens from GMGN.
+        
+        Returns:
+            List of new tokens
+        """
+        try:
+            # Import the entire module instead of a specific function
+            from . import standalone_token_data
+            
+            # Call the function through the module
+            return await standalone_token_data.get_new_tokens()
+            
+        except (ImportError, AttributeError) as e:
+            logger.error(f"Error importing get_new_tokens: {e}")
+            raise NotImplementedError("API implementation not available in this version")
     
-    def get_completing_tokens(self) -> List[Dict[str, Any]]:
-        """Get list of completing tokens."""
-        if self.test_mode:
-            return self.mock_token_lists["completing"]
-        raise NotImplementedError("API implementation not available in this version")
+    async def get_completing_tokens(self) -> List[Dict[str, Any]]:
+        """
+        Get completing tokens from GMGN.
+        
+        Returns:
+            List of completing tokens
+        """
+        try:
+            # Import the entire module instead of a specific function
+            from . import standalone_token_data
+            
+            # Call the function through the module
+            return await standalone_token_data.get_completing_tokens()
+            
+        except (ImportError, AttributeError) as e:
+            logger.error(f"Error importing get_completing_tokens: {e}")
+            raise NotImplementedError("API implementation not available in this version")
     
-    def get_soaring_tokens(self) -> List[Dict[str, Any]]:
-        """Get list of soaring tokens."""
-        if self.test_mode:
-            return self.mock_token_lists["soaring"]
-        raise NotImplementedError("API implementation not available in this version")
+    async def get_soaring_tokens(self) -> List[Dict[str, Any]]:
+        """
+        Get soaring tokens from GMGN.
+        
+        Returns:
+            List of soaring tokens
+        """
+        try:
+            # Import the entire module instead of a specific function
+            from . import standalone_token_data
+            
+            # Call the function through the module
+            return await standalone_token_data.get_soaring_tokens()
+            
+        except (ImportError, AttributeError) as e:
+            logger.error(f"Error importing get_soaring_tokens: {e}")
+            raise NotImplementedError("API implementation not available in this version")
     
-    def get_bonded_tokens(self) -> List[Dict[str, Any]]:
-        """Get list of bonded tokens."""
-        if self.test_mode:
-            return self.mock_token_lists["bonded"]
-        raise NotImplementedError("API implementation not available in this version")
+    async def get_bonded_tokens(self) -> List[Dict[str, Any]]:
+        """
+        Get bonded tokens from GMGN.
+        
+        Returns:
+            List of bonded tokens
+        """
+        try:
+            # Import the entire module instead of a specific function
+            from . import standalone_token_data
+            
+            # Call the function through the module
+            return await standalone_token_data.get_bonded_tokens()
+            
+        except (ImportError, AttributeError) as e:
+            logger.error(f"Error importing get_bonded_tokens: {e}")
+            raise NotImplementedError("API implementation not available in this version")
 
 # ---------------------------------------------------------------------------
 # Function to fetch a single batch of market cap data via GMGN API
 # ---------------------------------------------------------------------------
-async def fetch_batch_async(session: aiohttp.ClientSession, token_address: str, batch_start: int, batch_end: int):
+async def fetch_batch_async(session: aiohttp.ClientSession, token_address: str, batch_start: int, batch_end: int) -> List[Dict[str, Any]]:
     start_time_str = datetime.fromtimestamp(batch_start).strftime('%Y-%m-%d %H:%M:%S')
     end_time_str = datetime.fromtimestamp(batch_end).strftime('%Y-%m-%d %H:%M:%S')
     
@@ -196,7 +249,8 @@ async def fetch_batch_async(session: aiohttp.ClientSession, token_address: str, 
             # Delay between retries to avoid rate limiting
             await asyncio.sleep(0.5 + retry * 0.5)
             
-            async with session.get(url, params=params, headers=headers, timeout=30) as response:
+            timeout = aiohttp.ClientTimeout(total=30)
+            async with session.get(url, params=params, headers=headers, timeout=timeout) as response:
                 if response.status == 429:
                     retry_after = int(response.headers.get('Retry-After', retry_delay * 2))
                     logger.warning(f"Rate limited for {token_address}, waiting {retry_after}s before retry {retry+1}/{max_retries}")
@@ -246,7 +300,8 @@ async def fetch_batch_async(session: aiohttp.ClientSession, token_address: str, 
 # ---------------------------------------------------------------------------
 # Function to fetch complete market cap data for a token using batch requests
 # ---------------------------------------------------------------------------
-async def fetch_token_mcaps_async(token_address: str, start_timestamp: datetime, end_timestamp: datetime = None):
+async def _internal_fetch_token_mcaps_async(token_address: str, start_timestamp: datetime, end_timestamp: Optional[datetime] = None) -> List[Dict[str, Any]]:
+    """Internal implementation for fetching token market cap data."""
     start_time_unix = int(start_timestamp.timestamp())
     current_time = int(datetime.now().timestamp())
     end_time_unix = int(end_timestamp.timestamp()) if end_timestamp else current_time
@@ -273,7 +328,7 @@ async def fetch_token_mcaps_async(token_address: str, start_timestamp: datetime,
             if isinstance(result, Exception):
                 logger.error(f"Error in batch fetch for {token_address}: {result}")
                 continue
-            if result:
+            if result and not isinstance(result, BaseException):
                 all_candles.extend(result)
         
         logger.info(f"Successfully fetched {len(all_candles)} candles for {token_address}")
@@ -281,3 +336,73 @@ async def fetch_token_mcaps_async(token_address: str, start_timestamp: datetime,
     # Sort candles by time in ascending order
     all_candles.sort(key=lambda x: int(x.get("time", 0)))
     return all_candles
+
+# ---------------------------------------------------------------------------
+# Public Functions for Market Cap Data
+# ---------------------------------------------------------------------------
+async def fetch_token_mcaps_async(token_address: str, start_timestamp: datetime) -> List[Dict[str, Any]]:
+    """
+    Fetch market cap data for a token.
+    
+    Args:
+        token_address: Token address to fetch data for
+        start_timestamp: Starting timestamp for data
+        
+    Returns:
+        List of market cap candles
+    """
+    from .standalone_mcap import standalone_fetch_token_mcaps
+    
+    # Convert datetime to timestamp if needed
+    if isinstance(start_timestamp, datetime):
+        start_time = int(start_timestamp.timestamp())
+    else:
+        start_time = int(start_timestamp)
+    
+    # Use the standalone implementation
+    result = await standalone_fetch_token_mcaps(token_address, start_time)
+    
+    # Ensure we return a list
+    if isinstance(result, dict):
+        # If we got a dict (multiple tokens), just take the first one
+        if token_address in result:
+            return result[token_address]
+        elif len(result) > 0:
+            return list(result.values())[0]
+        return []
+    
+    # Already a list
+    return result
+
+async def fetch_multiple_token_mcaps_async(token_addresses: List[str], start_timestamp: datetime) -> Dict[str, List[Dict[str, Any]]]:
+    """
+    Fetch market cap data for multiple tokens.
+    
+    Args:
+        token_addresses: List of token addresses to fetch data for
+        start_timestamp: Starting timestamp for data
+        
+    Returns:
+        Dictionary mapping token addresses to lists of market cap candles
+    """
+    from .standalone_mcap import standalone_fetch_token_mcaps
+    
+    # Convert datetime to timestamp if needed
+    if isinstance(start_timestamp, datetime):
+        start_time = int(start_timestamp.timestamp())
+    else:
+        start_time = int(start_timestamp)
+    
+    # Join the addresses with spaces
+    token_str = " ".join(token_addresses)
+    
+    # Use the standalone implementation
+    result = await standalone_fetch_token_mcaps(token_str, start_time)
+    
+    # Ensure we return a dict
+    if not isinstance(result, dict):
+        # If we got a list (single token), convert to dict
+        return {token_addresses[0]: result} if token_addresses else {}
+    
+    # Already a dict
+    return result

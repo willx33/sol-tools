@@ -70,7 +70,7 @@ def create_handlers() -> Dict[str, Callable[[], Any]]:
         'dragon_eth_scan': dragon_handlers.eth_scan_tx,
         'dragon_eth_timestamp': dragon_handlers.eth_timestamp,
         
-        'dragon_gmgn_info': dragon_handlers.gmgn_token_info,
+        'dragon_gmgn_token_data': dragon_handlers.gmgn_token_data,
         'dragon_gmgn_new': dragon_handlers.gmgn_new_tokens,
         'dragon_gmgn_completing': dragon_handlers.gmgn_completing_tokens,
         'dragon_gmgn_soaring': dragon_handlers.gmgn_soaring_tokens,
@@ -251,76 +251,31 @@ def run_tests(args):
     Run tests based on command-line arguments.
     
     Args:
-        args: Command-line arguments
+        args: Command-line arguments with properties:
+            - test_module: Optional name of a specific module to test
+            - verbose: Whether to enable verbose output
     
     Returns:
-        bool: True if all tests passed, False otherwise
+        bool: True if all tests passed (including skipped tests), False if any test failed
     """
     try:
+        # Import the test runner
         from .tests.test_runner import run_all_tests
         
-        # Prepare test options
-        options = {
-            "save_report": args.report,
-            "verbose": args.verbose
-        }
+        # Set debug environment variable if requested
+        if args.verbose:
+            os.environ["DEBUG_TESTS"] = "1"
         
-        # Run specific tests if requested
-        if args.test_module:
-            print(f"Running tests for module: {args.test_module}")
-            
-            # Check if module test function exists
-            module_name = args.test_module.lower()
-            
-            # Try to import the test function dynamically
-            try:
-                if module_name == "file" or module_name == "fileops":
-                    from .tests.test_core.test_file_ops import run_file_ops_tests
-                    return run_file_ops_tests(verbose=args.verbose)
-                elif module_name == "config":
-                    from .tests.test_core.test_config import run_config_tests
-                    return run_config_tests(verbose=args.verbose)
-                elif module_name == "dragon":
-                    from .tests.test_modules.test_dragon import run_dragon_tests
-                    return run_dragon_tests(verbose=args.verbose)
-                elif module_name == "solana":
-                    from .tests.test_modules.test_solana import run_solana_tests
-                    return run_solana_tests(verbose=args.verbose)
-                elif module_name == "sharp":
-                    from .tests.test_modules.test_sharp import run_sharp_tests
-                    return run_sharp_tests(verbose=args.verbose)
-                elif module_name == "dune":
-                    from .tests.test_modules.test_dune import run_dune_tests
-                    return run_dune_tests(verbose=args.verbose)
-                elif module_name == "gmgn":
-                    from .tests.test_modules.test_gmgn import run_gmgn_tests
-                    return run_gmgn_tests(verbose=args.verbose)
-                elif module_name == "ethereum":
-                    from .tests.test_modules.test_ethereum import run_ethereum_tests
-                    return run_ethereum_tests(verbose=args.verbose)
-                elif module_name == "integration" or module_name == "workflow":
-                    from .tests.test_integration.test_workflows import run_workflow_tests
-                    return run_workflow_tests(verbose=args.verbose)
-                else:
-                    print(f"⚠️ Unknown test module: {module_name}")
-                    print("Available modules: file, config, dragon, solana, sharp, dune, gmgn, ethereum, integration")
-                    return False
-            except ImportError as e:
-                print(f"⚠️ Failed to import test module {module_name}: {str(e)}")
-                return False
+        # Run the tests with asyncio
+        exit_code = asyncio.run(run_all_tests(args.test_module))
         
-        # Run all tests
-        return run_all_tests(**options)
+        # Return True if exit_code is 0 (success), False otherwise
+        # Note: exit_code 0 means all tests passed or skipped, 1 means some tests failed
+        return exit_code == 0
     except ImportError as e:
         print(f"⚠️ Failed to import test runner: {str(e)}")
-        
-        # Fall back to legacy test if new framework is not available
-        try:
-            from .utils.test_file_ops import run_all_tests
-            return run_all_tests()
-        except ImportError:
-            print("❌ Could not find any test framework")
-            return False
+        print("❌ Could not find test framework")
+        return False
 
 
 def parse_args():
@@ -352,6 +307,13 @@ def main():
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     )
     
+    # Check if --no-mock is specified
+    no_mock = "--no-mock" in sys.argv
+    if no_mock:
+        # Override test_mode to False when --no-mock is specified
+        args.test_mode = False
+        logging.info("Running with --no-mock flag: Mock implementations will be disabled")
+    
     # Run tests if requested
     if args.test:
         run_tests(args)
@@ -362,6 +324,13 @@ def main():
     
     # Set up application components
     registry, container = setup_application(args)
+    
+    # If --no-mock is specified, make sure we're not using mock implementations
+    if no_mock:
+        from .modules.dragon.dragon_adapter import DRAGON_IMPORTS_SUCCESS
+        if not DRAGON_IMPORTS_SUCCESS:
+            logging.error("Cannot run with --no-mock flag because real Dragon implementation is not available")
+            return 1
     
     # Create the handlers
     handlers = create_handlers()
