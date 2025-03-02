@@ -425,11 +425,11 @@ class CursesMenu:
                 continue
                 
             # Normal display for non-selected items
-            # Add red dot indicator for missing env vars
+            # Add red dot indicator for missing env vars but no arrow for non-selected items
             if option.missing_env_vars:
-                option_text = f"▶ {option.name} 🔴"
+                option_text = f"{option.name} 🔴"
             else:
-                option_text = f"▶ {option.name}"
+                option_text = f"{option.name}"
             
             x = max((width - len(option_text)) // 2, 0)
             
@@ -445,7 +445,7 @@ class CursesMenu:
             option = self.manager.current_menu[self.manager.selected_idx]
             
             # Create highlighted text with padding
-            # Add red dot indicator for missing env vars
+            # Add red dot indicator for missing env vars and arrow ONLY for selected item
             if option.missing_env_vars:
                 option_text = f"▶ {option.name} 🔴"
             else:
