@@ -380,10 +380,18 @@ async def run_all_tests(specific_module: Optional[str] = None) -> int:
     
     # If a specific module is specified, only run tests for that module
     if specific_module:
-        if specific_module in AVAILABLE_MODULES:
-            result = await run_module_tests(specific_module)
-            results[specific_module] = result
-        else:
+        # Handle case-insensitivity by normalizing to uppercase for comparison
+        specific_module_upper = specific_module.upper()
+        module_found = False
+        
+        for module_name in AVAILABLE_MODULES.keys():
+            if module_name.upper() == specific_module_upper:
+                result = await run_module_tests(module_name)
+                results[module_name] = result
+                module_found = True
+                break
+                
+        if not module_found:
             print(f"{STATUS_INDICATORS['failed']} Module '{specific_module}' not found")
             return 1
     else:
