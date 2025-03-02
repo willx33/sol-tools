@@ -17,6 +17,10 @@ from pathlib import Path
 from typing import Dict, List, Any, Optional, Union
 import contextlib
 import io
+import glob
+
+# We don't import pandas at the top level to avoid unnecessary dependencies
+# It will be imported only when needed for Excel export
 
 # EXTREME AND AGGRESSIVE SILENCER
 # This code runs immediately at import time
@@ -470,6 +474,16 @@ async def standalone_test(token_address=None, time_frame='1d'):
     # Verify we're in the correct test context
     test_mode = IN_TEST_MODE
     
+    # Get project root for file paths
+    project_root = Path(__file__).parent.parent.parent.parent.parent  # Navigate up to project root
+    
+    # Define input data directories
+    default_input_dir = project_root / "data" / "input-data" / "api" / "gmgn" / "token-lists"
+    general_input_dir = project_root / "data" / "input-data"
+    
+    # Ensure directories exist
+    os.makedirs(default_input_dir, exist_ok=True)
+    
     # Use default test token if in test mode and no token provided
     if test_mode and not token_address:
         # Use BONK token address for tests
@@ -477,26 +491,187 @@ async def standalone_test(token_address=None, time_frame='1d'):
         if not IN_TEST_MODE:
             print(f"Test mode: Using default test token: {token_addresses}")
     else:
-        # Get token addresses
-        run_as_script = __name__ == "__main__" 
-        if run_as_script and len(sys.argv) >= 2:
-            token_addresses = sys.argv[1]
-        else:
-            # Interactive mode (skip if in test mode)
-            if test_mode:
-                # Use the provided token_address or default to BONK
-                token_addresses = token_address or "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263"
-                if not IN_TEST_MODE:
-                    print(f"Test mode: Using token address: {token_addresses}")
-            else:
+        # Option to use existing input file or input new data
+        if not test_mode and not token_address:
+            token_addresses = None
+            selected_file = None
+            
+            try:
+                import inquirer
+                
+                # Create initial choice options
+                initial_choices = [
+                    "Use existing input data",
+                    "Input new token addresses"
+                ]
+                
+                questions = [
+                    inquirer.List('action',
+                                message="Choose an option:",
+                                choices=initial_choices,
+                                carousel=True)
+                ]
+                
+                # Get initial choice
+                answers = inquirer.prompt(questions)
+                if not answers:
+                    print("Selection cancelled. Exiting.")
+                    return 1
+                    
+                choice = answers['action']
+                
+                # Handle file selection if user chose existing data
+                if choice == "Use existing input data":
+                    # Find all .txt files in the default and general input directories
+                    default_files = list(default_input_dir.glob("*.txt"))
+                    
+                    # Search for .txt files in all subdirectories of general_input_dir
+                    all_input_files = []
+                    for file_path in general_input_dir.glob("**/*.txt"):
+                        # Skip files that are already in default_files or are from default directory
+                        rel_path = file_path.relative_to(general_input_dir)
+                        if str(rel_path).startswith("api/gmgn/token-lists/"):
+                            continue
+                        all_input_files.append(file_path)
+                    
+                    # Combine lists, with default files first
+                    input_files = default_files + all_input_files
+                    
+                    if not input_files:
+                        print("No input files found. You'll need to input token addresses manually.")
+                        token_addresses = input("Enter token address(es) (comma-separated for multiple): ").strip()
+                    else:
+                        # Display available files in a selectable list
+                        file_options = []
+                        for file_path in input_files:
+                            is_default = file_path in default_files
+                            # Use relative path from project root for display
+                            rel_path = file_path.relative_to(project_root)
+                            display_name = f"{rel_path} {'(default)' if is_default else ''}"
+                            file_options.append((display_name, str(file_path)))
+                        
+                        # Use inquirer for file selection
+                        file_questions = [
+                            inquirer.List('file',
+                                        message="Select an input file:",
+                                        choices=[option[0] for option in file_options],
+                                        carousel=True)
+                        ]
+                        
+                        # Get user selection
+                        file_answers = inquirer.prompt(file_questions)
+                        if not file_answers:
+                            print("File selection cancelled. Please input token addresses manually.")
+                            token_addresses = input("Enter token address(es) (comma-separated for multiple): ").strip()
+                        else:
+                            selected_display = file_answers['file']
+                            # Find the matching file path
+                            for display, path in file_options:
+                                if display == selected_display:
+                                    selected_file = path
+                                    break
+                            
+                            if selected_file:
+                                print(f"\nSelected file: {selected_display}")
+                                try:
+                                    selected_file_path = Path(selected_file)
+                                    with open(selected_file_path, 'r') as f:
+                                        token_addresses = " ".join([line.strip() for line in f if line.strip()])
+                                    
+                                    if not token_addresses:
+                                        print("Selected file is empty. Please input token addresses manually.")
+                                        token_addresses = input("Enter token address(es) (comma-separated for multiple): ").strip()
+                                    else:
+                                        tokens_count = len(token_addresses.split())
+                                        print(f"Loaded {tokens_count} token address{'es' if tokens_count > 1 else ''} from file.")
+                                except Exception as e:
+                                    print(f"Error reading file: {e}")
+                                    print("Please input token addresses manually.")
+                                    token_addresses = input("Enter token address(es) (comma-separated for multiple): ").strip()
+                            else:
+                                print("Error with file selection. Please input token addresses manually.")
+                                token_addresses = input("Enter token address(es) (comma-separated for multiple): ").strip()
+                else:
+                    # User chose to input new addresses
+                    token_addresses = input("Enter token address(es) (comma-separated for multiple): ").strip()
+                
+                # Check if we have token addresses
+                if not token_addresses:
+                    print("No token address provided. Exiting.")
+                    return 1
+                    
+                # Convert comma-separated to space-separated for consistency 
+                if "," in token_addresses:
+                    token_addresses = " ".join([addr.strip() for addr in token_addresses.split(",")])
+                
+                # Ask if user wants to save the input for future use (only for manually entered addresses)
+                if choice == "Input new token addresses" or selected_file is None:
+                    save_input = input("\nSave these token addresses for future use? (y/n): ").lower().strip()
+                    if save_input in ['y', 'yes']:
+                        # Create filename with proper format
+                        today = datetime.now()
+                        tokens_list = token_addresses.split()
+                        first_token = tokens_list[0]
+                        token_identifier = f"{first_token[:3]}{first_token[-3:]}"
+                        num_tokens = len(tokens_list)
+                        
+                        # Create filename in the required format
+                        filename = f"{today.hour:02d}-{today.day:02d}-{today.month:02d}-{today.year}-{token_identifier}-{num_tokens}.txt"
+                        file_path = default_input_dir / filename
+                        
+                        try:
+                            with open(file_path, 'w') as f:
+                                for token in tokens_list:
+                                    f.write(f"{token}\n")
+                            print(f"\n✅ Token addresses saved to: {file_path}")
+                        except Exception as e:
+                            print(f"\n❌ Error saving token addresses: {e}")
+                        
+            except ImportError:
+                print("\nError: The inquirer package is required for arrow key navigation.")
+                print("Please install it with: pip install inquirer")
+                print("Falling back to basic input method.")
+                
+                print("\nChoose an option:")
+                print("1. Use existing input data")
+                print("2. Input new token addresses")
+                
+                choice = input("\nEnter choice (1-2): ").strip()
+                
+                if choice == "1":
+                    print("This feature requires the inquirer package for full functionality.")
+                    print("Please install it with: pip install inquirer")
+                    
+                # Fall back to simple input
                 token_addresses = input("Enter token address(es) (comma-separated for multiple): ").strip()
                 if not token_addresses:
                     print("No token address provided. Exiting.")
                     return 1
-                
-                # Convert comma-separated to space-separated for consistency 
+                    
+                # Convert comma-separated to space-separated for consistency
                 if "," in token_addresses:
                     token_addresses = " ".join([addr.strip() for addr in token_addresses.split(",")])
+        else:
+            # Get token addresses from command line arguments or token_address parameter
+            run_as_script = __name__ == "__main__" 
+            if run_as_script and len(sys.argv) >= 2:
+                token_addresses = sys.argv[1]
+            else:
+                # Interactive mode (skip if in test mode)
+                if test_mode:
+                    # Use the provided token_address or default to BONK
+                    token_addresses = token_address or "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263"
+                    if not IN_TEST_MODE:
+                        print(f"Test mode: Using token address: {token_addresses}")
+                else:
+                    token_addresses = input("Enter token address(es) (comma-separated for multiple): ").strip()
+                    if not token_addresses:
+                        print("No token address provided. Exiting.")
+                        return 1
+                    
+                    # Convert comma-separated to space-separated for consistency 
+                    if "," in token_addresses:
+                        token_addresses = " ".join([addr.strip() for addr in token_addresses.split(",")])
     
     # Set default start date based on time_frame parameter
     if isinstance(time_frame, str) and time_frame.lower().endswith('d') and time_frame[:-1].isdigit():
@@ -598,6 +773,53 @@ async def standalone_test(token_address=None, time_frame='1d'):
     if not test_mode:
         save_response = input("\nSave data for all tokens? (y/n): ").lower().strip()
         save_file = save_response in ['y', 'yes']
+    
+    # File format selection - simple approach to avoid recursion issues
+    file_format = "json"  # Default format
+    if save_file and not test_mode:
+        try:
+            import inquirer
+            
+            format_options = [
+                "JSON (.json)",
+                "Text (.txt)",
+                "Excel (.xlsx)"
+            ]
+            
+            questions = [
+                inquirer.List('format',
+                            message="Select file format:",
+                            choices=format_options,
+                            carousel=True)
+            ]
+            
+            # Get user selection
+            answers = inquirer.prompt(questions)
+            if answers:
+                selected_format = answers['format']
+                if selected_format == "Text (.txt)":
+                    file_format = "txt"
+                elif selected_format == "Excel (.xlsx)":
+                    file_format = "xlsx"
+                else:
+                    file_format = "json"
+            # If cancelled, default to json
+        except ImportError:
+            # Only as a fallback if inquirer is not available
+            print("\nSelect file format:")
+            print("1. JSON (.json)")
+            print("2. Text (.txt)")
+            print("3. Excel (.xlsx)")
+            
+            format_choice = input("\nSelect format (1-3): ").strip()
+            if format_choice == "2":
+                file_format = "txt"
+            elif format_choice == "3":
+                file_format = "xlsx"
+            else:
+                file_format = "json"  # Default to JSON for any invalid input
+        
+        print(f"Selected format: .{file_format}")
 
     # Handle multiple tokens
     if isinstance(result, dict):
@@ -634,18 +856,66 @@ async def standalone_test(token_address=None, time_frame='1d'):
         # Save all data to a single file
         if save_file:
             try:
-                # Create filename with timestamp
+                # Create new filename format: 'Day-Month-Year-First 3 and last 3 characters of the first token used-Number of token outputs total combined'
+                today = datetime.now()
+                first_token = list(result.keys())[0]
+                token_identifier = f"{first_token[:3]}{first_token[-3:]}"
+                num_tokens = len(result)
+                
                 # Add "test_" prefix in test mode
                 prefix = "test_" if test_mode else ""
-                tokens_string = "_".join(list(result.keys())[:3])  # Use first 3 tokens in filename
-                if len(result) > 3:
-                    tokens_string += f"_and_{len(result)-3}_more"
-                    
-                combined_file = output_dir / f"{prefix}mcap_combined_{tokens_string}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+                filename = f"{prefix}{today.day:02d}-{today.month:02d}-{today.year}-{token_identifier}-{num_tokens}"
                 
-                # Save the file with proper error handling
-                with open(combined_file, 'w') as f:
-                    json.dump(summary_data, f, indent=2)
+                if file_format == "json":
+                    combined_file = output_dir / f"{filename}.json"
+                    # Save the file with proper error handling
+                    with open(combined_file, 'w') as f:
+                        json.dump(summary_data, f, indent=2)
+                elif file_format == "txt":
+                    combined_file = output_dir / f"{filename}.txt"
+                    # Save as formatted text
+                    with open(combined_file, 'w') as f:
+                        f.write(json.dumps(summary_data, indent=2))
+                elif file_format == "xlsx":
+                    combined_file = output_dir / f"{filename}.xlsx"
+                    try:
+                        # Import pandas only when needed
+                        import pandas as pd
+                        from openpyxl import Workbook
+                        
+                        # Create Excel workbook with a sheet for each token
+                        with pd.ExcelWriter(combined_file) as writer:
+                            for token, candles in result.items():
+                                # Convert to pandas DataFrame
+                                df = pd.DataFrame(candles)
+                                # Format the sheet name (Excel sheet names limited to 31 chars)
+                                sheet_name = token[:15] if len(token) > 15 else token
+                                # Write to Excel
+                                df.to_excel(writer, sheet_name=sheet_name, index=False)
+                    except ImportError:
+                        print("\n⚠️ pandas or openpyxl module not found. Installing required packages...")
+                        try:
+                            import subprocess
+                            subprocess.check_call([sys.executable, "-m", "pip", "install", "pandas", "openpyxl"])
+                            
+                            # Try again after installing
+                            import pandas as pd
+                            from openpyxl import Workbook
+                            
+                            # Create Excel workbook with a sheet for each token
+                            with pd.ExcelWriter(combined_file) as writer:
+                                for token, candles in result.items():
+                                    # Convert to pandas DataFrame
+                                    df = pd.DataFrame(candles)
+                                    # Format the sheet name (Excel sheet names limited to 31 chars)
+                                    sheet_name = token[:15] if len(token) > 15 else token
+                                    # Write to Excel
+                                    df.to_excel(writer, sheet_name=sheet_name, index=False)
+                        except:
+                            print("\n❌ Failed to install required packages for Excel export. Falling back to JSON.")
+                            combined_file = output_dir / f"{filename}.json"
+                            with open(combined_file, 'w') as f:
+                                json.dump(summary_data, f, indent=2)
                 
                 # Verify file was saved successfully
                 if os.path.exists(combined_file) and os.path.getsize(combined_file) > 0:
@@ -703,14 +973,52 @@ async def standalone_test(token_address=None, time_frame='1d'):
             # Save file using the common prompt
             if save_file:
                 try:
-                    # Create filename with token and timestamp
+                    # Create new filename format: 'Day-Month-Year-First 3 and last 3 characters of the token-1'
+                    today = datetime.now()
+                    token_identifier = f"{token_addresses[:3]}{token_addresses[-3:]}"
+                    
                     # Add "test_" prefix in test mode
                     prefix = "test_" if test_mode else ""
-                    token_file = output_dir / f"{prefix}mcap_{token_addresses}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+                    filename = f"{prefix}{today.day:02d}-{today.month:02d}-{today.year}-{token_identifier}-1"
                     
-                    # Save the file with proper error handling
-                    with open(token_file, 'w') as f:
-                        json.dump(candles, f, indent=2)
+                    if file_format == "json":
+                        token_file = output_dir / f"{filename}.json"
+                        # Save the file with proper error handling
+                        with open(token_file, 'w') as f:
+                            json.dump(candles, f, indent=2)
+                    elif file_format == "txt":
+                        token_file = output_dir / f"{filename}.txt"
+                        # Save as formatted text
+                        with open(token_file, 'w') as f:
+                            f.write(json.dumps(candles, indent=2))
+                    elif file_format == "xlsx":
+                        token_file = output_dir / f"{filename}.xlsx"
+                        try:
+                            # Import pandas only when needed
+                            import pandas as pd
+                            
+                            # Convert to pandas DataFrame
+                            df = pd.DataFrame(candles)
+                            # Save to Excel
+                            df.to_excel(token_file, index=False)
+                        except ImportError:
+                            print("\n⚠️ pandas or openpyxl module not found. Installing required packages...")
+                            try:
+                                import subprocess
+                                subprocess.check_call([sys.executable, "-m", "pip", "install", "pandas", "openpyxl"])
+                                
+                                # Try again after installing
+                                import pandas as pd
+                                
+                                # Convert to pandas DataFrame
+                                df = pd.DataFrame(candles)
+                                # Save to Excel
+                                df.to_excel(token_file, index=False)
+                            except:
+                                print("\n❌ Failed to install required packages for Excel export. Falling back to JSON.")
+                                token_file = output_dir / f"{filename}.json"
+                                with open(token_file, 'w') as f:
+                                    json.dump(candles, f, indent=2)
                     
                     # Verify file was saved successfully
                     if os.path.exists(token_file) and os.path.getsize(token_file) > 0:
