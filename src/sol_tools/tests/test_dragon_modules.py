@@ -39,17 +39,11 @@ from src.sol_tools.modules.dragon.dragon_adapter import (
 )
 from src.sol_tools.core.config import CACHE_DIR, INPUT_DATA_DIR, OUTPUT_DATA_DIR
 
-
-# Test data - using the addresses provided
-TEST_CONTRACT_ADDRESSES = [
-    "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263",  # First token address
-    "63LfDmNb3MQ8mw9MtZ2To9bEA2M71kZUUGq5tiJxcqj9"   # Second token address
-]
-
-TEST_WALLET_ADDRESSES = [
-    "DfMxre4cKmvogbLrPigxmibVTTQDuzjdXojWzjCXXhzj",  # First wallet address
-    "4hSXPtxZgXFpo6Vxq9yqxNjcBoqWN3VoaPJWonUtupzD"   # Second wallet address
-]
+# Import test data from the central test data file
+from src.sol_tools.tests.test_data.real_test_data import (
+    REAL_TOKEN_ADDRESSES as TEST_CONTRACT_ADDRESSES,
+    REAL_WALLET_ADDRESSES as TEST_WALLET_ADDRESSES
+)
 
 # Test directory setup
 TEST_DIR = CACHE_DIR / "tests" / "dragon"
@@ -115,24 +109,13 @@ class DragonTestSuite:
         try:
             # Initialize with test directories
             self.adapter = DragonAdapter(
-                ethereum_input_dir=TEST_DATA_DIR / "input" / "ethereum",
-                solana_input_dir=TEST_DATA_DIR / "input" / "solana",
-                proxies_dir=TEST_DATA_DIR / "input" / "proxies",
-                ethereum_output_dirs={
-                    "wallet_analysis": TEST_DATA_DIR / "output" / "ethereum" / "wallet_analysis",
-                    "token_analysis": TEST_DATA_DIR / "output" / "ethereum" / "token_analysis"
-                },
-                solana_output_dirs={
-                    "wallet_analysis": TEST_DATA_DIR / "output" / "solana" / "wallet_analysis",
-                    "token_analysis": TEST_DATA_DIR / "output" / "solana" / "token_analysis"
-                },
-                token_info_dir=TEST_DATA_DIR / "token_info",
-                max_threads=5,
+                data_dir=TEST_DATA_DIR,
                 test_mode=True,  # Use test mode
+                verbose=False
             )
             
-            # Initialize the adapter
-            success = await self.adapter.initialize()
+            # Initialize the adapter (note: initialize() is synchronous, not async)
+            success = self.adapter.initialize()
             if success:
                 logger.info("Dragon adapter initialized successfully")
                 
@@ -152,7 +135,8 @@ class DragonTestSuite:
     async def cleanup_adapter(self):
         """Clean up the Dragon adapter."""
         if self.adapter:
-            await self.adapter.cleanup()
+            # Note: cleanup() is synchronous, not async
+            self.adapter.cleanup()
             logger.info("Dragon adapter cleaned up")
             
     def log_test_result(self, test_name: str, success: bool, error=None, skipped=False):
