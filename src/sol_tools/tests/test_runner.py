@@ -64,13 +64,13 @@ MENU_STRUCTURE = {
         "Token Watcher": ["Solana"],
         "Wallet Watcher": ["Solana"],
         "TG Data Extractor": ["Telegram", "Solana"],
-        "Bundle Tracker - Dragon": ["Dragon", "Solana"],
-        "Wallet Profiler - Dragon": ["Dragon", "Solana"],
-        "Top Trader Finder - Dragon": ["Dragon", "Solana"],
-        "TX Scanner - Dragon": ["Dragon", "Solana"],
-        "Copycat Finder - Dragon": ["Dragon", "Solana"],
-        "Whale Tracker - Dragon": ["Dragon", "Solana"],
-        "Early Investor Finder - Dragon": ["Dragon", "Solana"]
+        "Bundle Tracker 🐉": ["Dragon", "Solana"],
+        "Wallet Profiler 🐉": ["Dragon", "Solana"],
+        "Top Trader Finder 🐉": ["Dragon", "Solana"],
+        "TX Scanner 🐉": ["Dragon", "Solana"],
+        "Copycat Finder 🐉": ["Dragon", "Solana"],
+        "Whale Tracker 🐉": ["Dragon", "Solana"],
+        "Early Investor Finder 🐉": ["Dragon", "Solana"]
     },
     "Sharp Tools": {
         "Wallet Analyzer": ["Sharp"],
@@ -83,10 +83,10 @@ MENU_STRUCTURE = {
         "GMGN Tools": ["GMGN"]
     },
     "Eth Tools": {
-        "Wallet Profiler - Dragon": ["Dragon"],
-        "Top Trader Finder - Dragon": ["Dragon"],
-        "TX Scanner - Dragon": ["Dragon"],
-        "Time-Based TX Finder - Dragon": ["Dragon"]
+        "Wallet Profiler 🐉": ["Dragon"],
+        "Top Trader Finder 🐉": ["Dragon"],
+        "TX Scanner 🐉": ["Dragon"],
+        "Time-Based TX Finder 🐉": ["Dragon"]
     }
 }
 

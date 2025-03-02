@@ -125,25 +125,25 @@ def create_main_menu(handlers: Dict[str, Callable]) -> List[MenuOption]:
                   missing_env_vars=telegram_env_vars_missing),
         
         # Dragon Solana tools
-        MenuOption("Bundle Tracker - Dragon", handlers.get('solana_dragon_bundle'),
+        MenuOption("Bundle Tracker 🐉", handlers.get('solana_dragon_bundle'),
                   description="Finds bundled buys. Input: contract address.",
                   missing_env_vars=solana_env_vars_missing or dragon_env_vars_missing),
-        MenuOption("Wallet Profiler - Dragon", handlers.get('solana_dragon_wallet'),
+        MenuOption("Wallet Profiler 🐉", handlers.get('solana_dragon_wallet'),
                   description="PnL analysis from wallet list. Uses data/input-data/solana/wallet-lists/.",
                   missing_env_vars=solana_env_vars_missing or dragon_env_vars_missing),
-        MenuOption("Top Trader Finder - Dragon", handlers.get('solana_dragon_traders'),
+        MenuOption("Top Trader Finder 🐉", handlers.get('solana_dragon_traders'),
                   description="Finds best traders by token. Output: data/output-data/solana/dragon/top-traders/.",
                   missing_env_vars=solana_env_vars_missing or dragon_env_vars_missing),
-        MenuOption("TX Scanner - Dragon", handlers.get('solana_dragon_scan'),
+        MenuOption("TX Scanner 🐉", handlers.get('solana_dragon_scan'),
                   description="Gets all token transactions. Output: data/output-data/solana/dragon/transaction-data/.",
                   missing_env_vars=solana_env_vars_missing or dragon_env_vars_missing),
-        MenuOption("Copycat Finder - Dragon", handlers.get('solana_dragon_copy'),
+        MenuOption("Copycat Finder 🐉", handlers.get('solana_dragon_copy'),
                   description="Finds copycat wallets. Input: wallet address to analyze.",
                   missing_env_vars=solana_env_vars_missing or dragon_env_vars_missing),
-        MenuOption("Whale Tracker - Dragon", handlers.get('solana_dragon_holders'),
+        MenuOption("Whale Tracker 🐉", handlers.get('solana_dragon_holders'),
                   description="Lists major token holders. Output: data/output-data/solana/dragon/top-holders/.",
                   missing_env_vars=solana_env_vars_missing or dragon_env_vars_missing),
-        MenuOption("Early Investor Finder - Dragon", handlers.get('solana_dragon_buyers'),
+        MenuOption("Early Investor Finder 🐉", handlers.get('solana_dragon_buyers'),
                   description="Finds first buyers for token. Input: contract address.",
                   missing_env_vars=solana_env_vars_missing or dragon_env_vars_missing),
         
@@ -262,25 +262,18 @@ def create_main_menu(handlers: Dict[str, Callable]) -> List[MenuOption]:
     
     # Ethereum Tools
     eth_menu = [
-        MenuOption("Wallet Profiler - Dragon", handlers.get('dragon_eth_wallet'),
+        MenuOption("Wallet Profiler 🐉", handlers.get('dragon_eth_wallet'),
                   description="Analyzes ETH wallet performance. Uses data/input-data/ethereum/wallet-lists/.",
                   missing_env_vars=ethereum_env_vars_missing or dragon_env_vars_missing),
-        MenuOption("Top Trader Finder - Dragon", handlers.get('dragon_eth_traders'),
+        MenuOption("Top Trader Finder 🐉", handlers.get('dragon_eth_traders'),
                   description="Finds ETH top traders. Output: data/output-data/ethereum/dragon/top-traders/.",
                   missing_env_vars=ethereum_env_vars_missing or dragon_env_vars_missing),
-        MenuOption("TX Scanner - Dragon", handlers.get('dragon_eth_scan'),
+        MenuOption("TX Scanner 🐉", handlers.get('dragon_eth_scan'),
                   description="Gets ETH token transactions. Output: data/output-data/ethereum/dragon/wallet-analysis/.",
                   missing_env_vars=ethereum_env_vars_missing or dragon_env_vars_missing),
-        MenuOption("Time-Based TX Finder - Dragon", handlers.get('dragon_eth_timestamp'),
+        MenuOption("Time-Based TX Finder 🐉", handlers.get('dragon_eth_timestamp'),
                   description="Finds ETH txs by time range. Output: data/output-data/ethereum/dragon/early-buyers/.",
                   missing_env_vars=ethereum_env_vars_missing or dragon_env_vars_missing),
-        MenuOption("Back", None)
-    ]
-    
-    # Tron Tools (placeholder for future expansion)
-    tron_menu = [
-        MenuOption("Coming Soon", None,
-                  description="Tron blockchain tools - currently in development."),
         MenuOption("Back", None)
     ]
     
@@ -309,8 +302,6 @@ def create_main_menu(handlers: Dict[str, Callable]) -> List[MenuOption]:
         MenuOption("Eth Tools", children=eth_menu,
                   description="Ethereum blockchain analysis and wallet tracking.",
                   missing_env_vars=False),
-        MenuOption("Tron Tools", children=tron_menu,
-                  description="Tron blockchain tools (coming soon)."),
         MenuOption("Settings", children=utils_menu,
                   description="Configuration, cache, and API settings."),
         MenuOption("Exit", handlers.get('exit_app'),
