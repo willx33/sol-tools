@@ -69,6 +69,8 @@ sol-tools --clean
 
 Sol-Tools includes a comprehensive testing framework to ensure all components function correctly. The tests use mock data to simulate APIs and blockchain interactions without making actual external calls.
 
+For a detailed explanation of our testing philosophy and framework, see the [comprehensive testing documentation](src/sol_tools/tests/README.md).
+
 ### Running Tests
 
 ```bash
