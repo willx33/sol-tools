@@ -19,7 +19,8 @@ from ...core.base_adapter import BaseAdapter, ConfigError, OperationError, Resou
 import tls_client
 import httpx
 try:
-    from fake_useragent import UserAgent
+    # Import the UserAgent class directly
+    from fake_useragent import UserAgent  # type: ignore
 except:
     # Define a fallback if fake_useragent fails
     class UserAgent:
@@ -126,17 +127,18 @@ class GMGN_Client:
     def randomize_session(self):
         """Create a new TLS session with randomized browser fingerprint."""
         try:
-            # Choose only modern browsers for better compatibility
+            # Use a list of identifiers directly instead of accessing tls_client.settings
             identifier_options = [
-                br for br in tls_client.settings.ClientIdentifiers.__args__
-                if br.startswith(('chrome', 'safari', 'firefox', 'opera'))
+                "chrome103", "chrome104", "chrome105", "chrome106", 
+                "safari15_3", "safari15_5", "firefox102", "firefox104", 
+                "opera89", "opera90"
             ]
             
             # Select random browser
             self.identifier = random.choice(identifier_options)
             self.session = tls_client.Session(
                 random_tls_extension_order=True,
-                client_identifier=self.identifier
+                client_identifier=self.identifier  # type: ignore
             )
             
             # Use a fixed user agent to avoid errors with fake_useragent
@@ -213,19 +215,21 @@ class GMGN_Client:
     
     def configure_proxy(self):
         """Configure session with the next proxy if enabled."""
-        if not self.use_proxies:
-            self.session.proxies = None
+        if not self.use_proxies or self.session is None:
+            if hasattr(self, 'session') and self.session is not None:
+                self.session.proxies = {}
             return
             
         proxy = self.get_next_proxy()
-        if not proxy:
-            self.session.proxies = None
+        if not proxy or self.session is None:
+            if hasattr(self, 'session') and self.session is not None:
+                self.session.proxies = {}
             return
             
         if isinstance(proxy, dict):
             self.session.proxies = {
-                'http': proxy.get('http'),
-                'https': proxy.get('https')
+                'http': proxy.get('http', ''),
+                'https': proxy.get('https', '')
             }
         elif isinstance(proxy, str):
             self.session.proxies = {
@@ -236,59 +240,64 @@ class GMGN_Client:
     def getTokenInfo(self, contract_addr: str) -> Dict[str, Any]:
         """Get token information from GMGN."""
         if not contract_addr:
-            error_response = {"error": "No contract address provided"}
-            save_dragon_log("gmgn", contract_addr, {}, "No contract address provided")
-            return error_response
+            return {}
         
-        # Refresh session and proxy
-        self.randomize_session()
-        self.configure_proxy()
-        
-        url = f"{self.BASE_URL}/v1/tokens/sol/{contract_addr}"
-        
+        response = None
         try:
-            resp = self.session.get(url, headers=self.headers)
+            # Determine network based on address format
+            network = "sol" if len(contract_addr) in [43, 44] else "eth"
             
-            if resp.status_code != 200:
-                error_msg = f"HTTP {resp.status_code}"
-                error_response = {"error": error_msg, "body": resp.text}
-                save_dragon_log("gmgn", contract_addr, error_response, error_msg)
-                return error_response
+            # Use the correct endpoint for the network type
+            url = f"https://api.geckoterminal.com/api/v2/networks/{network}/tokens/{contract_addr}"
             
-            data = resp.json()
+            logger.debug(f"Fetching token info from: {url}")
             
-            price = float(data.get('price', 0))
-            mcap = float(data.get('market_cap', 0))
-            liq = float(data.get('liquidity', 0))
-            vol24 = float(data.get('volume_24h', 0))
-            p24 = float(data.get('price_24h', 0))
-            holders = int(data.get('holder_count', 0))
-            sym = data.get('symbol', '')
-            nm = data.get('name', '')
-            
-            price_change_24h = 0.0
-            if p24 > 0:
-                price_change_24h = ((price - p24) / p24) * 100
-            
-            response_data = {
-                "priceUsd": price,
-                "marketCap": mcap,
-                "liquidityUsd": liq,
-                "volume24h": vol24,
-                "priceChange24h": price_change_24h,
-                "holders": holders,
-                "symbol": sym,
-                "name": nm
-            }
-            
-            save_dragon_log("gmgn", contract_addr, response_data)
-            return response_data
-            
+            for attempt in range(self.max_retries):
+                logger.debug(f"Attempt {attempt+1}/{self.max_retries} to get token info for {contract_addr}")
+                
+                try:
+                    # Use httpx for requests with timeout if tls_client fails
+                    if self.session:
+                        # Don't pass timeout parameter to session.get
+                        response = self.session.get(url)
+                    else:
+                        # Fall back to httpx with timeout
+                        response = httpx.get(url, timeout=5)
+                    
+                    if response and response.status_code == 200:
+                        data = response.json().get("data", {}) or {}
+                        logger.debug(f"Successfully fetched token info for {contract_addr}")
+                        return data
+                    
+                    # Handle 404 errors specially (token not found)
+                    if response and response.status_code == 404:
+                        logger.info(f"Token not found (404) for {contract_addr} - this is normal for new tokens")
+                        # Only retry once for 404 errors
+                        if attempt > 0:
+                            return {"error": "Token not found in GeckoTerminal API", "code": 404}
+                    
+                except Exception as req_error:
+                    logger.warning(f"Request error on attempt {attempt+1}: {req_error}")
+                    response = None
+                    
+                # If we get here, the request failed
+                error_msg = f"Status: {response.status_code}" if response else "No response"
+                logger.warning(f"Failed to get token info: {error_msg} (attempt {attempt+1}/{self.max_retries})")
+                
+                time.sleep(random.uniform(1.0, 2.0))  # Backoff on failure
+                self.randomize_session()  # Try with new session
+                
+            # If we've exhausted all retries
+            if response and response.status_code == 404:
+                error_resp = {"error": "Token not found in GeckoTerminal API", "code": 404}
+                logger.info(f"Token {contract_addr} not found after {self.max_retries} attempts (404)")
+                return error_resp
+                
+            logger.error(f"All {self.max_retries} attempts to get token info failed for {contract_addr}")
+            return {"error": f"Failed after {self.max_retries} attempts", "code": response.status_code if response else 0}
         except Exception as e:
-            error_msg = str(e)
-            error_response = {"error": error_msg}
-            save_dragon_log("gmgn", contract_addr, {}, error_msg)
-            return error_response
+            logger.error(f"Error getting token info for {contract_addr}: {e}")
+            return {"error": str(e), "code": 0}
     
     def _get_token_url(self, token_type: str, site_choice: str = "Pump.Fun") -> str:
         """Get the appropriate URL for different token queries."""
@@ -335,7 +344,13 @@ class GMGN_Client:
         
         for attempt in range(max_attempts):
             try:
-                response = self.session.get(url, headers=self.headers)
+                response = None
+                if self.session is not None:
+                    response = self.session.get(url, headers=self.headers)
+                else:
+                    logger.warning("Session is None, cannot make request")
+                    time.sleep(random.uniform(1, 2))
+                    continue
                 
                 if response.status_code != 200:
                     logger.warning(f"Error {response.status_code} fetching {token_type} tokens, attempt {attempt+1}/{max_attempts}")
@@ -346,7 +361,14 @@ class GMGN_Client:
                 
                 # Process based on token type
                 if token_type == "bonded":
-                    items = data.get('data', {}).get('pairs', [])
+                    # Safely extract the pairs list with proper null checks
+                    items = []
+                    if data is not None and isinstance(data, dict):
+                        data_dict = data.get('data')
+                        if data_dict is not None and isinstance(data_dict, dict):
+                            pairs = data_dict.get('pairs')
+                            if pairs is not None and isinstance(pairs, list):
+                                items = pairs
                     for item in items:
                         if not item.get('base_address'):
                             continue
@@ -404,46 +426,79 @@ class TokenDataHandler:
         """Initialize the token data handler."""
         self.gmgn = GMGN_Client(use_proxies=use_proxies)
         self.max_retries = 5
-        self.timeout_sec = 10.0
+        self.timeout_sec = 30.0
+        self.logger = logging.getLogger(__name__)
     
     def _get_token_info_sync(self, address: str) -> Dict[str, Any]:
         """Get token info with retries and timeout."""
+        if not hasattr(self, 'gmgn') or self.gmgn is None:
+            self.logger.error("GMGN client not initialized in TokenDataHandler")
+            return {"error": "GMGN client not initialized properly"}
+            
         start_time = time.time()
         fail_count = 0
         last_err = None
+        
+        # More detailed logging
+        self.logger.info(f"Fetching token data for {address} with {self.max_retries} retries and {self.timeout_sec}s timeout")
         
         while fail_count < self.max_retries:
             elapsed = time.time() - start_time
             if elapsed > self.timeout_sec:
                 error_msg = f"Could not get data from GMGN in {self.timeout_sec}s"
+                self.logger.error(error_msg)
                 save_dragon_log("gmgn", address, {}, error_msg)
                 return {"error": error_msg}
             
             try:
+                self.logger.debug(f"Attempt {fail_count+1}/{self.max_retries} for token {address}")
+                # Wait a moment between retries to avoid overwhelming the API
+                if fail_count > 0:
+                    time.sleep(random.uniform(0.5, 1.5))
+                
                 token_data = self.gmgn.getTokenInfo(address)
+                
+                # Check for 404 error - these are expected for new tokens
+                if token_data.get("code") == 404:
+                    self.logger.info(f"Token {address} not found in GeckoTerminal - this is normal for new tokens")
+                    
+                    # Only do a single retry for 404s - no point in retrying more
+                    if fail_count > 0:
+                        # We already retried once, return the not found error
+                        return {
+                            "error": token_data.get("error", "Token not found"),
+                            "code": 404,
+                            "not_found": True
+                        }
+                    
+                    fail_count += 1
+                    continue
                 
                 if not token_data:
                     last_err = "Empty response"
+                    self.logger.warning(f"Empty response for token {address}")
                     fail_count += 1
-                    time.sleep(random.uniform(0.5, 1.0))
                     continue
                     
                 if "error" in token_data:
-                    last_err = token_data
+                    last_err = token_data.get("error", "Unknown error")
+                    self.logger.warning(f"Error in token data for {address}: {last_err}")
                     fail_count += 1
-                    time.sleep(random.uniform(0.5, 1.0))
                     continue
                 
+                # Success
+                self.logger.info(f"Successfully fetched token data for {address}")
                 return token_data
                 
             except Exception as e:
                 last_err = str(e)
+                self.logger.warning(f"Exception during token data fetch for {address}: {last_err}")
                 fail_count += 1
-                time.sleep(random.uniform(0.5, 1.3))
         
         error_response = {
             "error": f"GMGN getTokenInfo failed after {fail_count} retries: {last_err}"
         }
+        self.logger.error(error_response["error"])
         save_dragon_log("gmgn", address, error_response)
         return error_response
     
@@ -457,27 +512,67 @@ class TokenDataHandler:
         return result
 
 
-class DragonAdapter(BaseAdapter):
-    """Adapter for Dragon functionality within Sol Tools."""
+# Helper to safely check and create directories
+def _ensure_dir_exists(dir_path):
+    """Ensure directory exists, creating it if necessary."""
+    # Simply return if the path is None
+    if dir_path is None:
+        return
     
-    def __init__(
-        self,
-        test_mode: bool = False,
-        data_dir: Optional[Path] = None,
-        config_override: Optional[Dict[str, Any]] = None,
-        verbose: bool = False
-    ):
-        """
-        Initialize the Dragon adapter.
+    # Check if path exists and create if needed
+    if hasattr(dir_path, 'exists') and not dir_path.exists():
+        if hasattr(dir_path, 'mkdir'):
+            dir_path.mkdir(parents=True, exist_ok=True)
+
+
+class DragonAdapter(BaseAdapter):
+    """
+    DragonDEX adapter for interacting with the Dragon ecosystem.
+    
+    Attributes:
+        ethereum_input_dir: Directory for Ethereum input files
+        solana_input_dir: Directory for Solana input files
+        proxies_dir: Directory for proxy configuration
+        ethereum_output_dirs: Directories for Ethereum output
+        solana_output_dirs: Directories for Solana output
+        token_info_dir: Directory for token information
+        max_threads: Maximum number of threads for concurrent operations
+        bundle: Bundle configuration
+        solana_wallets: Solana wallet configurations
+    """
+    
+    def __init__(self, 
+                 ethereum_input_dir: Optional[Path] = None,
+                 solana_input_dir: Optional[Path] = None,
+                 proxies_dir: Optional[Path] = None,
+                 ethereum_output_dirs: Optional[Dict[str, Path]] = None,
+                 solana_output_dirs: Optional[Dict[str, Path]] = None,
+                 token_info_dir: Optional[Path] = None,
+                 max_threads: int = 10,
+                 bundle: Any = None,
+                 solana_wallets: Optional[List[Dict[str, Any]]] = None,
+                 **kwargs):
+        """Initialize DragonAdapter."""
+        super().__init__(**kwargs)
         
-        Args:
-            test_mode: If True, operate in test mode without external API calls
-            data_dir: Custom data directory path (optional)
-            config_override: Override default configuration values (optional)
-            verbose: Enable verbose logging if True
-        """
-        # Initialize the base adapter
-        super().__init__(test_mode, data_dir, config_override, verbose)
+        # Initialize directory paths
+        self.ethereum_input_dir = ethereum_input_dir
+        self.solana_input_dir = solana_input_dir
+        self.proxies_dir = proxies_dir
+        self.ethereum_output_dirs = ethereum_output_dirs or {}
+        self.solana_output_dirs = solana_output_dirs or {}
+        self.token_info_dir = token_info_dir
+        self.max_threads = max_threads
+        self.bundle = bundle
+        self.solana_wallets = solana_wallets or []
+        
+        # Ensure directories exist
+        for dir_path in [ethereum_input_dir, solana_input_dir, proxies_dir, token_info_dir]:
+            _ensure_dir_exists(dir_path)
+            
+        for dirs in [ethereum_output_dirs or {}, solana_output_dirs or {}]:
+            for dir_path in dirs.values():
+                _ensure_dir_exists(dir_path)
         
         # Set up internal state
         self.dragon_available = False
@@ -568,9 +663,10 @@ class DragonAdapter(BaseAdapter):
         """
         # Check that data directories are accessible
         for dir_path in [self.wallets_dir, self.export_dir]:
-            if not dir_path.exists():
+            if dir_path is not None and not dir_path.exists():
                 try:
-                    dir_path.mkdir(parents=True, exist_ok=True)
+                    if dir_path is not None:
+                        dir_path.mkdir(parents=True, exist_ok=True)
                 except Exception as e:
                     self.logger.error(f"Failed to create directory {dir_path}: {e}")
                     return False
@@ -611,9 +707,12 @@ class DragonAdapter(BaseAdapter):
             _wallet_threadpool.shutdown(wait=False)
         
         # Close GMGN client if it exists
-        if self.gmgn_client and hasattr(self.gmgn_client, 'client') and self.gmgn_client.client:
+        if self.gmgn_client is not None and hasattr(self.gmgn_client, 'session') and getattr(self.gmgn_client, 'session', None) is not None:
             try:
-                self.gmgn_client.client.close()
+                # Using getattr with default to avoid attribute error
+                session = getattr(self.gmgn_client, 'session', None)
+                if session is not None and hasattr(session, 'close'):
+                    session.close()
             except Exception as e:
                 self.logger.warning(f"Error closing GMGN client: {e}")
                 
@@ -670,18 +769,26 @@ class DragonAdapter(BaseAdapter):
         """
         try:
             # Make sure specific input directories exist
-            self.ethereum_input_dir.mkdir(parents=True, exist_ok=True)
-            self.solana_input_dir.mkdir(parents=True, exist_ok=True)
-            self.proxies_dir.mkdir(parents=True, exist_ok=True)
+            if self.ethereum_input_dir is not None:
+                self.ethereum_input_dir.mkdir(parents=True, exist_ok=True)
+            if self.solana_input_dir is not None:
+                self.solana_input_dir.mkdir(parents=True, exist_ok=True)
+            if self.proxies_dir is not None:
+                self.proxies_dir.mkdir(parents=True, exist_ok=True)
             
             # Create the output directories
-            for dir_path in self.ethereum_output_dirs.values():
-                dir_path.mkdir(parents=True, exist_ok=True)
+            if self.ethereum_output_dirs is not None:
+                for key, dir_path in self.ethereum_output_dirs.items():
+                    if dir_path is not None:
+                        dir_path.mkdir(parents=True, exist_ok=True)
                 
-            for dir_path in self.solana_output_dirs.values():
-                dir_path.mkdir(parents=True, exist_ok=True)
+            if self.solana_output_dirs is not None:
+                for key, dir_path in self.solana_output_dirs.items():
+                    if dir_path is not None:
+                        dir_path.mkdir(parents=True, exist_ok=True)
                 
-            self.token_info_dir.mkdir(parents=True, exist_ok=True)
+            if self.token_info_dir is not None:
+                self.token_info_dir.mkdir(parents=True, exist_ok=True)
             
             # Add a log message to help with debugging
             logger.info("Successfully created all Dragon directories")
@@ -699,16 +806,18 @@ class DragonAdapter(BaseAdapter):
         Returns:
             True if proxies are available, False otherwise
         """
-        proxy_path = self.proxies_dir / "proxies.txt"
+        proxy_path = None
+        if self.proxies_dir is not None:
+            proxy_path = self.proxies_dir / "proxies.txt"
         
-        if not proxy_path.exists() and create_if_missing:
+        if proxy_path is not None and not proxy_path.exists() and create_if_missing:
             # Create the directory and empty file
             from ...utils.common import ensure_file_dir
             ensure_file_dir(proxy_path)
             proxy_path.touch()
                 
         # Check if the file has content
-        if proxy_path.exists():
+        if proxy_path is not None and proxy_path.exists():
             with open(proxy_path, 'r') as f:
                 proxies = [line.strip() for line in f if line.strip()]
             return len(proxies) > 0
@@ -774,34 +883,58 @@ class DragonAdapter(BaseAdapter):
         Returns:
             Token information
         """
-        return await self.token_data_handler.get_token_data(contract_address)
+        if self.token_data_handler is None:
+            return {}
+        return await self.token_data_handler.get_token_data(contract_address)  # type: ignore
     
     def get_token_info_sync(self, contract_address: str) -> Dict[str, Any]:
         """
         Synchronous version of get_token_info.
         
         Args:
-            contract_address: Token contract address
+            contract_address: Contract address to get information for
             
         Returns:
             Token information
         """
-        return self.token_data_handler._get_token_info_sync(contract_address)
+        if not hasattr(self, 'token_data_handler') or self.token_data_handler is None:
+            self.logger.warning("Token data handler is not initialized")
+            return {}
+            
+        try:
+            # Check if we have a method to get token info
+            token_data_handler = getattr(self, 'token_data_handler', None)
+            if token_data_handler is not None and hasattr(token_data_handler, '_get_token_info_sync'):
+                return token_data_handler._get_token_info_sync(contract_address)
+            else:
+                self.logger.error("No _get_token_info_sync method available")
+                return {}
+        except Exception as e:
+            self.logger.error(f"Error getting token info for {contract_address}: {e}")
+            return {}
     
     def get_new_tokens(self) -> List[Dict[str, Any]]:
         """Get new token listings."""
+        if self.gmgn_client is None:
+            return []
         return self.gmgn_client.getNewTokens()
     
     def get_completing_tokens(self) -> List[Dict[str, Any]]:
         """Get completing token listings."""
+        if self.gmgn_client is None:
+            return []
         return self.gmgn_client.getCompletingTokens()
     
     def get_soaring_tokens(self) -> List[Dict[str, Any]]:
         """Get soaring token listings."""
+        if self.gmgn_client is None:
+            return []
         return self.gmgn_client.getSoaringTokens()
     
     def get_bonded_tokens(self) -> List[Dict[str, Any]]:
         """Get bonded token listings."""
+        if self.gmgn_client is None:
+            return []
         return self.gmgn_client.getBondedTokens()
     
     # Solana implementations
@@ -963,47 +1096,43 @@ class DragonAdapter(BaseAdapter):
             output_dir = str(self.solana_output_dirs["wallet_analysis"])
             os.makedirs(output_dir, exist_ok=True)
             
-            # Call Dragon's BulkWalletChecker
-            checker = self.BulkWalletChecker(
-                wallets=valid_wallets,
-                skip_wallets=skip_wallets,
-                output_dir=output_dir,
-                proxies=use_proxies,
-                threads=threads
-            )
+            # Handle BulkWalletChecker by importing the necessary module
+            from ...wallet.bulk_wallet_checker import BulkWalletChecker
             
-            # Run the checker (returns status code and files created)
-            checker_result = checker.run()
-            
-            # Process the result
-            if checker_result[0] != 0:
-                logger.error(f"BulkWalletChecker failed with status code {checker_result[0]}")
-                return {"success": False, "error": f"BulkWalletChecker failed with status code {checker_result[0]}"}
-            
-            # Load and process the wallet data from files
-            wallet_data = {}
-            for wallet in valid_wallets:
-                wallet_file = Path(output_dir) / f"{wallet}.json"
-                if wallet_file.exists():
-                    try:
-                        with open(wallet_file, "r") as f:
-                            wallet_data[wallet] = json.load(f)
-                    except json.JSONDecodeError:
-                        logger.warning(f"Error decoding wallet data file for {wallet}")
-                else:
-                    logger.warning(f"No data file found for wallet {wallet}")
-            
-            # Create the result dictionary
-            result = {
-                "success": True,
-                "wallets_processed": len(valid_wallets),
-                "wallet_data": wallet_data,
-                "files_created": checker_result[1] if len(checker_result) > 1 else [],
-                "timestamp": int(time.time()),
-                "duration": round(time.time() - start_time, 2)
-            }
-            
-            return result
+            try:
+                checker = BulkWalletChecker(
+                    wallets=valid_wallets,
+                    skip_wallets=skip_wallets,
+                    output_dir=output_dir,
+                    proxies=use_proxies,
+                    threads=threads
+                )
+                
+                # Run the checker (returns status code and files created)
+                result = checker.run()
+                
+                if result["status"] != "success":
+                    raise Exception(result.get("message", "Unknown error in BulkWalletChecker"))
+                    
+                # Process results and return in our adapter's format
+                return {
+                    "status": "success",
+                    "wallets_processed": len(valid_wallets),
+                    "results_location": output_dir,
+                    "metadata": result.get("data", {}),
+                    "timestamp": int(time.time()),
+                    "duration": round(time.time() - start_time, 2)
+                }
+                
+            except Exception as e:
+                logger.error(f"Error in BulkWalletChecker: {e}")
+                return {
+                    "status": "error",
+                    "message": str(e),
+                    "wallets_processed": 0,
+                    "timestamp": int(time.time()),
+                    "duration": round(time.time() - start_time, 2)
+                }
             
         except Exception as e:
             logger.exception(f"Error in solana_wallet_checker: {str(e)}")
@@ -1015,7 +1144,7 @@ class DragonAdapter(BaseAdapter):
                 "duration": round(time.time() - start_time, 2)
             }
 
-    def import_solana_wallets(self, filename: str, directory: str = None) -> bool:
+    def import_solana_wallets(self, filename: str, directory: Optional[str] = None) -> bool:
         """
         Import Solana wallets from a file.
         
@@ -1026,6 +1155,8 @@ class DragonAdapter(BaseAdapter):
         Returns:
             True if successful, False otherwise
         """
+        dir_path = directory or ""  # Use empty string if None
+
         if self.test_mode:
             # In test mode, just pretend we imported the wallets
             try:
@@ -1061,7 +1192,7 @@ class DragonAdapter(BaseAdapter):
             logger.exception(f"Error in import_solana_wallets: {str(e)}")
             return False
     
-    def import_ethereum_wallets(self, filename: str, directory: str = None) -> bool:
+    def import_ethereum_wallets(self, filename: str, directory: Optional[str] = None) -> bool:
         """
         Import Ethereum wallets from a file.
         
@@ -1072,6 +1203,8 @@ class DragonAdapter(BaseAdapter):
         Returns:
             True if successful, False otherwise
         """
+        dir_path = directory or ""  # Use empty string if None
+
         if self.test_mode:
             # In test mode, just pretend we imported the wallets
             try:

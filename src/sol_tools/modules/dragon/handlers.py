@@ -7,6 +7,7 @@ import asyncio
 import inquirer
 from typing import List, Dict, Any, Optional
 from datetime import datetime
+import logging
 
 from ...utils.common import clear_terminal, ensure_data_dir, check_proxy_file
 from ...core.config import check_env_vars
@@ -15,7 +16,19 @@ from .dragon_adapter import DragonAdapter
 # Initialize the dragon adapter for all handlers
 def _get_dragon_adapter():
     """Get initialized Dragon adapter."""
-    return DragonAdapter()
+    try:
+        adapter = DragonAdapter()
+        # Initialize the adapter asynchronously
+        asyncio.run(adapter.initialize())
+        if adapter.token_data_handler is None:
+            logger = logging.getLogger(__name__)
+            logger.warning("token_data_handler is None after initialization")
+        return adapter
+    except Exception as e:
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error initializing Dragon adapter: {e}")
+        # Still return the adapter so caller can handle the error gracefully
+        return DragonAdapter()
 
 
 def solana_bundle_checker():
@@ -125,7 +138,8 @@ def solana_wallet_checker():
             default='default'
         )
     ]
-    file_option = inquirer.prompt(questions)["file_option"]
+    answers = inquirer.prompt(questions)
+    file_option = answers.get("file_option", "default") if answers else "default"
     
     # Handle file selection based on user choice
     if file_option == 'default':
@@ -150,7 +164,8 @@ def solana_wallet_checker():
                 default=str(default_wallets_file)
             )
         ]
-        wallets_path = inquirer.prompt(manual_questions)["wallets_file"]
+        answers = inquirer.prompt(manual_questions)
+        wallets_path = answers.get("wallets_file", str(default_wallets_file)) if answers else str(default_wallets_file)
     
     # Get other options
     option_questions = [
@@ -170,7 +185,7 @@ def solana_wallet_checker():
             default=False
         )
     ]
-    answers = inquirer.prompt(option_questions)
+    answers = inquirer.prompt(option_questions) or {}
     
     # Load wallets from file
     try:
@@ -188,25 +203,26 @@ def solana_wallet_checker():
     
     # Parse thread count
     try:
-        threads = int(answers["threads"])
+        threads = int(answers.get("threads", "40"))
     except ValueError:
         print("⚠️ Invalid thread count, using default 40")
         threads = 40
     
     # Check proxies if requested
-    if answers["use_proxies"]:
+    use_proxies = answers.get("use_proxies", False)
+    if use_proxies:
         proxies = check_proxy_file()
         if not proxies:
             print("⚠️ No proxies found. Continuing without proxies.")
-            answers["use_proxies"] = False
+            use_proxies = False
     
     # Use the adapter
     adapter = _get_dragon_adapter()
     result = adapter.solana_wallet_checker(
         wallets, 
         threads=threads,
-        skip_wallets=answers["skip_wallets"],
-        use_proxies=answers["use_proxies"]
+        skip_wallets=answers.get("skip_wallets", False),
+        use_proxies=use_proxies
     )
     
     if result.get("success", False):
@@ -325,27 +341,36 @@ def gmgn_new_tokens():
     print("Fetching new tokens from GMGN...")
     
     # Use the adapter to get new tokens
-    adapter = _get_dragon_adapter()
-    tokens = adapter.get_new_tokens()
-    
-    # Process and save the results
-    if tokens:
-        output_file = output_dir / f"new_tokens_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-        with open(output_file, 'w') as f:
-            json.dump(tokens, f, indent=2)
+    try:
+        adapter = _get_dragon_adapter()
         
-        # Display results
-        print(f"\n✅ Successfully fetched {len(tokens)} new tokens")
-        print(f"Results saved to {output_file}")
+        if adapter.gmgn_client is None:
+            print("\n❌ Error: GMGN client not properly initialized")
+            input("\nPress Enter to continue...")
+            return
+            
+        tokens = adapter.get_new_tokens()
         
-        # Show sample of the data
-        print("\nSample token data:")
-        for token in tokens[:3]:
-            print(f"- {token.get('name', 'Unknown')} ({token.get('symbol', 'Unknown')}): {token.get('address', 'Unknown')}")
-        if len(tokens) > 3:
-            print(f"...and {len(tokens) - 3} more tokens")
-    else:
-        print("⚠️ No new tokens found")
+        # Process and save the results
+        if tokens:
+            output_file = output_dir / f"new_tokens_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+            with open(output_file, 'w') as f:
+                json.dump(tokens, f, indent=2)
+            
+            # Display results
+            print(f"\n✅ Successfully fetched {len(tokens)} new tokens")
+            print(f"Results saved to {output_file}")
+            
+            # Show sample of the data
+            print("\nSample token data:")
+            for token in tokens[:3]:
+                print(f"- {token.get('name', 'Unknown')} ({token.get('symbol', 'Unknown')}): {token.get('address', 'Unknown')}")
+            if len(tokens) > 3:
+                print(f"...and {len(tokens) - 3} more tokens")
+        else:
+            print("⚠️ No new tokens found")
+    except Exception as e:
+        print(f"\n❌ Handler error: {e}")
     
     input("\nPress Enter to continue...")
 
@@ -361,27 +386,36 @@ def gmgn_completing_tokens():
     print("Fetching completing tokens from GMGN...")
     
     # Use the adapter to get completing tokens
-    adapter = _get_dragon_adapter()
-    tokens = adapter.get_completing_tokens()
-    
-    # Process and save the results
-    if tokens:
-        output_file = output_dir / f"completing_tokens_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-        with open(output_file, 'w') as f:
-            json.dump(tokens, f, indent=2)
+    try:
+        adapter = _get_dragon_adapter()
         
-        # Display results
-        print(f"\n✅ Successfully fetched {len(tokens)} completing tokens")
-        print(f"Results saved to {output_file}")
+        if adapter.gmgn_client is None:
+            print("\n❌ Error: GMGN client not properly initialized")
+            input("\nPress Enter to continue...")
+            return
+            
+        tokens = adapter.get_completing_tokens()
         
-        # Show sample of the data
-        print("\nSample token data:")
-        for token in tokens[:3]:
-            print(f"- {token.get('name', 'Unknown')} ({token.get('symbol', 'Unknown')}): {token.get('address', 'Unknown')}")
-        if len(tokens) > 3:
-            print(f"...and {len(tokens) - 3} more tokens")
-    else:
-        print("⚠️ No completing tokens found")
+        # Process and save the results
+        if tokens:
+            output_file = output_dir / f"completing_tokens_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+            with open(output_file, 'w') as f:
+                json.dump(tokens, f, indent=2)
+            
+            # Display results
+            print(f"\n✅ Successfully fetched {len(tokens)} completing tokens")
+            print(f"Results saved to {output_file}")
+            
+            # Show sample of the data
+            print("\nSample token data:")
+            for token in tokens[:3]:
+                print(f"- {token.get('name', 'Unknown')} ({token.get('symbol', 'Unknown')}): {token.get('address', 'Unknown')}")
+            if len(tokens) > 3:
+                print(f"...and {len(tokens) - 3} more tokens")
+        else:
+            print("⚠️ No completing tokens found")
+    except Exception as e:
+        print(f"\n❌ Handler error: {e}")
     
     input("\nPress Enter to continue...")
 
@@ -397,27 +431,36 @@ def gmgn_soaring_tokens():
     print("Fetching soaring tokens from GMGN...")
     
     # Use the adapter to get soaring tokens
-    adapter = _get_dragon_adapter()
-    tokens = adapter.get_soaring_tokens()
-    
-    # Process and save the results
-    if tokens:
-        output_file = output_dir / f"soaring_tokens_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-        with open(output_file, 'w') as f:
-            json.dump(tokens, f, indent=2)
+    try:
+        adapter = _get_dragon_adapter()
         
-        # Display results
-        print(f"\n✅ Successfully fetched {len(tokens)} soaring tokens")
-        print(f"Results saved to {output_file}")
+        if adapter.gmgn_client is None:
+            print("\n❌ Error: GMGN client not properly initialized")
+            input("\nPress Enter to continue...")
+            return
+            
+        tokens = adapter.get_soaring_tokens()
         
-        # Show sample of the data
-        print("\nSample token data:")
-        for token in tokens[:3]:
-            print(f"- {token.get('name', 'Unknown')} ({token.get('symbol', 'Unknown')}): {token.get('address', 'Unknown')}")
-        if len(tokens) > 3:
-            print(f"...and {len(tokens) - 3} more tokens")
-    else:
-        print("⚠️ No soaring tokens found")
+        # Process and save the results
+        if tokens:
+            output_file = output_dir / f"soaring_tokens_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+            with open(output_file, 'w') as f:
+                json.dump(tokens, f, indent=2)
+            
+            # Display results
+            print(f"\n✅ Successfully fetched {len(tokens)} soaring tokens")
+            print(f"Results saved to {output_file}")
+            
+            # Show sample of the data
+            print("\nSample token data:")
+            for token in tokens[:3]:
+                print(f"- {token.get('name', 'Unknown')} ({token.get('symbol', 'Unknown')}): {token.get('address', 'Unknown')}")
+            if len(tokens) > 3:
+                print(f"...and {len(tokens) - 3} more tokens")
+        else:
+            print("⚠️ No soaring tokens found")
+    except Exception as e:
+        print(f"\n❌ Handler error: {e}")
     
     input("\nPress Enter to continue...")
 
@@ -433,27 +476,36 @@ def gmgn_bonded_tokens():
     print("Fetching bonded tokens from GMGN...")
     
     # Use the adapter to get bonded tokens
-    adapter = _get_dragon_adapter()
-    tokens = adapter.get_bonded_tokens()
-    
-    # Process and save the results
-    if tokens:
-        output_file = output_dir / f"bonded_tokens_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-        with open(output_file, 'w') as f:
-            json.dump(tokens, f, indent=2)
+    try:
+        adapter = _get_dragon_adapter()
         
-        # Display results
-        print(f"\n✅ Successfully fetched {len(tokens)} bonded tokens")
-        print(f"Results saved to {output_file}")
+        if adapter.gmgn_client is None:
+            print("\n❌ Error: GMGN client not properly initialized")
+            input("\nPress Enter to continue...")
+            return
+            
+        tokens = adapter.get_bonded_tokens()
         
-        # Show sample of the data
-        print("\nSample token data:")
-        for token in tokens[:3]:
-            print(f"- {token.get('name', 'Unknown')} ({token.get('symbol', 'Unknown')}): {token.get('address', 'Unknown')}")
-        if len(tokens) > 3:
-            print(f"...and {len(tokens) - 3} more tokens")
-    else:
-        print("⚠️ No bonded tokens found")
+        # Process and save the results
+        if tokens:
+            output_file = output_dir / f"bonded_tokens_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+            with open(output_file, 'w') as f:
+                json.dump(tokens, f, indent=2)
+            
+            # Display results
+            print(f"\n✅ Successfully fetched {len(tokens)} bonded tokens")
+            print(f"Results saved to {output_file}")
+            
+            # Show sample of the data
+            print("\nSample token data:")
+            for token in tokens[:3]:
+                print(f"- {token.get('name', 'Unknown')} ({token.get('symbol', 'Unknown')}): {token.get('address', 'Unknown')}")
+            if len(tokens) > 3:
+                print(f"...and {len(tokens) - 3} more tokens")
+        else:
+            print("⚠️ No bonded tokens found")
+    except Exception as e:
+        print(f"\n❌ Handler error: {e}")
     
     input("\nPress Enter to continue...")
 
@@ -478,33 +530,51 @@ def gmgn_token_info():
         )
     ]
     answers = prompt_user(questions)
+    if not answers:
+        print("\n❌ No input provided")
+        input("\nPress Enter to continue...")
+        return
+        
     contract_address = answers["contract_address"]
     
     # Use the adapter to get token information
-    adapter = _get_dragon_adapter()
-    token_info = adapter.get_token_info_sync(contract_address)
-    
-    if "error" not in token_info:
-        # Save token info to file
-        output_file = output_dir / f"token_info_{contract_address}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-        with open(output_file, 'w') as f:
-            json.dump(token_info, f, indent=2)
+    try:
+        adapter = _get_dragon_adapter()
         
-        # Display results
-        print("\n✅ Successfully fetched token information")
-        print(f"Results saved to {output_file}")
+        if adapter.token_data_handler is None:
+            print("\n❌ Error: Token data handler not properly initialized")
+            input("\nPress Enter to continue...")
+            return
+            
+        # Print a message to show that we're fetching data
+        print(f"\nFetching token information for {contract_address}...")
+            
+        token_info = adapter.get_token_info_sync(contract_address)
         
-        # Format and display token info
-        print("\n📊 Token Information:")
-        print(f"Name:             {token_info.get('name', 'Unknown')}")
-        print(f"Symbol:           {token_info.get('symbol', 'Unknown')}")
-        print(f"Price:            ${token_info.get('priceUsd', 0):.8f}")
-        print(f"Market Cap:       ${token_info.get('marketCap', 0):,.2f}")
-        print(f"Liquidity:        ${token_info.get('liquidityUsd', 0):,.2f}")
-        print(f"24h Volume:       ${token_info.get('volume24h', 0):,.2f}")
-        print(f"24h Change:       {token_info.get('priceChange24h', 0):.2f}%")
-        print(f"Holders:          {token_info.get('holders', 0):,}")
-    else:
-        print(f"\n❌ Failed to get token information: {token_info.get('error', 'Unknown error')}")
+        if token_info and "error" not in token_info:
+            # Save token info to file
+            output_file = output_dir / f"token_info_{contract_address}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+            with open(output_file, 'w') as f:
+                json.dump(token_info, f, indent=2)
+            
+            # Display results
+            print("\n✅ Successfully fetched token information")
+            print(f"Results saved to {output_file}")
+            
+            # Format and display token info
+            print("\n📊 Token Information:")
+            print(f"Name:             {token_info.get('name', 'Unknown')}")
+            print(f"Symbol:           {token_info.get('symbol', 'Unknown')}")
+            print(f"Price:            ${token_info.get('priceUsd', 0):.8f}")
+            print(f"Market Cap:       ${token_info.get('marketCap', 0):,.2f}")
+            print(f"Liquidity:        ${token_info.get('liquidityUsd', 0):,.2f}")
+            print(f"24h Volume:       ${token_info.get('volume24h', 0):,.2f}")
+            print(f"24h Change:       {token_info.get('priceChange24h', 0):.2f}%")
+            print(f"Holders:          {token_info.get('holders', 0):,}")
+        else:
+            error_msg = token_info.get('error', 'Unknown error') if token_info else "No data returned"
+            print(f"\n❌ Failed to get token information: {error_msg}")
+    except Exception as e:
+        print(f"\n❌ Handler error: {e}")
     
     input("\nPress Enter to continue...")

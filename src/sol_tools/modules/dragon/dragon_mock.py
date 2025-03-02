@@ -135,4 +135,73 @@ class GMGN(BaseMockComponent):
     """Mock Dragon GMGN component."""
     
     def __init__(self, *args, **kwargs):
-        super().__init__("GMGN", *args, **kwargs) 
+        super().__init__("GMGN", *args, **kwargs)
+        
+    def getTokenInfo(self, token_address):
+        """Mock implementation of getTokenInfo that mimics GeckoTerminal API response."""
+        logger.debug(f"Mock Dragon GMGN.getTokenInfo called for {token_address}")
+        
+        # Return mock token data in GeckoTerminal format
+        return {
+            "id": f"token-{token_address}",
+            "type": "token",
+            "attributes": {
+                "name": "Mock Token",
+                "symbol": "MOCK",
+                "address": token_address,
+                "coingecko_coin_id": "mock-token",
+                "decimals": 9,
+                "total_supply": "1000000000000000",
+                "price_usd": "0.12345678",
+                "fdv_usd": "1000000",
+                "total_reserve_in_usd": "500000", 
+                "volume_usd": {
+                    "h24": "250000"
+                },
+                "price_change_percentage": {
+                    "h24": "5.25"
+                }
+            },
+            "relationships": {
+                "top_pools": {
+                    "data": [
+                        {
+                            "id": "pool-mock-1",
+                            "type": "pool"
+                        }
+                    ]
+                }
+            }
+        }
+    
+    def getNewTokens(self):
+        """Mock implementation of getNewTokens."""
+        logger.debug("Mock Dragon GMGN.getNewTokens called")
+        return [
+            {"name": "New Token 1", "symbol": "NEW1", "address": "MockAddr1", "price": 0.1},
+            {"name": "New Token 2", "symbol": "NEW2", "address": "MockAddr2", "price": 0.2}
+        ]
+        
+    def getCompletingTokens(self):
+        """Mock implementation of getCompletingTokens."""
+        logger.debug("Mock Dragon GMGN.getCompletingTokens called")
+        return [
+            {"name": "Completing Token 1", "symbol": "COMP1", "address": "MockAddr3", "price": 0.3},
+            {"name": "Completing Token 2", "symbol": "COMP2", "address": "MockAddr4", "price": 0.4}
+        ]
+        
+    def getSoaringTokens(self):
+        """Mock implementation of getSoaringTokens."""
+        logger.debug("Mock Dragon GMGN.getSoaringTokens called")
+        return [
+            {"name": "Soaring Token 1", "symbol": "SOAR1", "address": "MockAddr5", "price": 0.5},
+            {"name": "Soaring Token 2", "symbol": "SOAR2", "address": "MockAddr6", "price": 0.6}
+        ]
+    
+    def getBondedTokens(self):
+        """Mock implementation of getBondedTokens."""
+        logger.debug("Mock Dragon GMGN.getBondedTokens called")
+        return [
+            {"name": "Bonded Token 1", "symbol": "BOND1", "address": "MockAddr7", "price": 0.7},
+            {"name": "Bonded Token 2", "symbol": "BOND2", "address": "MockAddr8", "price": 0.8}
+        ] 
