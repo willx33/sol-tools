@@ -258,7 +258,8 @@ async def fetch_batch_async(session: aiohttp.ClientSession, token_address: str,
                 
                 candles = data.get("data", [])
                 if not IN_TEST_MODE:
-                    print(f"✅ Fetched {len(candles)} candles for {token_address} from {start_time_str} to {end_time_str}")
+                    # Simplified output - just show a progress indicator with emoji and candle count
+                    print(f"✅ Fetched {len(candles)} candles for {token_address}")
                 logger.info(f"Fetched {len(candles)} candles for {token_address} from {start_time_str} to {end_time_str}")
                 
                 # Debug: Show first candle structure

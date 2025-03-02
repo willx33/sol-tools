@@ -45,18 +45,17 @@ class MenuManager:
         except Exception as e:
             print(f"Handler error: {e}")
 
-    def push_menu(self, options: List[MenuOption]):
-        """Push new menu options onto the stack, saving current state to history."""
-        # Debug logging to track recursion
-        print(f"Pushing menu with {len(options)} options")
-        if self.current_menu:
-            print(f"Current menu has {len(self.current_menu)} options")
-            # Check for circular reference
-            if self.current_menu is options:
-                print("ERROR: Circular reference detected - trying to push the same menu")
-                return
+    def push_menu(self, menu_options: List[MenuOption]):
+        """Push a new menu onto the stack."""
+        # Safety check for history length to prevent infinite recursion
+        if len(self.history) >= 10:
+            print("WARNING: Menu history limit reached. Possible infinite recursion detected.")
+            return
+            
+        # Store current menu and selected index in history
+        if self.current_menu is not None:
             self.history.append((self.current_menu, self.selected_idx))
-        self.current_menu = options
+        self.current_menu = menu_options
         self.selected_idx = 0
 
     def pop_menu(self) -> bool:
@@ -544,19 +543,26 @@ class CursesMenu:
 
 
 class InquirerMenu:
-    """
-    An inquirer-based menu interface with arrow key navigation.
-    """
+    """Fallback menu system using inquirer library."""
+    
     def __init__(self, handlers: Dict[str, Callable]):
         self.manager = MenuManager()
         self.main_menu = create_main_menu(handlers)
         self.manager.push_menu(self.main_menu)
         self.running = True
+        self.recursion_counter = 0  # Add counter to track recursion
     
     def run(self):
         """Run the inquirer-based menu system."""
         while self.running:
             try:
+                # Recursion safeguard
+                self.recursion_counter += 1
+                if self.recursion_counter > 20:
+                    print("ERROR: Excessive recursion detected in menu system. Exiting to prevent stack overflow.")
+                    self.running = False
+                    return
+                    
                 # Create choices list from current menu
                 choices = []
                 for option in self.manager.current_menu:
