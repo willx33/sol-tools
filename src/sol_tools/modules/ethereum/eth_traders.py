@@ -19,6 +19,11 @@ from typing import Dict, List, Any, Optional, Union, Tuple
 
 import aiohttp
 import httpx
+import tls_client
+import cloudscraper
+from fake_useragent import UserAgent
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from collections import defaultdict
 
 # Setup logging
 logger = logging.getLogger(__name__)
@@ -445,53 +450,124 @@ def run_top_traders_in_thread(token_address: str, days: int, output_dir: Path, t
             print("No result returned from thread")
         return False
 
+ua = UserAgent(os='linux', browsers=['firefox'])
+
 class EthTopTraders:
     """Ethereum Top Traders class."""
     
-    def __init__(self, token_address=None, days=30, output_dir=None, test_mode=False):
-        """
-        Initialize the Ethereum Top Traders finder.
-        
-        Args:
-            token_address: Ethereum token contract address
-            days: Number of days to analyze
-            output_dir: Directory to save results
-            test_mode: Run in test mode (no output)
-        """
-        self.token_address = token_address
-        self.days = days
-        
-        # Handle output directory with proper defaults
-        if output_dir is None:
-            self.output_dir = Config.get_output_dir()
-        else:
-            self.output_dir = Path(output_dir)
-            
-        self.test_mode = test_mode
+    def __init__(self):
+        self.sendRequest = tls_client.Session(client_identifier='chrome_103')
+        self.cloudScraper = cloudscraper.create_scraper()
+        self.shorten = lambda s: f"{s[:4]}...{s[-5:]}" if len(s) >= 9 else s
+        self.allData = {}
+        self.allAddresses = set()
+        self.addressFrequency = defaultdict(int)
+        self.totalTraders = 0
     
-    def run(self) -> bool:
+    def fetchTopTraders(self, contractAddress: str):
+        url = f"https://gmgn.ai/defi/quotation/v1/tokens/top_traders/eth/{contractAddress}?orderby=profit&direction=desc"
+        retries = 3
+        headers = {
+            "User-Agent": ua.random
+        }
+        
+        for attempt in range(retries):
+            try:
+                response = self.sendRequest.get(url, headers=headers)
+                data = response.json().get('data', None)
+                if data:
+                    return data
+            except Exception:
+                print(f"[🐲] Error fetching data on attempt, trying backup...")
+            finally:
+                try:
+                    response = self.cloudScraper.get(url, headers=headers)
+                    data = response.json().get('data', None)
+                    if data:
+                        return data
+                except Exception:
+                    print(f"[🐲] Backup scraper failed, retrying...")
+                    
+            time.sleep(1)
+        
+        print(f"[🐲] Failed to fetch data after {retries} attempts.")
+        return []
+
+    def topTraderData(self, contractAddresses, threads, output_dir: Optional[Path] = None):
+        with ThreadPoolExecutor(max_workers=threads) as executor:
+            futures = {executor.submit(self.fetchTopTraders, address): address for address in contractAddresses}
+            
+            for future in as_completed(futures):
+                contract_address = futures[future]
+                response = future.result()
+
+                self.allData[contract_address] = {}
+                self.totalTraders += len(response)
+
+                for top_trader in response:
+                    multiplier_value = top_trader['profit_change']
+                    
+                    if multiplier_value:
+                        address = top_trader['address']
+                        self.addressFrequency[address] += 1 
+                        self.allAddresses.add(address)
+                        
+                        bought_usd = f"${top_trader['total_cost']:,.2f}"
+                        total_profit = f"${top_trader['realized_profit']:,.2f}"
+                        unrealized_profit = f"${top_trader['unrealized_profit']:,.2f}"
+                        multiplier = f"{multiplier_value:.2f}x"
+                        buys = f"{top_trader['buy_tx_count_cur']}"
+                        sells = f"{top_trader['sell_tx_count_cur']}"
+                        
+                        self.allData[address] = {
+                            "boughtUsd": bought_usd,
+                            "totalProfit": total_profit,
+                            "unrealizedProfit": unrealized_profit,
+                            "multiplier": multiplier,
+                            "buys": buys,
+                            "sells": sells
+                        }
+        
+        repeatedAddresses = [address for address, count in self.addressFrequency.items() if count > 1]
+        
+        identifier = self.shorten(list(self.allAddresses)[0])
+        
+        # Use our project's data structure
+        if output_dir is None:
+            output_dir = Path(os.getcwd()) / "data" / "output-data" / "ethereum" / "top-traders"
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        with open(output_dir / f'allTopAddresses_{identifier}.txt', 'w') as av:
+            for address in self.allAddresses:
+                av.write(f"{address}\n")
+
+        if len(repeatedAddresses) != 0:
+            with open(output_dir / f'repeatedTopTraders_{identifier}.txt', 'w') as ra:
+                for address in repeatedAddresses:
+                    ra.write(f"{address}\n")
+            print(f"[🐲] Saved {len(repeatedAddresses)} repeated addresses to repeatedTopTraders_{identifier}.txt")
+
+        with open(output_dir / f'topTraders_{identifier}.json', 'w') as tt:
+            json.dump(self.allData, tt, indent=4)
+
+        print(f"[🐲] Saved {self.totalTraders} top traders for {len(contractAddresses)} tokens to allTopAddresses_{identifier}.txt")
+        print(f"[🐲] Saved {len(self.allAddresses)} top trader addresses to topTraders_{identifier}.json")
+
+        return True
+
+    def run(self, token_address: str, days: int = 30, output_dir: Optional[Path] = None, test_mode: bool = False) -> bool:
         """Run the top traders analysis and save results."""
-        if not self.test_mode:
-            print(f"Finding top traders for token {self.token_address} over the last {self.days} days")
+        if not test_mode:
+            print(f"Finding top traders for token {token_address} over the last {days} days")
         
         # Validate token address
-        if not self.token_address:
-            if not self.test_mode:
+        if not token_address:
+            if not test_mode:
                 print("No token address provided!")
             return False
         
-        # Make sure output directory exists
-        Config.ensure_dir_exists(self.output_dir)
-        
         # Process token
-        result = run_top_traders_in_thread(
-            self.token_address, 
-            self.days, 
-            self.output_dir,
-            self.test_mode
-        )
-        
-        return result
+        return self.topTraderData([token_address], threads=10, output_dir=output_dir)
 
 async def standalone_test(token_address=None, days=30):
     """Run a standalone test of the top traders finder."""
@@ -511,14 +587,9 @@ async def standalone_test(token_address=None, days=30):
     print(f"🧪 Running test mode on token {token_address} for {days} days...")
     
     # Create instance and run
-    finder = EthTopTraders(
-        token_address=token_address,
-        days=days,
-        output_dir=output_dir,
-        test_mode=test_mode
-    )
+    finder = EthTopTraders()
     
-    result = finder.run()
+    result = finder.run(token_address, days, output_dir, test_mode)
     
     if result:
         print("✅ Test completed successfully")
@@ -557,13 +628,9 @@ def main():
     Config.ensure_dir_exists(output_dir)
     
     # Create instance and run
-    finder = EthTopTraders(
-        token_address=args.token,
-        days=args.days,
-        output_dir=output_dir
-    )
+    finder = EthTopTraders()
     
-    result = finder.run()
+    result = finder.run(args.token, args.days, output_dir, args.test)
     
     return 0 if result else 1
 

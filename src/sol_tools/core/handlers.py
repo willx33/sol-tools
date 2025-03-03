@@ -1,35 +1,48 @@
-"""Base handler class for Sol Tools modules."""
+"""Core handlers module."""
 
-from typing import Dict, Any, Optional, Callable
+from typing import Any, Dict, Optional
+import logging
+
+logger = logging.getLogger(__name__)
 
 class BaseHandler:
-    """Base class for all handlers in Sol Tools."""
+    """Base class for all handlers."""
     
     def __init__(self, config: Optional[Dict[str, Any]] = None):
-        """Initialize the handler with optional config."""
+        """
+        Initialize base handler.
+        
+        Args:
+            config: Optional configuration dictionary
+        """
+        self.logger = logging.getLogger(self.__class__.__name__)
         self.config = config or {}
-        self.test_mode = False
     
-    def setup(self) -> bool:
-        """Set up the handler. Override in subclasses."""
+    def handle(self, *args: Any, **kwargs: Any) -> Dict[str, Any]:
+        """
+        Base handle method to be implemented by subclasses.
+        
+        Args:
+            *args: Positional arguments
+            **kwargs: Keyword arguments
+            
+        Returns:
+            Response data
+        """
+        raise NotImplementedError("Subclasses must implement handle()")
+    
+    def validate(self, data: Any) -> bool:
+        """
+        Validate input data.
+        
+        Args:
+            data: Data to validate
+            
+        Returns:
+            True if valid, False otherwise
+        """
         return True
     
-    def run(self) -> bool:
-        """Run the handler. Override in subclasses."""
-        return True
-    
-    def cleanup(self) -> bool:
-        """Clean up resources. Override in subclasses."""
-        return True
-    
-    def __call__(self) -> Any:
-        """Make the handler callable. This will run setup, run, and cleanup in sequence."""
-        try:
-            if not self.setup():
-                return False
-            result = self.run()
-            self.cleanup()
-            return result
-        except Exception as e:
-            print(f"Error in handler: {str(e)}")
-            return False 
+    def cleanup(self) -> None:
+        """Clean up any resources."""
+        pass 

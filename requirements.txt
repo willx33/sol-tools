@@ -7,11 +7,11 @@ pyyaml>=6.0.1
 
 # API clients
 dune-client>=1.1.0
-tls-client>=0.2.2
-fake-useragent>=1.1.3
+tls-client>=0.2.0
+fake-useragent>=1.1.1
 requests>=2.31.0
-aiohttp>=3.8.5
-httpx>=0.24.1
+aiohttp>=3.8.0
+httpx>=0.24.0
 websockets>=11.0.3
 python-telegram-bot>=13.15
 web3>=6.11.3
@@ -34,3 +34,6 @@ pydantic>=2.4.0
 typing-extensions>=4.7.0
 cryptography>=41.0.4
 jsonschema>=4.17.3  # Required for config validation
+
+# Added from the code block
+cloudscraper>=1.2.71

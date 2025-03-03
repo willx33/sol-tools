@@ -9,7 +9,7 @@ import random
 import asyncio
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Any, Optional, Callable, Union, TYPE_CHECKING
+from typing import Dict, List, Any, Optional, Callable, Union, TYPE_CHECKING, overload
 from concurrent.futures import ThreadPoolExecutor
 
 # Import BaseAdapter
@@ -141,17 +141,33 @@ try:
         EarlyBuyers, checkProxyFile, GMGN
     )
     
-    # Import our own Ethereum implementations instead of Dragon's
+    # Import Ethereum implementations from the ethereum module
     from ...modules.ethereum import (
-        EthWalletChecker, EthTopTraders, EthScanAllTx, EthTimestampTransactions
+        EthWalletChecker,
+        EthTopTraders,
+        EthScanAllTx,
+        EthTimestampTransactions
     )
+    
+    # Verify that we didn't get placeholder implementations
+    if (isinstance(EthWalletChecker, type) and 
+        EthWalletChecker.__name__.startswith('Placeholder')):
+        raise ImportError("Real EthWalletChecker implementation not available")
+    if (isinstance(EthTopTraders, type) and 
+        EthTopTraders.__name__.startswith('Placeholder')):
+        raise ImportError("Real EthTopTraders implementation not available")
+    if (isinstance(EthScanAllTx, type) and 
+        EthScanAllTx.__name__.startswith('Placeholder')):
+        raise ImportError("Real EthScanAllTx implementation not available")
+    if (isinstance(EthTimestampTransactions, type) and 
+        EthTimestampTransactions.__name__.startswith('Placeholder')):
+        raise ImportError("Real EthTimestampTransactions implementation not available")
     
     DRAGON_IMPORTS_SUCCESS = True
     logger.info("Successfully imported real Dragon implementation")
 except ImportError as e:
     logger.error(f"ERROR: Failed to import Dragon module. Error: {e}")
     logger.error("Please ensure the Dragon module is properly installed.")
-    # Make it clear that we require the real Dragon implementation
     raise ImportError("ERROR: Dragon module not found. Real implementation is required. No mock implementations are available or supported.")
 
 # If we're here, we've successfully imported Dragon
@@ -691,18 +707,21 @@ class DragonAdapter(BaseAdapter):
         
         # Initialize our Ethereum implementations
         try:
-            self.eth_bulk_wallet_checker = EthWalletChecker
-            self.eth_top_traders = EthTopTraders
-            self.eth_timestamp_transactions = EthTimestampTransactions
-            self.eth_scan_all_tx = EthScanAllTx
+            # Create instances of the Ethereum components
+            self.eth_bulk_wallet_checker = lambda **kwargs: EthWalletChecker(**kwargs)
+            self.eth_top_traders = lambda **kwargs: EthTopTraders(**kwargs)
+            self.eth_timestamp_transactions = lambda **kwargs: EthTimestampTransactions(**kwargs)
+            self.eth_scan_all_tx = lambda **kwargs: EthScanAllTx(**kwargs)
             logger.debug("Successfully initialized Ethereum components")
         except Exception as e:
-            logger.warning(f"Could not initialize Ethereum components: {str(e)}")
-            # Provide safe placeholder implementations that don't fail when called
-            self.eth_bulk_wallet_checker = lambda **kwargs: None
-            self.eth_top_traders = lambda **kwargs: None
-            self.eth_timestamp_transactions = lambda **kwargs: None
-            self.eth_scan_all_tx = lambda **kwargs: None
+            logger.error(f"Could not initialize Ethereum components: {str(e)}")
+            # Provide implementations that raise proper errors
+            def eth_component_error(**kwargs):
+                raise ImportError(f"Ethereum components failed to initialize: {str(e)}\nPlease check that all Ethereum modules are properly installed and configured.")
+            self.eth_bulk_wallet_checker = eth_component_error
+            self.eth_top_traders = eth_component_error
+            self.eth_timestamp_transactions = eth_component_error
+            self.eth_scan_all_tx = eth_component_error
         
         # Initialize BundleFinder instance
         self.bundle = BundleFinder
@@ -1287,3 +1306,79 @@ class DragonAdapter(BaseAdapter):
         
         # Default fallback for unknown validation types
         return False
+
+    def eth_top_traders(self, **kwargs: Any) -> Optional[EthTopTraders]:
+        """
+        Create an EthTopTraders instance.
+        
+        Args:
+            **kwargs: Keyword arguments including:
+                token_address (str): The Ethereum token contract address
+                days (int, optional): Number of days to analyze
+                output_dir (Path, optional): Directory to save results
+                test_mode (bool, optional): Whether to run in test mode
+                
+        Returns:
+            Optional[EthTopTraders]: The initialized instance or None if validation fails
+        """
+        token_address = kwargs.get('token_address')
+        days = kwargs.get('days', 30)
+        output_dir = kwargs.get('output_dir')
+        test_mode = kwargs.get('test_mode', False)
+        
+        if token_address is None:
+            logger.error("No token address provided")
+            return None
+            
+        if not isinstance(token_address, str):
+            logger.error(f"Invalid token address type: {type(token_address)}")
+            return None
+            
+        if not self.validate_ethereum_address(token_address):
+            logger.error(f"Invalid Ethereum address: {token_address}")
+            return None
+            
+        try:
+            # Pass kwargs directly to maintain flexibility
+            return EthTopTraders(**kwargs)
+        except Exception as e:
+            logger.error(f"Error creating EthTopTraders instance: {e}")
+            return None
+            
+    def eth_timestamp_transactions(self, **kwargs: Any) -> Optional[EthTimestampTransactions]:
+        """
+        Create an EthTimestampTransactions instance.
+        
+        Args:
+            **kwargs: Keyword arguments including:
+                contract_address (str): The Ethereum contract address
+                start_time (int): Start timestamp
+                end_time (int): End timestamp
+                output_dir (Path, optional): Directory to save results
+                
+        Returns:
+            Optional[EthTimestampTransactions]: The initialized instance or None if validation fails
+        """
+        contract_address = kwargs.get('contract_address')
+        start_time = kwargs.get('start_time')
+        end_time = kwargs.get('end_time')
+        output_dir = kwargs.get('output_dir')
+        
+        if contract_address is None:
+            logger.error("No contract address provided")
+            return None
+            
+        if not isinstance(contract_address, str):
+            logger.error(f"Invalid contract address type: {type(contract_address)}")
+            return None
+            
+        if not self.validate_ethereum_address(contract_address):
+            logger.error(f"Invalid Ethereum address: {contract_address}")
+            return None
+            
+        try:
+            # Pass kwargs directly to maintain flexibility
+            return EthTimestampTransactions(**kwargs)
+        except Exception as e:
+            logger.error(f"Error creating EthTimestampTransactions instance: {e}")
+            return None

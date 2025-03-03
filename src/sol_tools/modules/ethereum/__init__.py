@@ -35,50 +35,78 @@ else:
 class PlaceholderEthWalletChecker:
     """Placeholder for EthWalletChecker when the real implementation cannot be imported."""
     def __init__(self, *args: Any, **kwargs: Any):
-        raise ImportError("EthWalletChecker implementation is not available")
+        raise ImportError(
+            "EthWalletChecker implementation is not available. "
+            "This usually means either:\n"
+            "1. The eth_wallet.py module failed to import\n"
+            "2. There was an error in the eth_wallet.py module\n"
+            "Please check the ethereum module's log files for detailed error messages."
+        )
 
 class PlaceholderEthTopTraders:
     """Placeholder for EthTopTraders when the real implementation cannot be imported."""
     def __init__(self, *args: Any, **kwargs: Any):
-        raise ImportError("EthTopTraders implementation is not available")
+        raise ImportError(
+            "EthTopTraders implementation is not available. "
+            "This usually means either:\n"
+            "1. The eth_traders.py module failed to import\n"
+            "2. There was an error in the eth_traders.py module\n"
+            "Please check the ethereum module's log files for detailed error messages."
+        )
 
 class PlaceholderEthScanAllTx:
     """Placeholder for EthScanAllTx when the real implementation cannot be imported."""
     def __init__(self, *args: Any, **kwargs: Any):
-        raise ImportError("EthScanAllTx implementation is not available")
+        raise ImportError(
+            "EthScanAllTx implementation is not available. "
+            "This usually means either:\n"
+            "1. The eth_scan.py module failed to import\n"
+            "2. There was an error in the eth_scan.py module\n"
+            "Please check the ethereum module's log files for detailed error messages."
+        )
 
 class PlaceholderEthTimestampTransactions:
     """Placeholder for EthTimestampTransactions when the real implementation cannot be imported."""
     def __init__(self, *args: Any, **kwargs: Any):
-        raise ImportError("EthTimestampTransactions implementation is not available")
+        raise ImportError(
+            "EthTimestampTransactions implementation is not available. "
+            "This usually means either:\n"
+            "1. The eth_timestamp.py module failed to import\n"
+            "2. There was an error in the eth_timestamp.py module\n"
+            "Please check the ethereum module's log files for detailed error messages."
+        )
 
-# Try to import each module individually to prevent cascading failures
+# Try to import each module individually with better error logging
 try:
     from .eth_wallet import EthWalletChecker
-except Exception as e:
-    if not IN_TEST_MODE:  # Only log if not in test mode
-        logger.warning(f"Could not import EthWalletChecker: {str(e)}")
+except ImportError as e:
+    if not IN_TEST_MODE:
+        logger.error(f"Failed to import EthWalletChecker: {str(e)}")
+        logger.error("Please check that eth_wallet.py exists and is properly formatted")
     EthWalletChecker = PlaceholderEthWalletChecker  # type: ignore
 
 try:
     from .eth_traders import EthTopTraders
-except Exception as e:
-    if not IN_TEST_MODE:  # Only log if not in test mode
-        logger.warning(f"Could not import EthTopTraders: {str(e)}")
+except ImportError as e:
+    if not IN_TEST_MODE:
+        logger.error(f"Failed to import EthTopTraders: {str(e)}")
+        logger.error("Please check that eth_traders.py exists and is properly formatted")
     EthTopTraders = PlaceholderEthTopTraders  # type: ignore
 
 try:
     from .eth_scan import EthScanAllTx
-except Exception as e:
-    if not IN_TEST_MODE:  # Only log if not in test mode
-        logger.warning(f"Could not import EthScanAllTx: {str(e)}")
+except ImportError as e:
+    if not IN_TEST_MODE:
+        logger.error(f"Failed to import EthScanAllTx: {str(e)}")
+        logger.error("Please check that eth_scan.py exists and is properly formatted")
     EthScanAllTx = PlaceholderEthScanAllTx  # type: ignore
 
 try:
     from .eth_timestamp import EthTimestampTransactions
-except Exception as e:
-    if not IN_TEST_MODE:  # Only log if not in test mode
-        logger.warning(f"Could not import EthTimestampTransactions: {str(e)}")
+except ImportError as e:
+    if not IN_TEST_MODE:
+        logger.error(f"Failed to import EthTimestampTransactions: {str(e)}")
+        logger.error("Please check that eth_timestamp.py exists and is properly formatted")
     EthTimestampTransactions = PlaceholderEthTimestampTransactions  # type: ignore
 
 # Define package exports

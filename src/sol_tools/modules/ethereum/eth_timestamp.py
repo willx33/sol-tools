@@ -19,6 +19,10 @@ from typing import Dict, List, Any, Optional, Union, Tuple
 
 import aiohttp
 import httpx
+import tls_client
+import cloudscraper
+from fake_useragent import UserAgent
+import concurrent.futures
 
 # Setup logging
 logger = logging.getLogger(__name__)
@@ -60,6 +64,8 @@ if IN_TEST_MODE:
         for handler in list(logger_instance.handlers):
             logger_instance.removeHandler(handler)
         logger_instance.addHandler(NullHandler())
+
+ua = UserAgent(os='linux', browsers=['firefox'])
 
 # Constants for Ethereum API
 class Config:
@@ -589,62 +595,118 @@ def run_finder_in_thread(addresses: List[str],
 class EthTimestampTransactions:
     """Ethereum Timestamp Transactions finder class."""
     
-    def __init__(self, addresses=None, start_time=None, end_time=None, output_dir=None, test_mode=False):
-        """
-        Initialize the Ethereum Timestamp Transactions finder.
-        
-        Args:
-            addresses: List of Ethereum addresses to scan
-            start_time: Starting time for the search (datetime)
-            end_time: Ending time for the search (datetime)
-            output_dir: Directory to save results
-            test_mode: Run in test mode (no output)
-        """
-        self.addresses = addresses or []
-        
-        # Use current time as default if not provided
-        now = datetime.now()
-        
-        # Default to 24 hours ago if not specified
-        self.start_time = start_time if start_time is not None else (now - timedelta(days=1))
-        
-        # Default to current time if not specified
-        self.end_time = end_time if end_time is not None else now
-        
-        # Handle output directory with proper defaults
-        if output_dir is None:
-            self.output_dir = Config.get_output_dir()
-        else:
-            self.output_dir = Path(output_dir)
+    def __init__(self):
+        self.sendRequest = tls_client.Session(client_identifier='chrome_103')
+        self.cloudScraper = cloudscraper.create_scraper()
+        self.shorten = lambda s: f"{s[:4]}...{s[-5:]}" if len(s) >= 9 else s
+
+    def fetch_url(self, url, headers):
+        retries = 3
+        for attempt in range(retries):
+            try:
+                response = self.sendRequest.get(url, headers=headers).json()
+                return response
+            except Exception:
+                print(f"[🐲] Error fetching data, trying backup...")
+            finally:
+                try:
+                    response = self.cloudScraper.get(url, headers=headers).json()
+                    return response
+                except Exception:
+                    print(f"[🐲] Backup scraper failed, retrying...")
             
-        self.test_mode = test_mode
-    
-    def run(self) -> bool:
-        """Run the timestamp transaction finder and save results."""
-        if not self.test_mode:
-            print(f"Finding transactions for {len(self.addresses)} addresses in timeframe:")
-            print(f"From: {self.start_time.strftime('%Y-%m-%d %H:%M:%S')}")
-            print(f"To: {self.end_time.strftime('%Y-%m-%d %H:%M:%S')}")
+            time.sleep(1)
         
-        # Validate addresses
-        if not self.addresses:
-            if not self.test_mode:
-                print("No addresses provided!")
+        print(f"[🐲] Failed to fetch data after {retries} attempts.")
+        return {}
+
+    def getMintTimestamp(self, contractAddress):
+        headers = {
+            "User-Agent": ua.random
+        }
+        url = f"https://gmgn.ai/defi/quotation/v1/tokens/eth/{contractAddress}"
+        retries = 3
+
+        for attempt in range(retries):
+            try:
+                response = self.sendRequest.get(url, headers=headers).json()['data']['token']['creation_timestamp']
+                return response
+            except Exception:
+                print(f"[🐲] Error fetching data, trying backup...")
+            finally:
+                try:
+                    response = self.cloudScraper.get(url, headers=headers).json()['data']['token']['creation_timestamp']
+                    return response
+                except Exception:
+                    print(f"[🐲] Backup scraper failed, retrying...")
+            
+            time.sleep(1)
+        
+        print(f"[🐲] Failed to fetch data after {retries} attempts.")
+        return None
+
+    def getTxByTimestamp(self, contractAddress, threads, start, end):
+        base_url = f"https://gmgn.ai/defi/quotation/v1/trades/eth/{contractAddress}?limit=100"
+        paginator = None
+        urls = []
+        all_trades = []
+
+        headers = {
+            "User-Agent": ua.random
+        }
+        
+        print(f"[🐲] Starting... please wait.")
+
+        start = int(start)
+        end = int(end)
+
+        while True:
+            url = f"{base_url}&cursor={paginator}" if paginator else base_url
+            urls.append(url)
+            
+            response = self.fetch_url(url, headers)
+            trades = response.get('data', {}).get('history', [])
+            
+            if not trades or trades[-1]['timestamp'] < start:
+                break
+
+            paginator = response['data'].get('next')
+            if not paginator:
+                break
+        
+        with concurrent.futures.ThreadPoolExecutor(max_workers=threads) as executor:
+            future_to_url = {executor.submit(self.fetch_url, url, headers): url for url in urls}
+            for future in concurrent.futures.as_completed(future_to_url):
+                response = future.result()
+                trades = response.get('data', {}).get('history', [])
+                filtered_trades = [trade for trade in trades if start <= trade['timestamp'] <= end]
+                all_trades.extend(filtered_trades)
+
+        wallets = []
+        
+        # Use our project's data structure
+        output_dir = Path(os.getcwd()) / "data" / "output-data" / "ethereum" / "timestamp-txns"
+        output_dir.mkdir(parents=True, exist_ok=True)
+        
+        filename = output_dir / f"txns_{self.shorten(contractAddress)}__{random.randint(1111, 9999)}.txt"
+
+        for trade in all_trades:
+            wallets.append(trade.get("maker"))
+
+        with open(filename, 'a') as f:
+            for wallet in wallets:
+                f.write(f"{wallet}\n")
+        
+        print(f"[🐲] {len(wallets)} trades successfully saved to {filename}")
+        return True
+
+    def run(self, contract_address: str, start_time: int, end_time: int, threads: int = 10) -> bool:
+        """Run the timestamp transaction analysis."""
+        if not contract_address:
+            print("No contract address provided!")
             return False
-        
-        # Make sure output directory exists
-        Config.ensure_dir_exists(self.output_dir)
-        
-        # Process addresses
-        result = run_finder_in_thread(
-            self.addresses, 
-            self.start_time, 
-            self.end_time, 
-            self.output_dir,
-            self.test_mode
-        )
-        
-        return result
+            
+        return self.getTxByTimestamp(contract_address, threads, start_time, end_time)
 
 def parse_datetime(datetime_str: str) -> Optional[datetime]:
     """Parse a datetime string into a datetime object."""
@@ -703,15 +765,9 @@ async def standalone_test(addresses=None, start_time_str=None, end_time_str=None
     print(f"🧪 Running test mode on {len(addresses)} addresses...")
     
     # Create instance and run
-    finder = EthTimestampTransactions(
-        addresses=addresses,
-        start_time=start_time,
-        end_time=end_time,
-        output_dir=output_dir,
-        test_mode=test_mode
-    )
+    finder = EthTimestampTransactions()
     
-    result = finder.run()
+    result = finder.run(addresses[0], int(start_time.timestamp()), int(end_time.timestamp()))
     
     if result:
         print("✅ Test completed successfully")
@@ -776,14 +832,9 @@ def main():
     Config.ensure_dir_exists(output_dir)
     
     # Create instance and run
-    finder = EthTimestampTransactions(
-        addresses=args.addresses,
-        start_time=start_time,
-        end_time=end_time,
-        output_dir=output_dir
-    )
+    finder = EthTimestampTransactions()
     
-    result = finder.run()
+    result = finder.run(args.addresses[0], int(start_time.timestamp()), int(end_time.timestamp()))
     
     return 0 if result else 1
 

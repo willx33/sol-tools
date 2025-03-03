@@ -591,65 +591,74 @@ def eth_top_traders():
     clear_terminal()
     print("🐲 Dragon Ethereum Top Traders")
     
-    # Check for required environment variables
-    from ...utils.common import validate_credentials
-    if not validate_credentials("ethereum"):
-        return
-    
-    # Ask for token address
-    token_questions = [
-        inquirer.Text(
-            "token_address",
-            message="Enter token contract address:",
-            validate=lambda _, x: x.startswith('0x') and len(x) == 42
-        ),
-        inquirer.Text(
-            "days",
-            message="Number of days to analyze:",
-            default="30",
-            validate=lambda _, x: x.isdigit() and int(x) > 0
-        )
-    ]
-    
-    token_answers = inquirer.prompt(token_questions)
-    
-    if not token_answers:
-        return
-    
-    token_address = token_answers.get("token_address")
-    days = int(token_answers.get("days", "30"))
-    
     try:
-        # Import the adapter
+        # Import the adapter first to catch initialization errors
         adapter = _get_dragon_adapter()
+        
+        # Check for required environment variables
+        from ...utils.common import validate_credentials
+        if not validate_credentials("ethereum"):
+            return
+        
+        # Ask for token address
+        token_questions = [
+            inquirer.Text(
+                "token_address",
+                message="Enter token contract address:",
+                validate=lambda _, x: x.startswith('0x') and len(x) == 42
+            ),
+            inquirer.Text(
+                "days",
+                message="Number of days to analyze:",
+                default="30",
+                validate=lambda _, x: x.isdigit() and int(x) > 0
+            )
+        ]
+        
+        token_answers = inquirer.prompt(token_questions)
+        
+        if not token_answers:
+            return
+        
+        token_address = token_answers.get("token_address")
+        days = int(token_answers.get("days", "30"))
         
         print(f"\n🔍 Finding top traders for {token_address} over the last {days} days...")
         
         # Create output directory
         output_dir = ensure_data_dir("ethereum", "top-traders", data_type="output")
         
-        # Create instance with the appropriate parameters
-        top_traders = adapter.eth_top_traders(
-            token_address=token_address,
-            days=days,
-            output_dir=output_dir
-        )
+        try:
+            # Create instance with the appropriate parameters
+            kwargs = {
+                'token_address': token_address,
+                'days': days,
+                'output_dir': output_dir,
+                'test_mode': False
+            }
+            top_traders = adapter.eth_top_traders(**kwargs)
+            
+            if top_traders is None:
+                print("\n❌ Failed to initialize top traders analyzer")
+                return False
+                
+            # Run the analysis
+            result = top_traders.run(token_address=kwargs['token_address'])
+            
+            if result:
+                print("\n✅ Top traders analysis completed successfully!")
+                print(f"📁 Results saved to: {output_dir}")
+            else:
+                print("\n❌ Failed to find top traders.")
         
-        # Call the run method
-        if top_traders is None:
-            print("\n❌ Failed to initialize top traders analyzer")
-            return False
-        result = top_traders.run()
-        
-        if result:
-            print("\n✅ Top traders analysis completed successfully!")
-            print(f"📁 Results saved to: {output_dir}")
-        else:
-            print("\n❌ Failed to find top traders.")
-    
+        except ImportError as e:
+            print(f"\n❌ Ethereum module initialization error: {str(e)}")
+            print("Please ensure all Ethereum dependencies are installed correctly.")
+            
     except Exception as e:
-        print(f"\n❌ Error during top traders analysis: {str(e)}")
-    
+        print(f"\n❌ Unexpected error: {str(e)}")
+        print("Please check your inputs and try again.")
+        
     input("\nPress Enter to continue...")
 
 
@@ -730,100 +739,107 @@ def eth_scan_all_tx():
 
 
 def eth_timestamp_transactions():
-    """Find Ethereum transactions in a specific time range."""
+    """Find transactions within a specific time range."""
     clear_terminal()
-    print("🐲 Dragon Ethereum Time-Based Transaction Finder")
-    
-    # Check for required environment variables
-    from ...utils.common import validate_credentials
-    if not validate_credentials("ethereum"):
-        return
-    
-    # Ask for addresses and time range
-    from datetime import datetime, timedelta
-    
-    # Default time range (last 24 hours)
-    now = datetime.now()
-    yesterday = now - timedelta(days=1)
-    
-    # Format for display and input
-    date_format = "%Y-%m-%d %H:%M:%S"
-    
-    time_questions = [
-        inquirer.Text(
-            "addresses",
-            message="Enter Ethereum addresses (comma separated):",
-            validate=lambda _, x: all(addr.strip().startswith('0x') and len(addr.strip()) == 42 for addr in x.split(','))
-        ),
-        inquirer.Text(
-            "start_time",
-            message=f"Start time ({date_format}):",
-            default=yesterday.strftime(date_format)
-        ),
-        inquirer.Text(
-            "end_time",
-            message=f"End time ({date_format}):",
-            default=now.strftime(date_format)
-        )
-    ]
-    
-    time_answers = inquirer.prompt(time_questions)
-    
-    if not time_answers:
-        return
-    
-    addresses = [addr.strip() for addr in time_answers.get("addresses", "").split(',')]
+    print("🐲 Dragon Ethereum Timestamp Transactions")
     
     try:
-        start_time_str = time_answers.get("start_time", "")
-        end_time_str = time_answers.get("end_time", "")
-        
-        if not start_time_str or not end_time_str:
-            print("\n❌ Invalid date format: Start time or end time is missing")
-            input("\nPress Enter to continue...")
-            return
-            
-        start_time = datetime.strptime(start_time_str, date_format)
-        end_time = datetime.strptime(end_time_str, date_format)
-    except ValueError as e:
-        print(f"\n❌ Invalid date format: {str(e)}")
-        input("\nPress Enter to continue...")
-        return
-    
-    try:
-        # Import the adapter
+        # Import the adapter first to catch initialization errors
         adapter = _get_dragon_adapter()
         
-        print(f"\n🔍 Finding transactions for {len(addresses)} addresses in time range:")
-        print(f"From: {start_time.strftime(date_format)}")
-        print(f"To: {end_time.strftime(date_format)}")
+        # Check for required environment variables
+        from ...utils.common import validate_credentials
+        if not validate_credentials("ethereum"):
+            return
+            
+        # Ask for contract address and time range
+        from datetime import datetime, timedelta
         
+        # Default time range (last 24 hours)
+        now = datetime.now()
+        yesterday = now - timedelta(days=1)
+        
+        # Format for display and input
+        date_format = "%Y-%m-%d %H:%M:%S"
+        
+        questions = [
+            inquirer.Text(
+                "contract_address",
+                message="Enter contract address:",
+                validate=lambda _, x: x.startswith('0x') and len(x) == 42
+            ),
+            inquirer.Text(
+                "start_time",
+                message=f"Start time ({date_format}):",
+                default=yesterday.strftime(date_format)
+            ),
+            inquirer.Text(
+                "end_time",
+                message=f"End time ({date_format}):",
+                default=now.strftime(date_format)
+            )
+        ]
+        
+        answers = inquirer.prompt(questions)
+        
+        if not answers:
+            return
+            
+        contract_address = answers.get("contract_address")
+        
+        try:
+            start_time_str = answers.get("start_time", "")
+            end_time_str = answers.get("end_time", "")
+            
+            if not start_time_str or not end_time_str:
+                print("\n❌ Invalid date format: Start time or end time is missing")
+                return
+                
+            start_time = int(datetime.strptime(start_time_str, date_format).timestamp())
+            end_time = int(datetime.strptime(end_time_str, date_format).timestamp())
+            
+        except ValueError as e:
+            print(f"\n❌ Invalid date format: {str(e)}")
+            return
+            
         # Create output directory
-        output_dir = ensure_data_dir("ethereum", "time-transactions", data_type="output")
+        output_dir = ensure_data_dir("ethereum", "timestamp-tx", data_type="output")
         
-        # Create instance with the appropriate parameters
-        timestamp_finder = adapter.eth_timestamp_transactions(
-            addresses=addresses,
-            start_time=start_time,
-            end_time=end_time,
-            output_dir=output_dir
-        )
+        try:
+            # Create instance with the appropriate parameters
+            kwargs = {
+                'contract_address': contract_address,
+                'start_time': start_time,
+                'end_time': end_time,
+                'output_dir': output_dir
+            }
+            timestamp_tx = adapter.eth_timestamp_transactions(**kwargs)
+            
+            if timestamp_tx is None:
+                print("\n❌ Failed to initialize timestamp transactions analyzer")
+                return False
+                
+            # Run the analysis
+            result = timestamp_tx.run(
+                contract_address=kwargs['contract_address'],
+                start_time=kwargs['start_time'],
+                end_time=kwargs['end_time']
+            )
+            
+            if result:
+                print("\n✅ Timestamp transactions analysis completed successfully!")
+                print(f"📁 Results saved to: {output_dir}")
+            else:
+                print("\n❌ Failed to find transactions in the specified time range.")
         
-        # Call the run method
-        if timestamp_finder is None:
-            print("\n❌ Failed to initialize timestamp finder")
-            return False
-        result = timestamp_finder.run()
-        
-        if result:
-            print("\n✅ Time-based transaction search completed successfully!")
-            print(f"📁 Results saved to: {output_dir}")
-        else:
-            print("\n❌ Failed to find transactions in the specified time range.")
-    
+        except ImportError as e:
+            print(f"\n❌ Ethereum module initialization error: {str(e)}")
+            print("Please ensure all Ethereum dependencies are installed correctly.")
+            
     except Exception as e:
-        print(f"\n❌ Error during time-based transaction search: {str(e)}")
-    
+        print(f"\n❌ Unexpected error: {str(e)}")
+        print("Please check your inputs and try again.")
+        
     input("\nPress Enter to continue...")
 
 
