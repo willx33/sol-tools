@@ -22,36 +22,107 @@ import cloudscraper
 from fake_useragent import UserAgent
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import csv
+import contextlib
+import io
 
 import aiohttp
 import httpx
 
-# Setup logging
+# EXTREME AND AGGRESSIVE SILENCER
+# This code runs immediately at import time
+# It will detect if we're in test mode and silence EVERYTHING
+if os.environ.get("TEST_MODE") == "1":
+    # Silence ALL loggers
+    logging.basicConfig(level=logging.CRITICAL + 1)
+    
+    # Disable the root logger completely
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.CRITICAL + 1)
+    for handler in root_logger.handlers:
+        root_logger.removeHandler(handler)
+    root_logger.addHandler(logging.NullHandler())
+    
+    # Create a do-nothing handler
+    class NullHandler(logging.Handler):
+        def emit(self, record):
+            pass
+    
+    # Replace all print functions with a no-op version
+    def silent_print(*args, **kwargs):
+        pass
+    print = silent_print
+    
+    # Silence all known noisy modules
+    for name in logging.root.manager.loggerDict:
+        logger = logging.getLogger(name)
+        logger.setLevel(logging.CRITICAL + 1)
+        for handler in logger.handlers:
+            logger.removeHandler(handler)
+        logger.addHandler(NullHandler())
+
+# Now set up our own module logging AFTER the silencer
 logger = logging.getLogger(__name__)
 
-# Remove any existing handlers to prevent duplication
-for handler in list(logger.handlers):
-    logger.removeHandler(handler)
-
-# Add a NullHandler by default to prevent logging warnings
-logger.addHandler(logging.NullHandler())
-
-# Configure logging based on test mode
+# Global flag to track if we're in test mode
 IN_TEST_MODE = os.environ.get("TEST_MODE") == "1"
 
+# Completely disable all logging in test mode immediately
 if IN_TEST_MODE:
-    # Set critical+1 level (higher than any standard level)
+    # Disable all loggers
+    logging.getLogger().setLevel(logging.CRITICAL + 1)
+    
+    # Disable specific loggers that might be used
+    for name in ['asyncio', 'aiohttp', 'urllib3', 'sol_tools']:
+        logging.getLogger(name).setLevel(logging.CRITICAL + 1)
+        logging.getLogger(name).addHandler(NullHandler())
+    
+    # Set our module logger to do nothing
     logger.setLevel(logging.CRITICAL + 1)
-else:
-    # In non-test mode, add a StreamHandler for console output
-    console_handler = logging.StreamHandler()
-    console_handler.setFormatter(logging.Formatter('%(levelname)s: %(message)s'))
-    logger.addHandler(console_handler)
-    logger.setLevel(logging.INFO)
+    logger.addHandler(NullHandler())
 
-# Constants for Ethereum API
+@contextlib.contextmanager
+def suppress_all_output():
+    """Context manager to suppress both stdout and stderr output."""
+    if not IN_TEST_MODE:
+        yield  # If not in test mode, don't suppress anything
+        return
+        
+    # Save original stdout/stderr
+    original_stdout = sys.stdout
+    original_stderr = sys.stderr
+    
+    # Create null streams
+    null_out = open(os.devnull, 'w')
+    
+    try:
+        # Redirect stdout and stderr to null
+        sys.stdout = null_out
+        sys.stderr = null_out
+        yield
+    finally:
+        # Restore stdout and stderr
+        sys.stdout = original_stdout
+        sys.stderr = original_stderr
+        null_out.close()
+
+def show_progress_bar(iteration, total, prefix='', suffix='', length=30, fill='█'):
+    """
+    Call in a loop to create terminal progress bar
+    """
+    if IN_TEST_MODE:
+        return  # Do nothing in test mode
+        
+    percent = ("{0:.1f}").format(100 * (iteration / float(total)))
+    filled_length = int(length * iteration // total)
+    bar = fill * filled_length + '-' * (length - filled_length)
+    print(f'\r{prefix} |{bar}| {percent}% {suffix}', end='\r')
+    # Print New Line on Complete
+    if iteration == total:
+        print()
+
 class Config:
     """Configuration for Ethereum API calls."""
+    
     # API settings
     ETH_API_KEY = os.environ.get("ETHEREUM_API_KEY", "")
     ETH_ENDPOINT = "https://api.etherscan.io/api"
@@ -91,46 +162,25 @@ class Config:
     
     @staticmethod
     def get_input_dir() -> Path:
-        """Get the input directory for Ethereum wallet lists."""
-        # When used as a module in sol-tools
+        """Get the input directory for wallet lists."""
         if 'sol_tools' in sys.modules:
             from ...core.config import INPUT_DATA_DIR
-            return INPUT_DATA_DIR / "api" / "ethereum" / "wallets"
-        # When used standalone
-        else:
-            root = Config.get_project_root()
-            return root / "data" / "input-data" / "api" / "ethereum" / "wallets"
+            return INPUT_DATA_DIR / "ethereum" / "wallets"
+        return Path.home() / "sol-tools" / "data" / "input-data" / "ethereum" / "wallets"
     
     @staticmethod
     def get_output_dir() -> Path:
-        """Get the output directory for Ethereum wallet analysis."""
-        # When used as a module in sol-tools
+        """Get the output directory for wallet analysis."""
         if 'sol_tools' in sys.modules:
             from ...core.config import OUTPUT_DATA_DIR
-            return OUTPUT_DATA_DIR / "api" / "ethereum" / "wallet-analysis"
-        # When used standalone
-        else:
-            root = Config.get_project_root()
-            return root / "data" / "output-data" / "api" / "ethereum" / "wallet-analysis"
+            return OUTPUT_DATA_DIR / "ethereum" / "wallets"
+        return Path.home() / "sol-tools" / "data" / "output-data" / "ethereum" / "wallets"
     
     @staticmethod
     def ensure_dir_exists(directory: Path) -> Path:
         """Ensure a directory exists and return its path."""
         directory.mkdir(parents=True, exist_ok=True)
         return directory
-
-# Show progress bar
-def show_progress_bar(iteration, total, prefix='', suffix='', length=30, fill='█'):
-    """Display a progress bar in the console."""
-    if total == 0:
-        total = 1  # Avoid division by zero
-    percent = ("{0:.1f}").format(100 * (iteration / float(total)))
-    filled_length = int(length * iteration // total)
-    bar = fill * filled_length + '-' * (length - filled_length)
-    sys.stdout.write(f'\r{prefix} |{bar}| {percent}% {suffix}')
-    sys.stdout.flush()
-    if iteration == total:
-        print()
 
 # Function to validate Ethereum address
 def is_valid_eth_address(address: str) -> bool:
@@ -161,29 +211,50 @@ async def get_wallet_balance(session: aiohttp.ClientSession, address: str) -> Di
     for retry in range(Config.MAX_RETRIES):
         try:
             # Add delay for rate limiting
-            await asyncio.sleep(Config.RATE_LIMIT_DELAY)
+            await asyncio.sleep(Config.RATE_LIMIT_DELAY * (1 + retry))
             
-            # Use the proper timeout object
             timeout = aiohttp.ClientTimeout(total=Config.REQUEST_TIMEOUT)
             
             async with session.get(url, params=params, timeout=timeout) as response:
+                if response.status == 429:  # Rate limit
+                    retry_after = int(response.headers.get('Retry-After', Config.RETRY_DELAY_MIN * 2))
+                    if not IN_TEST_MODE:
+                        print(f"⚠️ Rate limited for {address}, waiting {retry_after}s before retry {retry+1}/{Config.MAX_RETRIES}")
+                    logger.warning(f"Rate limited for {address}, waiting {retry_after}s")
+                    await asyncio.sleep(retry_after)
+                    continue
+                
                 if response.status != 200:
                     error_text = await response.text()
-                    logger.error(f"HTTP {response.status}: {error_text[:200]}")
+                    error_msg = f"HTTP {response.status}: {error_text[:200]}"
+                    if not IN_TEST_MODE:
+                        print(f"❌ Error fetching balance for {address}: {error_msg}")
+                    logger.error(f"Error fetching balance for {address}: {error_msg}")
+                    
                     if retry < Config.MAX_RETRIES - 1:
-                        # Use random delay within range for better retry behavior
                         delay = Config.RETRY_DELAY_MIN + (Config.RETRY_DELAY_MAX - Config.RETRY_DELAY_MIN) * random.random()
                         await asyncio.sleep(delay)
                         continue
-                    return {"status": "error", "address": address, "error": f"HTTP {response.status}"}
+                    return {"status": "error", "address": address, "error": error_msg}
                 
-                data = await response.json()
+                try:
+                    data = await response.json()
+                except Exception as e:
+                    if not IN_TEST_MODE:
+                        print(f"❌ Error parsing JSON response: {str(e)}")
+                    logger.error(f"Error parsing JSON for {address}: {str(e)}")
+                    if retry < Config.MAX_RETRIES - 1:
+                        delay = Config.RETRY_DELAY_MIN + (Config.RETRY_DELAY_MAX - Config.RETRY_DELAY_MIN) * random.random()
+                        await asyncio.sleep(delay)
+                        continue
+                    return {"status": "error", "address": address, "error": f"JSON parse error: {str(e)}"}
                 
                 if data.get("status") != "1":
                     error_msg = data.get("message", "Unknown error")
+                    if not IN_TEST_MODE:
+                        print(f"❌ API error for {address}: {error_msg}")
                     logger.error(f"API error for {address}: {error_msg}")
                     if retry < Config.MAX_RETRIES - 1:
-                        # Use random delay within range for better retry behavior
                         delay = Config.RETRY_DELAY_MIN + (Config.RETRY_DELAY_MAX - Config.RETRY_DELAY_MIN) * random.random()
                         await asyncio.sleep(delay)
                         continue
@@ -197,22 +268,25 @@ async def get_wallet_balance(session: aiohttp.ClientSession, address: str) -> Di
                     "status": "success",
                     "address": address,
                     "balance_wei": balance_wei,
-                    "balance_eth": balance_eth
+                    "balance_eth": balance_eth,
+                    "timestamp": int(time.time())
                 }
                 
         except asyncio.TimeoutError:
+            if not IN_TEST_MODE:
+                print(f"❌ Timeout getting balance for {address}")
             logger.error(f"Timeout getting balance for {address}")
             if retry < Config.MAX_RETRIES - 1:
-                # Use random delay within range for better retry behavior
                 delay = Config.RETRY_DELAY_MIN + (Config.RETRY_DELAY_MAX - Config.RETRY_DELAY_MIN) * random.random()
                 await asyncio.sleep(delay)
                 continue
             return {"status": "error", "address": address, "error": "Timeout"}
             
         except Exception as e:
+            if not IN_TEST_MODE:
+                print(f"❌ Error getting balance for {address}: {str(e)}")
             logger.error(f"Error getting balance for {address}: {str(e)}")
             if retry < Config.MAX_RETRIES - 1:
-                # Use random delay within range for better retry behavior
                 delay = Config.RETRY_DELAY_MIN + (Config.RETRY_DELAY_MAX - Config.RETRY_DELAY_MIN) * random.random()
                 await asyncio.sleep(delay)
                 continue
@@ -239,89 +313,79 @@ async def get_wallet_transactions(session: aiohttp.ClientSession, address: str) 
     for retry in range(Config.MAX_RETRIES):
         try:
             # Add delay for rate limiting
-            await asyncio.sleep(Config.RATE_LIMIT_DELAY)
+            await asyncio.sleep(Config.RATE_LIMIT_DELAY * (1 + retry))
             
-            # Use the proper timeout object
             timeout = aiohttp.ClientTimeout(total=Config.REQUEST_TIMEOUT)
             
             async with session.get(url, params=params, timeout=timeout) as response:
+                if response.status == 429:  # Rate limit
+                    retry_after = int(response.headers.get('Retry-After', Config.RETRY_DELAY_MIN * 2))
+                    if not IN_TEST_MODE:
+                        print(f"⚠️ Rate limited for {address}, waiting {retry_after}s before retry {retry+1}/{Config.MAX_RETRIES}")
+                    logger.warning(f"Rate limited for {address}, waiting {retry_after}s")
+                    await asyncio.sleep(retry_after)
+                    continue
+                
                 if response.status != 200:
                     error_text = await response.text()
-                    logger.error(f"HTTP {response.status}: {error_text[:200]}")
-                    if retry < Config.MAX_RETRIES - 1:
-                        # Use random delay within range for better retry behavior
-                        delay = Config.RETRY_DELAY_MIN + (Config.RETRY_DELAY_MAX - Config.RETRY_DELAY_MIN) * random.random()
-                        await asyncio.sleep(delay)
-                        continue
-                    return {"status": "error", "address": address, "error": f"HTTP {response.status}"}
-                
-                data = await response.json()
-                
-                if data.get("status") != "1":
-                    error_msg = data.get("message", "Unknown error")
+                    error_msg = f"HTTP {response.status}: {error_text[:200]}"
+                    if not IN_TEST_MODE:
+                        print(f"❌ Error fetching transactions for {address}: {error_msg}")
+                    logger.error(f"Error fetching transactions for {address}: {error_msg}")
                     
-                    # If no transactions found, this is actually OK
-                    if "No transactions found" in error_msg:
-                        return {
-                            "status": "success",
-                            "address": address,
-                            "transactions": []
-                        }
-                    
-                    logger.error(f"API error for {address}: {error_msg}")
                     if retry < Config.MAX_RETRIES - 1:
-                        # Use random delay within range for better retry behavior
                         delay = Config.RETRY_DELAY_MIN + (Config.RETRY_DELAY_MAX - Config.RETRY_DELAY_MIN) * random.random()
                         await asyncio.sleep(delay)
                         continue
                     return {"status": "error", "address": address, "error": error_msg}
                 
-                # Process transactions
-                transactions = data.get("result", [])
+                try:
+                    data = await response.json()
+                except Exception as e:
+                    if not IN_TEST_MODE:
+                        print(f"❌ Error parsing JSON response: {str(e)}")
+                    logger.error(f"Error parsing JSON for {address}: {str(e)}")
+                    if retry < Config.MAX_RETRIES - 1:
+                        delay = Config.RETRY_DELAY_MIN + (Config.RETRY_DELAY_MAX - Config.RETRY_DELAY_MIN) * random.random()
+                        await asyncio.sleep(delay)
+                        continue
+                    return {"status": "error", "address": address, "error": f"JSON parse error: {str(e)}"}
                 
-                # Format transactions
-                formatted_txs = []
-                for tx in transactions:
-                    # Convert wei to ether
-                    value_wei = int(tx.get("value", "0"))
-                    value_eth = value_wei / 1e18
-                    
-                    # Format timestamp
-                    timestamp = int(tx.get("timeStamp", "0"))
-                    date = datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d %H:%M:%S')
-                    
-                    formatted_txs.append({
-                        "hash": tx.get("hash"),
-                        "from": tx.get("from"),
-                        "to": tx.get("to"),
-                        "value_wei": value_wei,
-                        "value_eth": value_eth,
-                        "timestamp": timestamp,
-                        "date": date,
-                        "gas": int(tx.get("gas", "0")),
-                        "gas_price": int(tx.get("gasPrice", "0")),
-                        "is_error": tx.get("isError", "0") == "1"
-                    })
+                if data.get("status") != "1":
+                    error_msg = data.get("message", "Unknown error")
+                    if not IN_TEST_MODE:
+                        print(f"❌ API error for {address}: {error_msg}")
+                    logger.error(f"API error for {address}: {error_msg}")
+                    if retry < Config.MAX_RETRIES - 1:
+                        delay = Config.RETRY_DELAY_MIN + (Config.RETRY_DELAY_MAX - Config.RETRY_DELAY_MIN) * random.random()
+                        await asyncio.sleep(delay)
+                        continue
+                    return {"status": "error", "address": address, "error": error_msg}
+                
+                transactions = data.get("result", [])
                 
                 return {
                     "status": "success",
                     "address": address,
-                    "transactions": formatted_txs
+                    "transactions": transactions,
+                    "timestamp": int(time.time())
                 }
                 
         except asyncio.TimeoutError:
+            if not IN_TEST_MODE:
+                print(f"❌ Timeout getting transactions for {address}")
             logger.error(f"Timeout getting transactions for {address}")
             if retry < Config.MAX_RETRIES - 1:
-                # Use random delay within range for better retry behavior
                 delay = Config.RETRY_DELAY_MIN + (Config.RETRY_DELAY_MAX - Config.RETRY_DELAY_MIN) * random.random()
                 await asyncio.sleep(delay)
                 continue
             return {"status": "error", "address": address, "error": "Timeout"}
             
         except Exception as e:
+            if not IN_TEST_MODE:
+                print(f"❌ Error getting transactions for {address}: {str(e)}")
             logger.error(f"Error getting transactions for {address}: {str(e)}")
             if retry < Config.MAX_RETRIES - 1:
-                # Use random delay within range for better retry behavior
                 delay = Config.RETRY_DELAY_MIN + (Config.RETRY_DELAY_MAX - Config.RETRY_DELAY_MIN) * random.random()
                 await asyncio.sleep(delay)
                 continue
@@ -330,151 +394,97 @@ async def get_wallet_transactions(session: aiohttp.ClientSession, address: str) 
     return {"status": "error", "address": address, "error": "Max retries exceeded"}
 
 async def process_wallet(session: aiohttp.ClientSession, address: str) -> Dict[str, Any]:
-    """Process a single wallet - get balance and transactions."""
+    """Process a single wallet address."""
     if not is_valid_eth_address(address):
-        return {
-            "status": "error", 
-            "address": address, 
-            "error": "Invalid Ethereum address format"
-        }
+        return {"status": "error", "address": address, "error": "Invalid Ethereum address"}
     
-    # Get balance and transactions in parallel
+    # Get balance and transactions concurrently
     balance_task = asyncio.create_task(get_wallet_balance(session, address))
-    txs_task = asyncio.create_task(get_wallet_transactions(session, address))
+    transactions_task = asyncio.create_task(get_wallet_transactions(session, address))
     
-    balance_result = await balance_task
-    txs_result = await txs_task
+    balance_result, transactions_result = await asyncio.gather(balance_task, transactions_task)
     
-    # Combine results
-    if balance_result.get("status") == "error":
+    # If either call failed, return the error
+    if balance_result["status"] == "error":
         return balance_result
+    if transactions_result["status"] == "error":
+        return transactions_result
     
-    if txs_result.get("status") == "error":
-        return txs_result
-    
-    # Create the combined result
-    result = {
+    # Combine the results
+    return {
         "status": "success",
         "address": address,
-        "balance_wei": balance_result.get("balance_wei", 0),
-        "balance_eth": balance_result.get("balance_eth", 0),
-        "transactions": txs_result.get("transactions", [])
+        "balance_wei": balance_result["balance_wei"],
+        "balance_eth": balance_result["balance_eth"],
+        "transactions": transactions_result["transactions"],
+        "timestamp": int(time.time())
     }
-    
-    return result
 
-async def process_wallets(wallets: List[str], output_dir: Path, threads: int = 10, test_mode: bool = False) -> bool:
-    """Process a list of wallet addresses and save the results."""
-    # Create sessions and process wallets in batches
-    processed_count = 0
-    total_wallets = len(wallets)
-    results = []
+async def process_wallets(wallets: List[str], output_dir: Optional[Path] = None, threads: int = 10, test_mode: bool = False) -> bool:
+    """Process a list of wallet addresses."""
+    if not wallets:
+        if not IN_TEST_MODE:
+            print("❌ No wallet addresses provided")
+        logger.error("No wallet addresses provided")
+        return False
     
-    if not test_mode:
-        print(f"Processing {total_wallets} Ethereum wallets...")
+    if output_dir is None:
+        output_dir = Config.get_output_dir()
     
-    async with aiohttp.ClientSession() as session:
-        # Process wallets in parallel with concurrency control
-        semaphore = asyncio.Semaphore(threads)
-        
-        async def process_with_semaphore(wallet):
-            async with semaphore:
-                return await process_wallet(session, wallet)
-        
-        # Create tasks for all wallets
-        tasks = [process_with_semaphore(wallet) for wallet in wallets]
-        
-        # Process all tasks and collect results
-        for i, task in enumerate(asyncio.as_completed(tasks), 1):
-            try:
-                result = await task
-                results.append(result)
-                processed_count += 1
-                
-                if not test_mode:
-                    # Show progress
-                    show_progress_bar(processed_count, total_wallets, 
-                                     prefix=f'Progress:', 
-                                     suffix=f'Complete ({processed_count}/{total_wallets})', 
-                                     length=40)
-            except Exception as e:
-                logger.error(f"Error processing wallet: {str(e)}")
-                continue
+    Config.ensure_dir_exists(output_dir)
     
-    # Save results to output directory
+    # Create timestamp for output file
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_file = output_dir / f"wallet_analysis_{timestamp}.json"
     
-    # Use a more descriptive output filename
-    wallets_count = len(wallets)
-    success_count = sum(1 for r in results if r.get("status") == "success")
-    error_count = wallets_count - success_count
+    # Create semaphore to limit concurrent requests
+    semaphore = asyncio.Semaphore(threads)
     
-    # Add "test_" prefix in test mode
-    prefix = "test_" if test_mode else ""
-    output_file = output_dir / f"{prefix}eth_wallet_results_{timestamp}_{wallets_count}wallets_{success_count}success_{error_count}errors.json"
+    async def process_with_semaphore(wallet):
+        async with semaphore:
+            async with aiohttp.ClientSession() as session:
+                return await process_wallet(session, wallet)
     
+    if not IN_TEST_MODE:
+        print(f"🔍 Processing {len(wallets)} wallets...")
+    
+    results = []
+    total_wallets = len(wallets)
+    processed = 0
+    
+    # Process wallets concurrently with semaphore
+    tasks = [process_with_semaphore(wallet) for wallet in wallets]
+    for task in asyncio.as_completed(tasks):
+        result = await task
+        results.append(result)
+        processed += 1
+        if not IN_TEST_MODE:
+            show_progress_bar(processed, total_wallets, prefix='Progress:', suffix='Complete')
+    
+    # Save results
     try:
         with open(output_file, 'w') as f:
             json.dump(results, f, indent=2)
-        
-        if not test_mode:
-            file_size_mb = os.path.getsize(output_file) / (1024 * 1024)
+        if not IN_TEST_MODE:
             print(f"\n✅ Results saved to {output_file}")
-            print(f"   File size: {file_size_mb:.2f} MB")
-            print(f"   Wallets processed: {wallets_count}")
-            print(f"   Successful: {success_count}")
-            print(f"   Errors: {error_count}")
-        
-        # Remove test files after saving to avoid cluttering
-        if test_mode and os.path.exists(output_file):
-            os.remove(output_file)
-            
         return True
     except Exception as e:
-        logger.error(f"Error saving results: {str(e)}")
-        if not test_mode:
+        if not IN_TEST_MODE:
             print(f"\n❌ Error saving results: {str(e)}")
+        logger.error(f"Error saving results: {str(e)}")
         return False
 
-def run_wallet_checker_in_thread(wallets: List[str], output_dir: Path, threads: int = 10, test_mode: bool = False) -> bool:
-    """
-    Run the wallet checker in a separate thread with its own event loop.
-    This is a workaround for "Cannot run the event loop while another loop is running" errors.
-    """
-    result_queue = queue.Queue()
-    
+def run_wallet_checker_in_thread(wallets: List[str], output_dir: Optional[Path] = None, threads: int = 10, test_mode: bool = False) -> bool:
+    """Run the wallet checker in a separate thread."""
     def thread_worker():
-        # Create a new event loop for this thread
-        thread_loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(thread_loop)
-        
-        try:
-            # Run the async function in this thread's event loop
-            result = thread_loop.run_until_complete(process_wallets(wallets, output_dir, threads, test_mode))
-            result_queue.put(("success", result))
-        except Exception as e:
-            result_queue.put(("error", str(e)))
-        finally:
-            thread_loop.close()
+        return asyncio.run(process_wallets(wallets, output_dir, threads, test_mode))
     
-    # Start the thread and wait for it to complete
-    thread = threading.Thread(target=thread_worker)
-    thread.daemon = True
-    thread.start()
-    thread.join()
-    
-    # Get the result
-    if not result_queue.empty():
-        status, result = result_queue.get()
-        if status == "success":
-            return result
-        else:
-            if not test_mode:
-                print(f"Error in wallet checker: {result}")
-            return False
-    else:
-        if not test_mode:
-            print("No result returned from thread")
+    try:
+        return thread_worker()
+    except Exception as e:
+        if not IN_TEST_MODE:
+            print(f"❌ Error running wallet checker: {str(e)}")
+        logger.error(f"Error running wallet checker: {str(e)}")
         return False
 
 def import_wallets_from_file(file_path: Union[str, Path]) -> List[str]:
@@ -807,93 +817,76 @@ class EthWalletChecker:
         
         return True
 
-async def standalone_test(wallet_addresses=None, threads=2):
-    """Run a standalone test of the wallet checker."""
-    # Set test mode flag
-    os.environ["TEST_MODE"] = "1"
-    test_mode = True
-    
-    # Use default test wallets if none provided
-    if not wallet_addresses:
-        wallet_addresses = [
-            "0x742d35Cc6634C0532925a3b844Bc454e4438f44e",  # Vitalik's address
-            "0xAb5801a7D398351b8bE11C439e05C5B3259aeC9B"   # Another well-known address
-        ]
-    
-    # Ensure we have a list of wallets
-    if isinstance(wallet_addresses, str):
-        wallet_addresses = [wallet_addresses]
-    
-    # Set up output directory
-    output_dir = Config.get_output_dir()
-    Config.ensure_dir_exists(output_dir)
-    
-    print(f"🧪 Running test mode on {len(wallet_addresses)} wallets...")
-    
-    # Create instance and run
-    checker = EthWalletChecker(
-        wallets=wallet_addresses,
-        threads=threads,
-        output_dir=output_dir,
-        test_mode=test_mode
-    )
-    
-    result = checker.run()
-    
-    if result:
-        print("✅ Test completed successfully")
-    else:
-        print("❌ Test failed")
-    
-    return 0 if result else 1
+async def standalone_test(test_addresses: Optional[List[str]] = None) -> bool:
+    """Run a standalone test of the wallet checker functionality."""
+    with suppress_all_output():
+        # Use test addresses or a default test address
+        if not test_addresses:
+            test_addresses = [
+                "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045",  # Vitalik's address
+                "0x1db3439a222c519ab44bb1144fc28167b4fa6ee6"   # Binance cold wallet
+            ]
+        
+        # Create test output directory
+        test_output_dir = Config.get_output_dir() / "test_output"
+        Config.ensure_dir_exists(test_output_dir)
+        
+        try:
+            # Process test wallets
+            success = await process_wallets(test_addresses, test_output_dir, threads=2, test_mode=True)
+            
+            # Clean up test files
+            if success:
+                for file in test_output_dir.glob("wallet_analysis_*.json"):
+                    try:
+                        os.remove(file)
+                    except Exception:
+                        pass
+                try:
+                    os.rmdir(test_output_dir)
+                except Exception:
+                    pass
+            
+            return success
+            
+        except Exception as e:
+            logger.error(f"Error in standalone test: {str(e)}")
+            return False
 
 def main():
-    """Main entry point for the script."""
-    # Parse command line arguments
-    parser = argparse.ArgumentParser(description='Ethereum Wallet Checker')
-    parser.add_argument('--wallet', '-w', type=str, help='Path to wallet list file')
-    parser.add_argument('--threads', '-t', type=int, default=10, help='Number of threads to use')
-    parser.add_argument('--output', '-o', type=str, help='Output directory (default: data/output-data/ethereum/wallet-analysis)')
-    parser.add_argument('--test', action='store_true', help='Run in test mode')
-    
+    """Main entry point for standalone usage."""
+    parser = argparse.ArgumentParser(description="Ethereum Wallet Checker")
+    parser.add_argument("--test", action="store_true", help="Run in test mode")
+    parser.add_argument("--input", type=str, help="Input file with wallet addresses (one per line)")
+    parser.add_argument("--output-dir", type=str, help="Output directory for results")
+    parser.add_argument("--threads", type=int, default=10, help="Number of concurrent threads")
     args = parser.parse_args()
     
-    # If in test mode, run the test
     if args.test:
-        return asyncio.run(standalone_test(threads=args.threads))
+        os.environ["TEST_MODE"] = "1"
+        success = asyncio.run(standalone_test())
+        sys.exit(0 if success else 1)
     
-    # Make sure we have a wallet file
-    if not args.wallet:
-        print("❌ No wallet file specified.")
-        print("Please use --wallet/-w to specify a wallet list file.")
-        return 1
+    # Normal operation mode
+    if not args.input:
+        print("Error: Please provide an input file with wallet addresses")
+        sys.exit(1)
     
-    # Import wallets from file
-    wallets = import_wallets_from_file(args.wallet)
-    
-    if not wallets:
-        print("❌ No wallets found in the specified file.")
-        return 1
-    
-    # Setup output directory
-    if args.output:
-        output_dir = Path(args.output)
-    else:
-        output_dir = Config.get_output_dir()
-    
-    Config.ensure_dir_exists(output_dir)
-    
-    # Create instance and run
-    checker = EthWalletChecker(
-        wallets=wallets,
-        threads=args.threads,
-        output_dir=output_dir
-    )
-    
-    result = checker.run()
-    
-    return 0 if result else 1
+    try:
+        # Read wallet addresses from input file
+        with open(args.input, 'r') as f:
+            wallets = [line.strip() for line in f if line.strip()]
+        
+        # Set output directory
+        output_dir = Path(args.output_dir) if args.output_dir else Config.get_output_dir()
+        
+        # Run the wallet checker
+        success = run_wallet_checker_in_thread(wallets, output_dir, args.threads)
+        sys.exit(0 if success else 1)
+        
+    except Exception as e:
+        print(f"Error: {str(e)}")
+        sys.exit(1)
 
-# For standalone execution
 if __name__ == "__main__":
-    sys.exit(main()) 
+    main() 
