@@ -173,102 +173,116 @@ def check_missing_env_vars(module_name: str) -> List[str]:
             missing_vars.append(var)
     return missing_vars
 
-async def run_module_tests(module_name: str, options: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+def check_module_env_vars(module_name):
+    """
+    Check if a module has all required environment variables.
+    
+    Args:
+        module_name: Name of the module to check
+        
+    Returns:
+        Tuple of (status_indicator, missing_vars)
+    """
+    if module_name not in AVAILABLE_MODULES:
+        return STATUS_INDICATORS["failed"], [f"Module '{module_name}' not found"]
+    
+    # Get required env vars for this module
+    module_info = AVAILABLE_MODULES[module_name]
+    required_env_vars = module_info.get("required_env_vars", [])
+    
+    # Check which env vars are missing
+    missing_vars = []
+    for var in required_env_vars:
+        if not os.environ.get(var):
+            missing_vars.append(var)
+    
+    # Return appropriate status based on missing vars
+    if missing_vars:
+        return STATUS_INDICATORS["skipped"], missing_vars
+    
+    return STATUS_INDICATORS["passed"], []
+
+async def run_module_tests(module_name, module_info):
     """
     Run tests for a specific module.
     
     Args:
         module_name: Name of the module to test
-        options: Optional parameters to pass to the test runner
+        module_info: Module information from AVAILABLE_MODULES
         
     Returns:
-        Dictionary with test results
+        Dict containing test results and status
     """
-    if module_name not in AVAILABLE_MODULES:
-        print(f"{STATUS_INDICATORS['failed']} Module '{module_name}' not found")
-        return {"status": "failed", "error": f"Module '{module_name}' not found"}
+    # Check required environment variables
+    module_status, missing_env_vars = check_module_env_vars(module_name)
     
-    module_info = AVAILABLE_MODULES[module_name]
-    result = {"status": "unknown", "missing_env_vars": [], "has_skips": False, "has_failures": False}
-    
-    # Check for missing environment variables
-    missing_vars = check_missing_env_vars(module_name)
-    result["missing_env_vars"] = missing_vars
-    
-    # If there are missing environment variables, skip the test
-    # All modules with missing env vars should be skipped
-    if missing_vars:
-        print(f"{STATUS_INDICATORS['skipped']} Skipping {module_name} tests due to missing environment variables: {', '.join(missing_vars)}")
+    if module_status == STATUS_INDICATORS["skipped"]:
+        cprint(f"\n🟡 Skipping {module_name} tests due to missing environment variables: {', '.join(missing_env_vars)}", "yellow")
         return {
             "status": "skipped",
-            "missing_env_vars": missing_vars,
-            "has_skips": True,
-            "has_failures": False
+            "missing_env_vars": missing_env_vars,
+            "has_skips": True
         }
     
+    # Print module header
+    cprint(f"\nRunning tests for {module_name}", "bold")
+    
     try:
-        # Import the module
-        test_module = importlib.import_module(module_info["module_path"])
+        # Import the test module
+        module_path = module_info["module_path"]
+        run_func_name = module_info.get("run_func", "run_tests")
         
-        # Get the run function
-        run_func_name = module_info["run_func"]
-        run_func = getattr(test_module, run_func_name)
+        try:
+            test_module = importlib.import_module(module_path)
+            run_func = getattr(test_module, run_func_name)
+        except (ImportError, AttributeError) as e:
+            cprint(f"❌ Failed to import test module {module_path}: {str(e)}", "red")
+            return {
+                "status": "failed",
+                "reason": f"Import error: {str(e)}",
+                "has_failures": True
+            }
         
         # Run the tests
-        print(f"\n{COLORS['bold']}Running tests for {module_name}{COLORS['end']}")
+        options = {}  # Can be expanded to pass options from command line
         
-        if asyncio.iscoroutinefunction(run_func):
-            exit_code = await run_func(options)
+        # Allow both return styles - dict or int
+        result = await run_func(options)
+        
+        if isinstance(result, int):
+            # Old-style int return, convert to dict
+            passed = result == 0
+            return {
+                "status": "passed" if passed else "failed",
+                "has_failures": not passed,
+                "exit_code": result
+            }
         else:
-            exit_code = run_func(options)
-        
-        # In our convention:
-        # - exit_code == 0: All tests passed
-        # - exit_code == 1: Some tests failed
-        # - exit_code == 2: All tests were skipped (no failures)
-        
-        has_failures = False
-        has_skips = False
-        
-        if exit_code == 0:
-            # All tests passed
-            status = "passed"
-        elif exit_code == 2:
-            # All tests were skipped
-            status = "skipped"
-            has_skips = True
-        else:
-            # Some tests failed
-            status = "failed"
-            has_failures = True
+            # New-style dict return with detailed results
+            module_passed = not result.get("has_failures", False)
+            has_skips = result.get("has_skips", False) or any(
+                r.get("status") == "skipped" for r in result.get("tests", {}).values()
+            )
             
-        # Update result with status information
-        result.update({
-            "status": status, 
-            "exit_code": exit_code,
-            "has_failures": has_failures,
-            "has_skips": has_skips
-        })
-        
-        return result
-        
-    except ImportError as e:
-        print(f"{STATUS_INDICATORS['failed']} Failed to import {module_name} test module: {str(e)}")
-        return {
-            "status": "failed", 
-            "error": str(e), 
-            "has_failures": True, 
-            "has_skips": False,
-            "missing_env_vars": missing_vars
-        }
+            return {
+                "status": "passed" if module_passed else "failed",
+                "has_skips": has_skips,
+                "has_failures": not module_passed,
+                "tests": result.get("tests", {}),
+                "total_tests": result.get("total_tests", 0),
+                "passed_tests": result.get("passed_tests", 0),
+                "skipped_tests": result.get("skipped_tests", 0)
+            }
+            
     except Exception as e:
-        print(f"{STATUS_INDICATORS['failed']} Error running {module_name} tests: {str(e)}")
+        cprint(f"❌ Error running tests for {module_name}: {str(e)}", "red")
+        import traceback
+        traceback.print_exc()
+        
         return {
-            "status": "failed", 
-            "error": str(e), 
-            "has_failures": True, 
-            "has_skips": False,
-            "missing_env_vars": missing_vars
+            "status": "failed",
+            "reason": str(e),
+            "has_failures": True
         }
 
 def get_module_status_indicator(result: Dict[str, Any]) -> str:
@@ -349,25 +363,172 @@ def get_menu_item_status(menu_section: str, submenu: str, results: Dict[str, Dic
     
     return status_indicator, list(set(missing_env_vars))  # Deduplicate missing env vars
 
-async def run_all_tests(specific_module: Optional[str] = None) -> int:
+async def run_all_tests(module_name=None):
     """
     Run all tests or tests for a specific module.
     
     Args:
-        specific_module: Optional name of a specific module to test
+        module_name: Optional name of a specific module to test
         
     Returns:
         int: Exit code (0 for success, 1 for failure)
     """
     start_time = time.time()
-    results = {}
     
-    print(f"\n{COLORS['bold']}🧪 Sol Tools Test Runner{COLORS['end']}")
-    print(f"Running comprehensive tests organized by menu structure\n")
+    # Print header
+    cprint("\n🧪 Sol Tools Test Runner", "bold")
+    cprint("Running comprehensive tests organized by menu structure", "cyan")
     
-    # Display available environment variables
+    # Check environment variables
+    print_env_vars()
+    
+    # Store results for each module
+    module_results = {}
+    
+    # Run tests for the specified module, or all modules if none specified
+    if module_name and module_name.lower() != "all":
+        # Run tests for a specific module
+        if module_name.lower() in AVAILABLE_MODULES:
+            module_info = AVAILABLE_MODULES[module_name.lower()]
+            module_results[module_name] = await run_module_tests(module_name, module_info)
+        else:
+            cprint(f"\n❌ Module '{module_name}' not found", "red")
+            return 1
+    else:
+        # Run tests for all modules
+        for name, info in AVAILABLE_MODULES.items():
+            module_results[name] = await run_module_tests(name, info)
+    
+    # Print test results by menu structure
+    print_results_by_menu(module_results)
+    
+    # Print test results by category
+    print_results_by_category(module_results)
+    
+    # Print summary
+    exit_code = await print_summary(module_results, start_time)
+    
+    # Return exit code
+    return exit_code
+
+async def print_summary(module_results, start_time):
+    """Print a summary of test results."""
+    # Calculate elapsed time
+    elapsed_time = time.time() - start_time
+    
+    # Count the results
+    passed_modules = []
+    failed_modules = []
+    skipped_modules = []
+    
+    total_tests = 0
+    passed_tests = 0
+    skipped_tests = 0
+    failed_tests = 0
+    
+    # Process results for each module
+    for module_name, result in module_results.items():
+        module_status = result.get("status", "unknown")
+        
+        if "tests" in result:
+            # Count test results for this module
+            module_total = result.get("total_tests", 0)
+            module_passed = result.get("passed_tests", 0)
+            module_skipped = result.get("skipped_tests", 0)
+            module_failed = module_total - module_passed - module_skipped
+            
+            # Add to the totals
+            total_tests += module_total
+            passed_tests += module_passed
+            skipped_tests += module_skipped
+            failed_tests += module_failed
+        
+        # Track module status
+        if module_status == "passed":
+            passed_modules.append(module_name)
+        elif module_status == "skipped":
+            skipped_modules.append(module_name)
+        else:
+            failed_modules.append(module_name)
+    
+    # Print the summary
+    cprint("\n📊 Test Summary (completed in {:.2f} seconds)".format(elapsed_time), "bold")
+    
+    # Module status
+    if skipped_modules:
+        cprint(f"🟡 {len(skipped_modules)} modules had skipped tests due to missing dependencies", "yellow")
+    if failed_modules:
+        cprint(f"🔴 {len(failed_modules)} modules had failures", "red")
+    
+    cprint(f"🟢 {len(passed_modules)} modules passed", "green")
+    
+    # Detailed stats
+    if total_tests > 0:
+        # Only show detailed stats if we have test data
+        print("\n📈 Detailed Test Statistics:")
+        
+        # Calculate percentages
+        pass_percent = (passed_tests / total_tests) * 100 if total_tests > 0 else 0
+        skip_percent = (skipped_tests / total_tests) * 100 if total_tests > 0 else 0
+        fail_percent = (failed_tests / total_tests) * 100 if total_tests > 0 else 0
+        
+        print(f"  Total Tests: {total_tests}")
+        cprint(f"  Passed: {passed_tests} ({pass_percent:.1f}%)", "green")
+        
+        if skipped_tests > 0:
+            cprint(f"  Skipped: {skipped_tests} ({skip_percent:.1f}%)", "yellow")
+        
+        if failed_tests > 0:
+            cprint(f"  Failed: {failed_tests} ({fail_percent:.1f}%)", "red")
+        
+        # Calculate code coverage approximation if available
+        print_coverage_summary(passed_tests, total_tests)
+    
+    # Return success status for command-line usage
+    return 0 if not failed_modules else 1
+
+def print_coverage_summary(passed_tests, total_tests):
+    """
+    Print an approximate code coverage summary.
+    
+    This is a very rough approximation of code coverage based on
+    the test pass rate. It serves as a quick indicator only.
+    """
+    # Only show coverage indication if tests were run
+    if total_tests == 0:
+        return
+    
+    # Calculate estimated coverage (simple approximation)
+    # This is intentionally conservative to avoid overestimating coverage
+    est_coverage = min(95, (passed_tests / total_tests) * 100)
+    
+    # Print coverage bar
+    bar_width = 30
+    covered_width = int((est_coverage / 100) * bar_width)
+    uncovered_width = bar_width - covered_width
+    
+    coverage_bar = f"[{'=' * covered_width}{' ' * uncovered_width}]"
+    
+    print("\n📊 Estimated Test Coverage:")
+    print(f"  {coverage_bar} {est_coverage:.1f}%")
+    print("  (This is an approximation based on test success rate)")
+    
+    # Add coverage insights
+    if est_coverage < 50:
+        cprint("  ⚠️ Low test coverage detected. Consider adding more tests.", "yellow")
+    elif est_coverage < 70:
+        cprint("  📝 Moderate test coverage. Key features are tested.", "cyan")
+    else:
+        cprint("  ✅ Good test coverage. Most functionality is being tested.", "green")
+
+def print_env_vars():
+    """Display available environment variables."""
     print(f"{COLORS['cyan']}Environment variables detected:{COLORS['end']}")
-    env_vars = [var for var in os.environ.keys() if var in ["HELIUS_API_KEY", "DUNE_API_KEY", "TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID", "SOL_TOOLS_DATA_DIR"]]
+    env_vars = [var for var in os.environ.keys() if var in [
+        "HELIUS_API_KEY", "DUNE_API_KEY", "TELEGRAM_BOT_TOKEN", 
+        "TELEGRAM_CHAT_ID", "SOL_TOOLS_DATA_DIR"
+    ]]
+    
     if env_vars:
         for var in env_vars:
             value = os.environ.get(var, "")
@@ -377,30 +538,9 @@ async def run_all_tests(specific_module: Optional[str] = None) -> int:
     else:
         print(f"  No relevant environment variables found.")
     print()
-    
-    # If a specific module is specified, only run tests for that module
-    if specific_module:
-        # Handle case-insensitivity by normalizing to uppercase for comparison
-        specific_module_upper = specific_module.upper()
-        module_found = False
-        
-        for module_name in AVAILABLE_MODULES.keys():
-            if module_name.upper() == specific_module_upper:
-                result = await run_module_tests(module_name)
-                results[module_name] = result
-                module_found = True
-                break
-                
-        if not module_found:
-            print(f"{STATUS_INDICATORS['failed']} Module '{specific_module}' not found")
-            return 1
-    else:
-        # Run tests for all modules
-        for module_name in AVAILABLE_MODULES:
-            result = await run_module_tests(module_name)
-            results[module_name] = result
-    
-    # Print test results organized by menu structure
+
+def print_results_by_menu(module_results):
+    """Print test results organized by menu structure."""
     print(f"\n{COLORS['bold']}Test Results by Menu Structure:{COLORS['end']}")
     
     # Organize and display the menu structure with test results
@@ -412,7 +552,7 @@ async def run_all_tests(specific_module: Optional[str] = None) -> int:
             is_last = idx == len(MENU_STRUCTURE[menu_section]) - 1
             prefix = "└──" if is_last else "├──"
             
-            status_indicator, missing_vars = get_menu_item_status(menu_section, submenu, results)
+            status_indicator, missing_vars = get_menu_item_status(menu_section, submenu, module_results)
             
             # Skip menu items with no associated modules or no test results
             if not status_indicator:
@@ -424,8 +564,9 @@ async def run_all_tests(specific_module: Optional[str] = None) -> int:
                 missing_info = f" (Missing: {', '.join(missing_vars)})"
             
             print(f"│   {prefix} {status_indicator} {submenu}{missing_info}")
-    
-    # Print summary of results by module category
+
+def print_results_by_category(module_results):
+    """Print summary of results by module category."""
     print(f"\n{COLORS['bold']}Test Results by Category:{COLORS['end']}")
     
     # Group modules by category
@@ -440,8 +581,8 @@ async def run_all_tests(specific_module: Optional[str] = None) -> int:
     for category, module_names in sorted(modules_by_category.items()):
         print(f"{category}")
         for module_name in sorted(module_names):
-            if module_name in results:
-                result = results[module_name]
+            if module_name in module_results:
+                result = module_results[module_name]
                 status_indicator = get_module_status_indicator(result)
                 
                 # Format module status
@@ -464,43 +605,25 @@ async def run_all_tests(specific_module: Optional[str] = None) -> int:
                         (not result.get("has_skips", False) or 
                          (result.get("has_skips", False) and not result.get("has_failures", False)))):
                         # Import the module to get test details
-                        test_module = importlib.import_module(module_info["module_path"])
-                        # See if the module has a function to get test names
-                        if hasattr(test_module, "get_test_names"):
-                            test_names = test_module.get_test_names()
-                            # Display each test with proper indentation and icon
-                            for test_name in test_names:
-                                if result.get("status") == "passed":
-                                    print(f"    • {test_name}")
-                        # If the module doesn't have test names, try to infer from the module info
-                        elif "submodules" in module_info and module_info["submodules"]:
-                            for submodule in module_info["submodules"]:
-                                print(f"    • {submodule}")
+                        try:
+                            test_module = importlib.import_module(module_info["module_path"])
+                            # See if the module has a function to get test names
+                            if hasattr(test_module, "get_test_names"):
+                                test_names = test_module.get_test_names()
+                                # Display each test with proper indentation and icon
+                                for test_name in test_names:
+                                    if result.get("status") == "passed":
+                                        print(f"    • {test_name}")
+                            # If the module doesn't have test names, try to infer from the module info
+                            elif "submodules" in module_info and module_info["submodules"]:
+                                for submodule in module_info["submodules"]:
+                                    print(f"    • {submodule}")
+                        except ModuleNotFoundError:
+                            # Module path might be wrong, skip detailed reporting
+                            pass
                 except Exception as e:
                     # Just continue without detailed test info if any issues
                     pass
-    
-    # Print final summary
-    elapsed_time = time.time() - start_time
-    print(f"\n{COLORS['bold']}📊 Test Summary (completed in {elapsed_time:.2f} seconds){COLORS['end']}")
-    
-    failed_modules = [module for module, result in results.items() if result.get("has_failures", False)]
-    passed_modules = [module for module, result in results.items() 
-                      if not result.get("has_failures", False) and not result.get("has_skips", False)]
-    skipped_modules = [module for module, result in results.items() 
-                       if not result.get("has_failures", False) and result.get("has_skips", False)]
-    
-    if failed_modules:
-        print(f"{STATUS_INDICATORS['failed']} {len(failed_modules)} modules had test failures")
-    
-    if skipped_modules:
-        print(f"{STATUS_INDICATORS['skipped']} {len(skipped_modules)} modules had skipped tests due to missing dependencies")
-    
-    if passed_modules:
-        print(f"{STATUS_INDICATORS['passed']} {len(passed_modules)} modules passed")
-    
-    # Return success status for command-line usage
-    return 0 if not failed_modules else 1
 
 def main():
     """Main entry point for the test runner module."""

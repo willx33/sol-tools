@@ -195,6 +195,131 @@ class BaseTester:
                 "reason": str(e)
             }
     
+    def validate_data_structure(self, data: Any, schema: Dict, path: str = "") -> List[str]:
+        """
+        Validate data against a schema definition.
+        
+        This is a simple schema validator that checks:
+        - Types are correct
+        - Required fields are present
+        - Nested structures match expectations
+        
+        Args:
+            data: The data to validate
+            schema: A dictionary mapping field names to expected types or nested schemas
+            path: Current path for error reporting (used for nested validation)
+            
+        Returns:
+            List of error messages (empty if validation passes)
+        """
+        errors = []
+        
+        # Handle None schema as accepting any value
+        if schema is None:
+            return errors
+            
+        # Check if data is of the correct type
+        if isinstance(schema, type) or isinstance(schema, tuple):
+            # Schema is a simple type check
+            if not isinstance(data, schema):
+                errors.append(f"{path}: Expected {schema}, got {type(data)}")
+            return errors
+            
+        # Handle dict schema against dict data
+        if isinstance(schema, dict):
+            # First validate the data is a dict
+            if not isinstance(data, dict):
+                errors.append(f"{path}: Expected dict, got {type(data)}")
+                return errors
+                
+            # Check required fields are present
+            for key, value_schema in schema.items():
+                # Skip optional fields (keys that start with ?)
+                is_optional = False
+                if key.startswith("?"):
+                    clean_key = key[1:]
+                    is_optional = True
+                else:
+                    clean_key = key
+                
+                # Check if required field is present
+                if clean_key not in data:
+                    if not is_optional:
+                        errors.append(f"{path}.{clean_key}: Missing required field")
+                    continue
+                    
+                # Validate field value (recursively for nested schemas)
+                if isinstance(value_schema, dict):
+                    # Nested schema validation
+                    nested_errors = self.validate_data_structure(
+                        data[clean_key], 
+                        value_schema,
+                        f"{path}.{clean_key}"
+                    )
+                    errors.extend(nested_errors)
+                else:
+                    # Simple type validation
+                    if not isinstance(data[clean_key], value_schema):
+                        errors.append(
+                            f"{path}.{clean_key}: Expected {value_schema}, " +
+                            f"got {type(data[clean_key])}"
+                        )
+        
+        # Handle list schema against list data
+        elif isinstance(schema, list) and len(schema) == 1:
+            # Schema is a list with element type definition
+            if not isinstance(data, list):
+                errors.append(f"{path}: Expected list, got {type(data)}")
+                return errors
+                
+            # Validate each list element
+            element_schema = schema[0]
+            for i, element in enumerate(data):
+                element_errors = self.validate_data_structure(
+                    element,
+                    element_schema,
+                    f"{path}[{i}]"
+                )
+                errors.extend(element_errors)
+                
+        return errors
+    
+    async def with_timeout(self, coro, timeout: int = 30, error_message: str = "Operation timed out"):
+        """
+        Run a coroutine with a timeout.
+        
+        Args:
+            coro: The coroutine to run
+            timeout: Timeout in seconds
+            error_message: Message to include in the timeout exception
+            
+        Returns:
+            The result of the coroutine
+            
+        Raises:
+            TimeoutError: If the operation times out
+        """
+        try:
+            return await asyncio.wait_for(coro, timeout=timeout)
+        except asyncio.TimeoutError:
+            raise TimeoutError(error_message)
+    
+    def create_temp_file(self, content: str = "", extension: str = ".txt") -> Path:
+        """
+        Create a temporary file with the specified content.
+        
+        Args:
+            content: Content to write to the file
+            extension: File extension to use
+            
+        Returns:
+            Path to the temporary file
+        """
+        fd, path = tempfile.mkstemp(suffix=extension, dir=self.test_root)
+        with os.fdopen(fd, 'w') as tmp:
+            tmp.write(content)
+        return Path(path)
+    
     async def run_tests(self, tests: List[Tuple[str, Callable]]) -> Dict[str, Dict[str, Any]]:
         """
         Run multiple tests and return the results.
