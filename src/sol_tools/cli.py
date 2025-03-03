@@ -15,6 +15,9 @@ from .core.config_registry import ConfigRegistry
 from .core.di_container import DIContainer
 from .core.base_adapter import BaseAdapter
 from .core.menu import CursesMenu, InquirerMenu
+from .core.handlers import BaseHandler
+from .modules.ethereum.handlers import EthWalletHandler, EthScanHandler, EthTimestampHandler
+from .modules.gmgn.handlers import fetch_mcap_data_handler, fetch_token_data_handler
 
 # Import handlers for each module
 from .modules.dragon import handlers as dragon_handlers
@@ -22,7 +25,6 @@ from .modules.dune import handlers as dune_handlers
 from .modules.sharp import handlers as sharp_handlers
 from .modules.solana import handlers as solana_handlers
 from .modules.gmgn import handlers as gmgn_handlers
-from .utils import common as utils_handlers
 
 # Set up centralized __pycache__ location if not already set
 if 'PYTHONPYCACHEPREFIX' not in os.environ:
@@ -38,82 +40,81 @@ def exit_app() -> None:
     sys.exit(0)
 
 
-def create_handlers() -> Dict[str, Callable[[], Any]]:
-    """
-    Create a dictionary of all available handlers mapped to their menu identifiers.
-    This is what connects menu options to actual functionality.
-    """
-    handlers = {
-        # Exit function
-        'exit_app': exit_app,
-        
-        # Dragon module handlers - from dragon/handlers.py
-        'dragon_solana_bundle': dragon_handlers.solana_bundle_checker,
-        'dragon_solana_wallet': dragon_handlers.solana_wallet_checker, 
-        'dragon_solana_traders': dragon_handlers.solana_top_traders,
-        'dragon_solana_scan': dragon_handlers.solana_scan_tx,
-        'dragon_solana_copy': dragon_handlers.solana_copy_wallet_finder,
-        'dragon_solana_holders': dragon_handlers.solana_top_holders,
-        'dragon_solana_buyers': dragon_handlers.solana_early_buyers,
-        
-        # Alternative Dragon handlers from solana/handlers.py - these will be used by the menu
-        'solana_dragon_bundle': solana_handlers.dragon_solana_bundle,
-        'solana_dragon_wallet': solana_handlers.dragon_solana_wallet,
-        'solana_dragon_traders': solana_handlers.dragon_solana_traders,
-        'solana_dragon_scan': solana_handlers.dragon_solana_scan,
-        'solana_dragon_copy': solana_handlers.dragon_solana_copy,
-        'solana_dragon_holders': solana_handlers.dragon_solana_holders,
-        'solana_dragon_buyers': solana_handlers.dragon_solana_buyers,
-        
-        'dragon_eth_wallet': dragon_handlers.eth_wallet_checker,
-        'dragon_eth_traders': dragon_handlers.eth_top_traders,
-        'dragon_eth_scan': dragon_handlers.eth_scan_tx,
-        'dragon_eth_timestamp': dragon_handlers.eth_timestamp,
-        
-        'dragon_gmgn_token_data': dragon_handlers.gmgn_token_data,
-        'dragon_gmgn_new': dragon_handlers.gmgn_new_tokens,
-        'dragon_gmgn_completing': dragon_handlers.gmgn_completing_tokens,
-        'dragon_gmgn_soaring': dragon_handlers.gmgn_soaring_tokens,
-        'dragon_gmgn_bonded': dragon_handlers.gmgn_bonded_tokens,
-        
-        # Dune module handlers
-        'dune_query': dune_handlers.run_query,
-        'dune_parse': dune_handlers.parse_csv,
-        
-        # GMGN module handler
-        'gmgn_mcap_data': lambda: asyncio.run(gmgn_handlers.fetch_mcap_data_handler()),
-        
-        # Sharp module handlers
-        'sharp_wallet_checker': lambda: sharp_handlers.wallet_checker(),
-        'sharp_wallet_checker_json': lambda: sharp_handlers.wallet_checker(export_format='json'),
-        'sharp_wallet_checker_csv': lambda: sharp_handlers.wallet_checker(export_format='csv'),
-        'sharp_wallet_checker_excel': lambda: sharp_handlers.wallet_checker(export_format='excel'),
-        
-        # Sharp wallet splitter with export options
-        'sharp_wallet_splitter': lambda: sharp_handlers.wallet_splitter(),
-        'sharp_wallet_splitter_json': lambda: sharp_handlers.wallet_splitter(export_format='json'),
-        'sharp_wallet_splitter_csv': lambda: sharp_handlers.wallet_splitter(export_format='csv'),
-        'sharp_wallet_splitter_excel': lambda: sharp_handlers.wallet_splitter(export_format='excel'),
-        
-        # Sharp CSV merger with export options
-        'sharp_csv_merger': lambda: sharp_handlers.csv_merger(),
-        'sharp_csv_merger_json': lambda: sharp_handlers.csv_merger(export_format='json'),
-        'sharp_csv_merger_csv': lambda: sharp_handlers.csv_merger(export_format='csv'),
-        'sharp_csv_merger_excel': lambda: sharp_handlers.csv_merger(export_format='excel'),
-        
-        'sharp_pnl_checker': sharp_handlers.pnl_checker,
-        
-        # Solana module handlers
-        'solana_token_monitor': solana_handlers.token_monitor,
-        'solana_wallet_monitor': solana_handlers.wallet_monitor,
-        'solana_telegram_scraper': solana_handlers.telegram_scraper,
-        
-        # Utility handlers
-        'utils_clear_cache': utils_handlers.clear_cache,
-        'utils_test_telegram': utils_handlers.test_telegram,
-        'utils_test_helius': utils_handlers.test_helius,
-        'utils_run_full_tests': utils_handlers.run_full_tests,
-    }
+def create_handlers(config: Dict[str, Any]) -> Dict[str, BaseHandler]:
+    """Create handlers for all available tools."""
+    handlers = {}
+    
+    # Ethereum handlers
+    handlers['eth-wallet'] = EthWalletHandler(config)
+    handlers['eth-scan'] = EthScanHandler(config)
+    handlers['eth-timestamp'] = EthTimestampHandler()
+    
+    # Exit function
+    handlers['exit_app'] = exit_app
+    
+    # Dragon module handlers - from dragon/handlers.py
+    handlers['dragon_solana_bundle'] = dragon_handlers.solana_bundle_checker
+    handlers['dragon_solana_wallet'] = dragon_handlers.solana_wallet_checker
+    handlers['dragon_solana_traders'] = dragon_handlers.solana_top_traders
+    handlers['dragon_solana_scan'] = dragon_handlers.solana_scan_tx
+    handlers['dragon_solana_copy'] = dragon_handlers.solana_copy_wallet_finder
+    handlers['dragon_solana_holders'] = dragon_handlers.solana_top_holders
+    handlers['dragon_solana_buyers'] = dragon_handlers.solana_early_buyers
+    
+    # Alternative Dragon handlers from solana/handlers.py - these will be used by the menu
+    handlers['solana_dragon_bundle'] = solana_handlers.dragon_solana_bundle
+    handlers['solana_dragon_wallet'] = solana_handlers.dragon_solana_wallet
+    handlers['solana_dragon_traders'] = solana_handlers.dragon_solana_traders
+    handlers['solana_dragon_scan'] = solana_handlers.dragon_solana_scan
+    handlers['solana_dragon_copy'] = solana_handlers.dragon_solana_copy
+    handlers['solana_dragon_holders'] = solana_handlers.dragon_solana_holders
+    handlers['solana_dragon_buyers'] = solana_handlers.dragon_solana_buyers
+    
+    handlers['dragon_eth_traders'] = dragon_handlers.eth_top_traders
+    handlers['dragon_eth_scan'] = dragon_handlers.eth_scan_all_tx
+    handlers['dragon_eth_timestamp'] = dragon_handlers.eth_timestamp_transactions
+    
+    handlers['dragon_gmgn_token_data'] = dragon_handlers.gmgn_token_data
+    handlers['dragon_gmgn_new'] = dragon_handlers.gmgn_new_tokens
+    handlers['dragon_gmgn_completing'] = dragon_handlers.gmgn_completing_tokens
+    handlers['dragon_gmgn_soaring'] = dragon_handlers.gmgn_soaring_tokens
+    handlers['dragon_gmgn_bonded'] = dragon_handlers.gmgn_bonded_tokens
+    
+    # Dune module handlers
+    handlers['dune_query'] = dune_handlers.run_query
+    handlers['dune_parse'] = dune_handlers.parse_csv
+    
+    # GMGN module handler
+    handlers['gmgn_mcap_data'] = lambda: asyncio.run(gmgn_handlers.fetch_mcap_data_handler())
+    
+    # Sharp module handlers
+    handlers['sharp_wallet_checker'] = lambda: sharp_handlers.wallet_checker()
+    handlers['sharp_wallet_checker_json'] = lambda: sharp_handlers.wallet_checker(export_format='json')
+    handlers['sharp_wallet_checker_csv'] = lambda: sharp_handlers.wallet_checker(export_format='csv')
+    handlers['sharp_wallet_checker_excel'] = lambda: sharp_handlers.wallet_checker(export_format='excel')
+    
+    # Sharp wallet splitter with export options
+    handlers['sharp_wallet_splitter'] = lambda: sharp_handlers.wallet_splitter()
+    handlers['sharp_wallet_splitter_json'] = lambda: sharp_handlers.wallet_splitter(export_format='json')
+    handlers['sharp_wallet_splitter_csv'] = lambda: sharp_handlers.wallet_splitter(export_format='csv')
+    handlers['sharp_wallet_splitter_excel'] = lambda: sharp_handlers.wallet_splitter(export_format='excel')
+    
+    # Sharp CSV merger with export options
+    handlers['sharp_csv_merger'] = lambda: sharp_handlers.csv_merger()
+    handlers['sharp_csv_merger_json'] = lambda: sharp_handlers.csv_merger(export_format='json')
+    handlers['sharp_csv_merger_csv'] = lambda: sharp_handlers.csv_merger(export_format='csv')
+    handlers['sharp_csv_merger_excel'] = lambda: sharp_handlers.csv_merger(export_format='excel')
+    
+    handlers['sharp_pnl_checker'] = sharp_handlers.pnl_checker
+    
+    # Solana module handlers
+    handlers['solana_token_monitor'] = solana_handlers.token_monitor
+    handlers['solana_wallet_monitor'] = solana_handlers.wallet_monitor
+    handlers['solana_telegram_scraper'] = solana_handlers.telegram_scraper
+    
+    # GMGN handlers
+    handlers['gmgn-mcap'] = fetch_mcap_data_handler
+    handlers['gmgn-token'] = fetch_token_data_handler
     
     return handlers
 
@@ -335,7 +336,7 @@ def main():
             return 1
     
     # Create the handlers
-    handlers = create_handlers()
+    handlers = create_handlers(load_config())
     
     # Create and run the appropriate menu
     if args.text_menu:

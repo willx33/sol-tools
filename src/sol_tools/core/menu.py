@@ -134,8 +134,8 @@ def create_main_menu(handlers: Dict[str, Callable]) -> List[MenuOption]:
         MenuOption("Token Watcher", handlers.get('solana_token_monitor'), 
                   description="Monitors token transactions. Saves to data/output-data/solana/transaction-data/.",
                   missing_env_vars=solana_env_vars_missing),
-        MenuOption("Wallet Watcher", handlers.get('solana_wallet_monitor'),
-                  description="Tracks wallet activity. Uses data/input-data/solana/wallet-lists/monitor-wallets.txt.",
+        MenuOption("Solana Wallet Monitor", handlers.get('solana_wallet_monitor'),
+                  description="Tracks wallet activity. Uses data/input-data/api/solana/wallets/monitor-wallets.txt.",
                   missing_env_vars=solana_env_vars_missing),
         MenuOption("TG Data Extractor", handlers.get('solana_telegram_scraper'),
                   description="Extracts data from Telegram. Saves to data/output-data/solana/telegram/.",
@@ -279,8 +279,8 @@ def create_main_menu(handlers: Dict[str, Callable]) -> List[MenuOption]:
     
     # Ethereum Tools
     eth_menu = [
-        MenuOption("Wallet Profiler 🐉", handlers.get('dragon_eth_wallet'),
-                  description="Analyzes ETH wallet performance. Uses data/input-data/ethereum/wallet-lists/.",
+        MenuOption("Wallet Checker 🐉", handlers.get('eth_wallet_checker'),
+                  description="Analyzes ETH wallet performance. Uses data/input-data/api/ethereum/wallets/.",
                   missing_env_vars=ethereum_env_vars_missing or dragon_env_vars_missing),
         MenuOption("Top Trader Finder 🐉", handlers.get('dragon_eth_traders'),
                   description="Finds ETH top traders. Output: data/output-data/ethereum/dragon/top-traders/.",

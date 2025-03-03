@@ -138,22 +138,22 @@ class DragonTester(BaseTester):
     def _create_dragon_directories(self) -> None:
         """Create Dragon-specific test directories."""
         # Create Dragon directories
-        (self.test_root / "input-data" / "solana" / "wallet-lists").mkdir(parents=True, exist_ok=True)
-        (self.test_root / "input-data" / "ethereum" / "wallet-lists").mkdir(parents=True, exist_ok=True)
+        (self.test_root / "input-data" / "api" / "ethereum" / "wallets").mkdir(parents=True, exist_ok=True)
+        (self.test_root / "input-data" / "api" / "solana" / "wallets").mkdir(parents=True, exist_ok=True)
         (self.test_root / "output-data" / "dragon").mkdir(parents=True, exist_ok=True)
     
     def _create_test_data(self) -> None:
         """Create test data files in the test directories."""
         # Create Solana test wallets using real data
         self.solana_wallets = [{"address": addr} for addr in REAL_WALLET_ADDRESSES]
-        self.solana_wallets_file = self.test_root / "input-data" / "solana" / "wallet-lists" / "test_wallets.json"
+        self.solana_wallets_file = self.test_root / "input-data" / "api" / "solana" / "wallets" / "test_wallets.json"
         
         with open(self.solana_wallets_file, "w") as f:
             json.dump(self.solana_wallets, f, indent=2)
         
         # Create Ethereum test wallets using real Ethereum addresses
         self.ethereum_wallets = [{"address": addr} for addr in REAL_ETH_ADDRESSES["wallets"][:10]]
-        self.ethereum_wallets_file = self.test_root / "input-data" / "ethereum" / "wallet-lists" / "test_wallets.json"
+        self.ethereum_wallets_file = self.test_root / "input-data" / "api" / "ethereum" / "wallets" / "test_wallets.json"
         
         with open(self.ethereum_wallets_file, "w") as f:
             json.dump(self.ethereum_wallets, f, indent=2)
@@ -228,7 +228,7 @@ class DragonTester(BaseTester):
         self.logger.info("Testing Solana wallet import...")
         
         # Create a CSV wallet list for testing
-        wallet_list_dir = self.test_root / "input-data" / "solana" / "wallet-lists"
+        wallet_list_dir = self.test_root / "input-data" / "api" / "solana" / "wallets"
         wallet_list_dir.mkdir(parents=True, exist_ok=True)
         
         test_wallets_file = wallet_list_dir / "test-wallets.csv"
@@ -303,7 +303,7 @@ class DragonTester(BaseTester):
         self.logger.info("Testing Ethereum wallet import...")
         
         # Create a CSV wallet list for testing
-        wallet_list_dir = self.test_root / "input-data" / "ethereum" / "wallet-lists"
+        wallet_list_dir = self.test_root / "input-data" / "api" / "ethereum" / "wallets"
         wallet_list_dir.mkdir(parents=True, exist_ok=True)
         
         test_wallets_file = wallet_list_dir / "test-eth-wallets.csv"

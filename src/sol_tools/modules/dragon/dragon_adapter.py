@@ -30,6 +30,26 @@ except:
 
 # Set up logging
 logger = logging.getLogger(__name__)
+# Add a NullHandler to prevent "No handlers could be found" warnings
+logger.addHandler(logging.NullHandler())
+
+# Check if we're in test mode
+IN_TEST_MODE = os.environ.get("TEST_MODE") == "1"
+
+# If in test mode, silence all logging from this module
+if IN_TEST_MODE:
+    # Create a do-nothing handler
+    class NullHandler(logging.Handler):
+        def emit(self, record):
+            pass
+    
+    # Set critical+1 level (higher than any standard level)
+    logger.setLevel(logging.CRITICAL + 1)
+    
+    # Remove any existing handlers and add our null handler
+    for handler in list(logger.handlers):
+        logger.removeHandler(handler)
+    logger.addHandler(NullHandler())
 
 # Set up thread pools for concurrent operations
 _gmgn_threadpool = ThreadPoolExecutor(max_workers=20)
@@ -118,9 +138,14 @@ try:
     from Dragon import (
         utils, BundleFinder, ScanAllTx, BulkWalletChecker, TopTraders,
         TimestampTransactions, purgeFiles, CopyTradeWalletFinder, TopHolders,
-        EarlyBuyers, checkProxyFile, EthBulkWalletChecker, EthTopTraders,
-        EthTimestampTransactions, EthScanAllTx, GMGN
+        EarlyBuyers, checkProxyFile, GMGN
     )
+    
+    # Import our own Ethereum implementations instead of Dragon's
+    from ...modules.ethereum import (
+        EthWalletChecker, EthTopTraders, EthScanAllTx, EthTimestampTransactions
+    )
+    
     DRAGON_IMPORTS_SUCCESS = True
     logger.info("Successfully imported real Dragon implementation")
 except ImportError as e:
@@ -601,7 +626,7 @@ class DragonAdapter(BaseAdapter):
         self.solana_wallets = kwargs.get('solana_wallets') or []
         
         # Ethereum wallets storage
-        self.ethereum_wallets = kwargs.get('ethereum_wallets') or []
+        self._ethereum_wallets = kwargs.get('ethereum_wallets') or []
         
         # Token metrics cache
         self.token_metrics_cache = {}
@@ -662,11 +687,22 @@ class DragonAdapter(BaseAdapter):
         self.copy_trade_wallet_finder = CopyTradeWalletFinder
         self.top_holders = TopHolders
         self.early_buyers = EarlyBuyers
-        self.eth_bulk_wallet_checker = EthBulkWalletChecker
-        self.eth_top_traders = EthTopTraders
-        self.eth_timestamp_transactions = EthTimestampTransactions
-        self.eth_scan_all_tx = EthScanAllTx
         self.gmgn = GMGN
+        
+        # Initialize our Ethereum implementations
+        try:
+            self.eth_bulk_wallet_checker = EthWalletChecker
+            self.eth_top_traders = EthTopTraders
+            self.eth_timestamp_transactions = EthTimestampTransactions
+            self.eth_scan_all_tx = EthScanAllTx
+            logger.debug("Successfully initialized Ethereum components")
+        except Exception as e:
+            logger.warning(f"Could not initialize Ethereum components: {str(e)}")
+            # Provide safe placeholder implementations that don't fail when called
+            self.eth_bulk_wallet_checker = lambda **kwargs: None
+            self.eth_top_traders = lambda **kwargs: None
+            self.eth_timestamp_transactions = lambda **kwargs: None
+            self.eth_scan_all_tx = lambda **kwargs: None
         
         # Initialize BundleFinder instance
         self.bundle = BundleFinder
@@ -1152,12 +1188,20 @@ class DragonAdapter(BaseAdapter):
             
             # Read the file to populate ethereum_wallets
             try:
+                wallets = []
                 with open(file_path, 'r') as f:
-                    wallets_data = json.load(f)
-                    # Store the wallets in memory
-                    self._ethereum_wallets = wallets_data
-                    logger.debug(f"Loaded wallets data: {wallets_data}")
-                    logger.info(f"Imported {len(self._ethereum_wallets)} Ethereum wallets from {file_path}")
+                    for line in f:
+                        # Skip comments and empty lines
+                        line = line.strip()
+                        if not line or line.startswith('#'):
+                            continue
+                        
+                        # Add the wallet to the list
+                        wallets.append(line)
+                
+                # Store the wallets in memory
+                self._ethereum_wallets = wallets
+                logger.info(f"Imported {len(self._ethereum_wallets)} Ethereum wallets from {file_path}")
             except Exception as e:
                 logger.error(f"Error reading wallet file {file_path}: {e}")
                 return False
@@ -1212,6 +1256,16 @@ class DragonAdapter(BaseAdapter):
         self.logger.info("Dragon adapter cleaned up")
         return True
     
+    @property
+    def ethereum_wallets(self):
+        """
+        Get the list of Ethereum wallets.
+        
+        Returns:
+            List of Ethereum wallet addresses
+        """
+        return getattr(self, '_ethereum_wallets', [])
+
     def validate(self, request_type: str, data: Any) -> bool:
         """
         Validate the input data.

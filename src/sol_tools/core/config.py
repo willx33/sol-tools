@@ -95,12 +95,12 @@ def load_config() -> Dict[str, Any]:
     # Solana
     (INPUT_DATA_DIR / "solana").mkdir(parents=True, exist_ok=True)
     (INPUT_DATA_DIR / "solana" / "token-lists").mkdir(parents=True, exist_ok=True)
-    (INPUT_DATA_DIR / "solana" / "wallet-lists").mkdir(parents=True, exist_ok=True)
+    (INPUT_DATA_DIR / "solana" / "wallets").mkdir(parents=True, exist_ok=True)
     
     # Ethereum
     (INPUT_DATA_DIR / "ethereum").mkdir(parents=True, exist_ok=True)
     (INPUT_DATA_DIR / "ethereum" / "token-lists").mkdir(parents=True, exist_ok=True)
-    (INPUT_DATA_DIR / "ethereum" / "wallet-lists").mkdir(parents=True, exist_ok=True)
+    (INPUT_DATA_DIR / "ethereum" / "wallets").mkdir(parents=True, exist_ok=True)
     
     # Sharp
     (INPUT_DATA_DIR / "sharp").mkdir(parents=True, exist_ok=True)
@@ -174,8 +174,8 @@ def load_config() -> Dict[str, Any]:
     
     # Ensure placeholder files exist
     placeholder_files = [
-        (INPUT_DATA_DIR / "ethereum" / "wallet-lists" / "wallets.txt"),
-        (INPUT_DATA_DIR / "solana" / "wallet-lists" / "wallets.txt"),
+        (INPUT_DATA_DIR / "ethereum" / "wallets" / "wallets.txt"),
+        (INPUT_DATA_DIR / "solana" / "wallets" / "wallets.txt"),
         (INPUT_DATA_DIR / "proxies" / "proxies.txt"),
         (INPUT_DATA_DIR / "api" / "gmgn" / "token-lists" / "token_addresses.txt"),
         (INPUT_DATA_DIR / "solana" / "token-lists" / "tokens.txt")

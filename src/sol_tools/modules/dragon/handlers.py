@@ -9,12 +9,33 @@ from typing import List, Dict, Any, Optional, Union
 from datetime import datetime
 import logging
 import time
+from pathlib import Path
 
 from ...utils.common import clear_terminal, ensure_data_dir, check_proxy_file
 from ...core.config import check_env_vars
 from .dragon_adapter import DragonAdapter
 
+# Setup logging with a NullHandler to prevent "No handlers could be found" warnings
 logger = logging.getLogger(__name__)
+logger.addHandler(logging.NullHandler())
+
+# Check if we're in test mode
+IN_TEST_MODE = os.environ.get("TEST_MODE") == "1"
+
+# If in test mode, silence all logging from this module
+if IN_TEST_MODE:
+    # Create a do-nothing handler
+    class NullHandler(logging.Handler):
+        def emit(self, record):
+            pass
+    
+    # Set critical+1 level (higher than any standard level)
+    logger.setLevel(logging.CRITICAL + 1)
+    
+    # Remove any existing handlers and add our null handler
+    for handler in list(logger.handlers):
+        logger.removeHandler(handler)
+    logger.addHandler(NullHandler())
 
 class DragonHandlers:
     """Handlers for Dragon module functionality."""
@@ -188,8 +209,9 @@ def solana_wallet_checker():
     if not validate_multiple_credentials(["solana", "telegram"]):
         return
     
-    # Setup wallet directory
-    wallet_dir = ensure_data_dir("solana", "wallet-lists", data_type="input")
+    # Set up directories
+    wallet_dir = ensure_data_dir("api", "solana", "wallets")
+    output_dir = ensure_data_dir("api", "solana", "wallet-analysis")
     
     # Choose wallets file
     default_wallets_file = wallet_dir / "wallets.txt"
@@ -248,80 +270,70 @@ def solana_wallet_checker():
         inquirer.Text(
             "threads",
             message="Number of threads",
-            default="40"
-        ),
-        inquirer.Confirm(
-            "skip_wallets",
-            message="Skip wallets with no buys in 30d?",
-            default=False
+            default="10"
         ),
         inquirer.Confirm(
             "use_proxies",
-            message="Use proxies for API requests?",
+            message="Use proxies?",
+            default=False
+        ),
+        inquirer.Confirm(
+            "skip_wallets",
+            message="Skip wallet importing? (Use if already imported)",
             default=False
         )
     ]
-    answers = inquirer.prompt(option_questions) or {}
+    answers = inquirer.prompt(option_questions)
     
-    # Load wallets from file
-    try:
-        with open(wallets_path, 'r') as f:
-            wallets = [line.strip() for line in f if line.strip() and not line.startswith('#')]
-    except Exception as e:
-        print(f"❌ Error reading wallets file: {e}")
-        return
-    
-    if not wallets:
-        print("❌ No wallet addresses found in file.")
-        return
-    
-    print(f"ℹ️ Loaded {len(wallets)} wallet addresses")
-    
-    # Parse thread count
-    try:
-        threads = int(answers.get("threads", "40"))
-    except ValueError:
-        print("⚠️ Invalid thread count, using default 40")
-        threads = 40
-    
-    # Check proxies if requested
-    use_proxies = answers.get("use_proxies", False)
-    if use_proxies:
-        proxies = check_proxy_file()
-        if not proxies:
-            print("⚠️ No proxies found. Continuing without proxies.")
-            use_proxies = False
-    
-    # Use the adapter
-    adapter = _get_dragon_adapter()
-    result = adapter.solana_wallet_checker(
-        wallets, 
-        threads=threads,
-        skip_wallets=answers.get("skip_wallets", False),
-        use_proxies=use_proxies
-    )
-    
-    if result.get("success", False):
-        print(f"\n✅ Wallet analysis completed")
-        if "data" in result:
-            # Save the wallet analysis data to a file
-            wallet_data = result["data"]
-            from ...utils.common import save_unified_data
+    if answers:
+        threads = int(answers.get("threads", "10"))
+        use_proxies = answers.get("use_proxies", False)
+        skip_wallets = answers.get("skip_wallets", False)
+        
+        # Check proxy file if using proxies
+        if use_proxies:
+            if not check_proxy_file():
+                print("❌ Proxy file check failed. Continuing without proxies.")
+                use_proxies = False
+        
+        try:
+            # Import the adapter
+            adapter = _get_dragon_adapter()
             
-            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-            output_file = save_unified_data(
-                module="solana/dragon",
-                data_items=wallet_data if isinstance(wallet_data, list) else [wallet_data],
-                filename_prefix=f"wallet_analysis_{timestamp}",
-                data_type="output",
-                subdir="wallet-analysis"
+            # Import wallets if not skipping
+            if not skip_wallets:
+                if not adapter.import_ethereum_wallets(str(wallets_path)):
+                    print("❌ Failed to import wallets from file. Please check the file format.")
+                    input("\nPress Enter to continue...")
+                    return
+            
+            # Run the wallet checker
+            print(f"\n🔍 Analyzing Ethereum wallets with {threads} threads...")
+            
+            # Create instance with the appropriate parameters
+            wallet_checker = adapter.eth_bulk_wallet_checker(
+                wallets=adapter.ethereum_wallets,
+                skip_wallets=skip_wallets,
+                threads=threads,
+                proxies=use_proxies
             )
             
-            # Display summary stats
-            print(f"Processed {len(wallets)} wallets")
-            print(f"Results saved to: {output_file}")
-    else:
-        print(f"\n❌ Wallet analysis failed: {result.get('error', 'Unknown error')}")
+            # Call the run method as per the reference implementation
+            if wallet_checker is None:
+                print("\n❌ Failed to initialize wallet checker")
+                return False
+            result = wallet_checker.run()
+            
+            if result:
+                print("\n✅ Ethereum wallet checking completed successfully!")
+                print(f"📁 Results saved to output directory")
+            else:
+                print("\n❌ Failed to check Ethereum wallets.")
+        
+        except Exception as e:
+            print(f"\n❌ Error during Ethereum wallet check: {str(e)}")
+    
+    input("\nPress Enter to continue...")
 
 
 def solana_top_traders():
@@ -371,12 +383,207 @@ def solana_early_buyers():
 
 
 def eth_wallet_checker():
-    """Analyze Ethereum wallet performance metrics."""
+    """Check Ethereum wallet performance metrics."""
     clear_terminal()
     print("🐲 Dragon Ethereum Wallet Checker")
     
-    # Stub implementation for Ethereum wallet checker
-    print("This feature will analyze Ethereum wallet performance metrics")
+    try:
+        # Check for required environment variables
+        from ...utils.common import validate_credentials
+        if not validate_credentials("ethereum"):
+            return
+        
+        # Setup wallet directory paths
+        project_root = Path(__file__).parent.parent.parent.parent.parent  # Navigate up to project root
+        default_input_dir = project_root / "data" / "input-data" / "ethereum" / "wallets"
+        general_input_dir = project_root / "data" / "input-data"
+        
+        # Ensure default directory exists
+        os.makedirs(default_input_dir, exist_ok=True)
+        
+        # Create example file if it doesn't exist
+        default_wallets_file = default_input_dir / "wallets.txt"
+        if not os.path.exists(default_wallets_file):
+            with open(default_wallets_file, 'w') as f:
+                f.write("# Add wallet addresses here (one per line)")
+        
+        # Find all .txt files in both default and general input directories
+        default_files = list(default_input_dir.glob("*.txt"))
+        
+        # Search for .txt files in all subdirectories of general_input_dir
+        all_input_files = []
+        for file_path in general_input_dir.glob("**/*.txt"):
+            # Skip files that are already in default_files or are from default directory
+            rel_path = file_path.relative_to(general_input_dir)
+            if str(rel_path).startswith("ethereum/wallets/"):
+                continue
+            all_input_files.append(file_path)
+        
+        # Combine lists, with default files first
+        input_files = default_files + all_input_files
+        
+        if not input_files:
+            print("❌ No wallet files found in any input directory.")
+            print(f"📁 Please place your wallet list files in: {default_input_dir}")
+            print("💡 Use the --wallet/-w option to specify a wallet list file.")
+            input("\nPress Enter to continue...")
+            return
+        
+        # First, allow the user to choose whether to use the default file or select a file
+        questions = [
+            inquirer.List(
+                "file_option",
+                message="How would you like to provide wallet addresses?",
+                choices=[
+                    ('Use the default wallets file', 'default'),
+                    ('Select a wallets file from all available files', 'select'),
+                    ('Enter a specific file path manually', 'manual')
+                ],
+                default='default'
+            )
+        ]
+        answers = inquirer.prompt(questions)
+        file_option = answers.get("file_option", "default") if answers else "default"
+        
+        # Handle file selection based on user choice
+        if file_option == 'default':
+            wallets_path = str(default_wallets_file)
+            print(f"Using default wallets file: {wallets_path}")
+        elif file_option == 'select':
+            print("\nSelect a file by number:")
+            for i, file_path in enumerate(input_files, 1):
+                # Use relative path from project root for display
+                rel_path = file_path.relative_to(project_root)
+                
+                # Only mark this specific file as default
+                specific_default_path = "data/input-data/ethereum/wallets/wallets.txt"
+                is_default = str(rel_path) == specific_default_path
+                
+                display_name = f"{rel_path} {'🔹 (default)' if is_default else ''}"
+                print(f"  {i}. {display_name}")
+            
+            while True:
+                file_choice = input("\n➤ Select option (or press Enter for default file): ").strip()
+                
+                # Handle empty input - use default file
+                if not file_choice:
+                    wallets_path = str(default_wallets_file)
+                    print(f"\n✅ Using default file: data/input-data/ethereum/wallets/wallets.txt")
+                    break
+                
+                try:
+                    choice_num = int(file_choice)
+                    if 1 <= choice_num <= len(input_files):
+                        wallets_path = str(input_files[choice_num - 1])
+                        break
+                    else:
+                        print(f"\n❌ Please enter a number between 1 and {len(input_files)}")
+                except ValueError:
+                    print("\n❌ Please enter a valid number")
+        else:  # manual option
+            manual_questions = [
+                inquirer.Text(
+                    "wallets_file",
+                    message="Enter the path to wallets file",
+                    default=str(default_wallets_file)
+                )
+            ]
+            answers = inquirer.prompt(manual_questions)
+            wallets_path = answers.get("wallets_file", str(default_wallets_file)) if answers else str(default_wallets_file)
+        
+        # Get other options
+        option_questions = [
+            inquirer.Text(
+                "threads",
+                message="Number of threads",
+                default="10"
+            ),
+            inquirer.Confirm(
+                "use_proxies",
+                message="Use proxies?",
+                default=False
+            ),
+            inquirer.Confirm(
+                "skip_wallets",
+                message="Skip wallet importing? (Use if already imported)",
+                default=False
+            )
+        ]
+        answers = inquirer.prompt(option_questions)
+        
+        if answers:
+            threads = int(answers.get("threads", "10"))
+            use_proxies = answers.get("use_proxies", False)
+            skip_wallets = answers.get("skip_wallets", False)
+            
+            # Check proxy file if using proxies
+            if use_proxies:
+                if not check_proxy_file():
+                    print("❌ Proxy file check failed. Continuing without proxies.")
+                    use_proxies = False
+            
+            try:
+                # Import the adapter
+                adapter = _get_dragon_adapter()
+                
+                # Import wallets if not skipping
+                if not skip_wallets:
+                    if not adapter.import_ethereum_wallets(str(wallets_path)):
+                        print("❌ Failed to import wallets from file. Please check the file format.")
+                        input("\nPress Enter to continue...")
+                        return
+                
+                # Run the wallet checker
+                print(f"\n🔍 Analyzing Ethereum wallets with {threads} threads...")
+                
+                # Create output directory
+                output_dir = project_root / "data" / "output-data" / "ethereum" / "wallet-analysis"
+                os.makedirs(output_dir, exist_ok=True)
+                
+                try:
+                    # Create instance with the appropriate parameters
+                    wallet_checker = adapter.eth_bulk_wallet_checker(
+                        wallets=adapter.ethereum_wallets,
+                        skip_wallets=skip_wallets,
+                        threads=threads,
+                        proxies=use_proxies,
+                        output_dir=output_dir
+                    )
+                    
+                    # Check if the wallet_checker is None (e.g., due to initialization failure)
+                    if wallet_checker is None:
+                        print("\n❌ Error: Ethereum wallet checker could not be initialized.")
+                        print("This could be due to missing dependencies or configuration issues.")
+                        input("\nPress Enter to continue...")
+                        return
+                    
+                    # Call the run method as per the reference implementation
+                    if wallet_checker is None:
+                        print("\n❌ Failed to initialize wallet checker")
+                        return False
+                    result = wallet_checker.run()
+                    
+                    if result:
+                        print("\n✅ Ethereum wallet checking completed successfully!")
+                        print(f"📁 Results saved to: {output_dir}")
+                    else:
+                        print("\n❌ Failed to check Ethereum wallets.")
+                        
+                except AttributeError as ae:
+                    if "NoneType" in str(ae) and "handlers" in str(ae).lower():
+                        print("\n❌ Handler error: The logging system is not properly configured.")
+                    else:
+                        print(f"\n❌ Error initializing wallet checker: {str(ae)}")
+                except Exception as e:
+                    print(f"\n❌ Error during Ethereum wallet check: {str(e)}")
+            
+            except Exception as e:
+                print(f"\n❌ Error during Ethereum wallet setup: {str(e)}")
+        
+    except Exception as outer_e:
+        print(f"\n❌ Unexpected error: {str(outer_e)}")
+    
+    input("\nPress Enter to continue...")
 
 
 def eth_top_traders():
@@ -384,26 +591,240 @@ def eth_top_traders():
     clear_terminal()
     print("🐲 Dragon Ethereum Top Traders")
     
-    # Stub implementation for Ethereum top traders
-    print("This feature will find top Ethereum traders for specific tokens")
-
-
-def eth_scan_tx():
-    """Retrieve all transactions for a specific Ethereum token."""
-    clear_terminal()
-    print("🐲 Dragon Ethereum Scan Transactions")
+    # Check for required environment variables
+    from ...utils.common import validate_credentials
+    if not validate_credentials("ethereum"):
+        return
     
-    # Stub implementation for Ethereum transaction scanning
-    print("This feature will scan all transactions for an Ethereum token")
-
-
-def eth_timestamp():
-    """Find transactions between specific timestamps."""
-    clear_terminal()
-    print("🐲 Dragon Ethereum Timestamp Finder")
+    # Ask for token address
+    token_questions = [
+        inquirer.Text(
+            "token_address",
+            message="Enter token contract address:",
+            validate=lambda _, x: x.startswith('0x') and len(x) == 42
+        ),
+        inquirer.Text(
+            "days",
+            message="Number of days to analyze:",
+            default="30",
+            validate=lambda _, x: x.isdigit() and int(x) > 0
+        )
+    ]
     
-    # Stub implementation for Ethereum timestamp finder
-    print("This feature will find Ethereum transactions between specific timestamps")
+    token_answers = inquirer.prompt(token_questions)
+    
+    if not token_answers:
+        return
+    
+    token_address = token_answers.get("token_address")
+    days = int(token_answers.get("days", "30"))
+    
+    try:
+        # Import the adapter
+        adapter = _get_dragon_adapter()
+        
+        print(f"\n🔍 Finding top traders for {token_address} over the last {days} days...")
+        
+        # Create output directory
+        output_dir = ensure_data_dir("ethereum", "top-traders", data_type="output")
+        
+        # Create instance with the appropriate parameters
+        top_traders = adapter.eth_top_traders(
+            token_address=token_address,
+            days=days,
+            output_dir=output_dir
+        )
+        
+        # Call the run method
+        if top_traders is None:
+            print("\n❌ Failed to initialize top traders analyzer")
+            return False
+        result = top_traders.run()
+        
+        if result:
+            print("\n✅ Top traders analysis completed successfully!")
+            print(f"📁 Results saved to: {output_dir}")
+        else:
+            print("\n❌ Failed to find top traders.")
+    
+    except Exception as e:
+        print(f"\n❌ Error during top traders analysis: {str(e)}")
+    
+    input("\nPress Enter to continue...")
+
+
+def eth_scan_all_tx():
+    """Scan all transactions for Ethereum addresses."""
+    clear_terminal()
+    print("🐲 Dragon Ethereum Transaction Scanner")
+    
+    # Check for required environment variables
+    from ...utils.common import validate_credentials
+    if not validate_credentials("ethereum"):
+        return
+    
+    # Ask for addresses
+    address_questions = [
+        inquirer.Text(
+            "addresses",
+            message="Enter Ethereum addresses (comma separated):",
+            validate=lambda _, x: all(addr.strip().startswith('0x') and len(addr.strip()) == 42 for addr in x.split(','))
+        ),
+        inquirer.Text(
+            "start_block",
+            message="Starting block (optional, leave empty for default):",
+            default=""
+        ),
+        inquirer.Text(
+            "end_block",
+            message="Ending block (optional, leave empty for latest):",
+            default=""
+        )
+    ]
+    
+    address_answers = inquirer.prompt(address_questions)
+    
+    if not address_answers:
+        return
+    
+    addresses = [addr.strip() for addr in address_answers.get("addresses", "").split(',')]
+    start_block_str = address_answers.get("start_block", "").strip()
+    end_block_str = address_answers.get("end_block", "").strip()
+    
+    start_block = int(start_block_str) if start_block_str else None
+    end_block = int(end_block_str) if end_block_str else None
+    
+    try:
+        # Import the adapter
+        adapter = _get_dragon_adapter()
+        
+        print(f"\n🔍 Scanning transactions for {len(addresses)} addresses...")
+        
+        # Create output directory
+        output_dir = ensure_data_dir("ethereum", "transaction-scans", data_type="output")
+        
+        # Create instance with the appropriate parameters
+        scanner = adapter.eth_scan_all_tx(
+            addresses=addresses,
+            start_block=start_block,
+            end_block=end_block,
+            output_dir=output_dir
+        )
+        
+        # Call the run method
+        if scanner is None:
+            print("\n❌ Failed to initialize transaction scanner")
+            return False
+        result = scanner.run()
+        
+        if result:
+            print("\n✅ Transaction scanning completed successfully!")
+            print(f"📁 Results saved to: {output_dir}")
+        else:
+            print("\n❌ Failed to scan transactions.")
+    
+    except Exception as e:
+        print(f"\n❌ Error during transaction scanning: {str(e)}")
+    
+    input("\nPress Enter to continue...")
+
+
+def eth_timestamp_transactions():
+    """Find Ethereum transactions in a specific time range."""
+    clear_terminal()
+    print("🐲 Dragon Ethereum Time-Based Transaction Finder")
+    
+    # Check for required environment variables
+    from ...utils.common import validate_credentials
+    if not validate_credentials("ethereum"):
+        return
+    
+    # Ask for addresses and time range
+    from datetime import datetime, timedelta
+    
+    # Default time range (last 24 hours)
+    now = datetime.now()
+    yesterday = now - timedelta(days=1)
+    
+    # Format for display and input
+    date_format = "%Y-%m-%d %H:%M:%S"
+    
+    time_questions = [
+        inquirer.Text(
+            "addresses",
+            message="Enter Ethereum addresses (comma separated):",
+            validate=lambda _, x: all(addr.strip().startswith('0x') and len(addr.strip()) == 42 for addr in x.split(','))
+        ),
+        inquirer.Text(
+            "start_time",
+            message=f"Start time ({date_format}):",
+            default=yesterday.strftime(date_format)
+        ),
+        inquirer.Text(
+            "end_time",
+            message=f"End time ({date_format}):",
+            default=now.strftime(date_format)
+        )
+    ]
+    
+    time_answers = inquirer.prompt(time_questions)
+    
+    if not time_answers:
+        return
+    
+    addresses = [addr.strip() for addr in time_answers.get("addresses", "").split(',')]
+    
+    try:
+        start_time_str = time_answers.get("start_time", "")
+        end_time_str = time_answers.get("end_time", "")
+        
+        if not start_time_str or not end_time_str:
+            print("\n❌ Invalid date format: Start time or end time is missing")
+            input("\nPress Enter to continue...")
+            return
+            
+        start_time = datetime.strptime(start_time_str, date_format)
+        end_time = datetime.strptime(end_time_str, date_format)
+    except ValueError as e:
+        print(f"\n❌ Invalid date format: {str(e)}")
+        input("\nPress Enter to continue...")
+        return
+    
+    try:
+        # Import the adapter
+        adapter = _get_dragon_adapter()
+        
+        print(f"\n🔍 Finding transactions for {len(addresses)} addresses in time range:")
+        print(f"From: {start_time.strftime(date_format)}")
+        print(f"To: {end_time.strftime(date_format)}")
+        
+        # Create output directory
+        output_dir = ensure_data_dir("ethereum", "time-transactions", data_type="output")
+        
+        # Create instance with the appropriate parameters
+        timestamp_finder = adapter.eth_timestamp_transactions(
+            addresses=addresses,
+            start_time=start_time,
+            end_time=end_time,
+            output_dir=output_dir
+        )
+        
+        # Call the run method
+        if timestamp_finder is None:
+            print("\n❌ Failed to initialize timestamp finder")
+            return False
+        result = timestamp_finder.run()
+        
+        if result:
+            print("\n✅ Time-based transaction search completed successfully!")
+            print(f"📁 Results saved to: {output_dir}")
+        else:
+            print("\n❌ Failed to find transactions in the specified time range.")
+    
+    except Exception as e:
+        print(f"\n❌ Error during time-based transaction search: {str(e)}")
+    
+    input("\nPress Enter to continue...")
 
 
 def gmgn_new_tokens():

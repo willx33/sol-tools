@@ -95,7 +95,7 @@ class SolanaTester(BaseTester):
     
     def _create_solana_directories(self) -> None:
         """Create Solana-specific test directories."""
-        (self.test_root / "input-data" / "solana").mkdir(parents=True, exist_ok=True)
+        (self.test_root / "input-data" / "api" / "solana" / "wallets").mkdir(parents=True, exist_ok=True)
         (self.test_root / "input-data" / "solana" / "wallet-lists").mkdir(parents=True, exist_ok=True)
         (self.test_root / "output-data" / "solana").mkdir(parents=True, exist_ok=True)
         (self.test_root / "output-data" / "solana" / "monitoring").mkdir(parents=True, exist_ok=True)
@@ -104,7 +104,7 @@ class SolanaTester(BaseTester):
         """Create test data files in the test directories."""
         # Create test wallets using real data
         self.solana_wallets = SOLANA_TEST_WALLETS
-        self.solana_wallets_file = self.test_root / "input-data" / "solana" / "wallet-lists" / "test_wallets.json"
+        self.solana_wallets_file = self.test_root / "input-data" / "api" / "solana" / "wallets" / "test_wallets.json"
         
         with open(self.solana_wallets_file, "w") as f:
             json.dump(self.solana_wallets, f, indent=2)
