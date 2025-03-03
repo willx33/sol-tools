@@ -190,8 +190,8 @@ class EthTopTraders(TopTraders):
                 output_dir (Path, optional): Directory to save results
                 test_mode (bool, optional): Whether to run in test mode. Defaults to False.
         """
-        token_address = kwargs.get('token_address')
-        super().__init__(token_address)
+        self.token_address = kwargs.get('token_address')
+        super().__init__(self.token_address)
         self.days = kwargs.get('days', 30)
         self.output_dir = kwargs.get('output_dir')
         self.test_mode = kwargs.get('test_mode', False)
@@ -202,7 +202,7 @@ class EthTopTraders(TopTraders):
         self.all_addresses = set()
         self.address_frequency = defaultdict(int)
         self.total_traders = 0
-        self.contract = token_address
+        self.contract = self.token_address
     
     def process_traders_data(self, addresses: List[str], threads: int = 10) -> bool:
         """Process trader data for the given addresses."""
@@ -225,23 +225,31 @@ class EthTopTraders(TopTraders):
             logger.error(f"Error saving results: {e}")
             return False
 
-    def run(self) -> bool:
-        """Run the top traders analysis."""
-        if not self.contract:
+    def run(self, token_address: str) -> bool:
+        """
+        Run the top traders analysis.
+        
+        Args:
+            token_address: The Ethereum token contract address to analyze
+            
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        if not token_address:
             if not self.test_mode:
                 print("[🐲] No token address provided!")
             return False
             
         if not self.test_mode:
-            print(f"[🐲] Finding top traders for {self.contract} over the last {self.days} days")
+            print(f"[🐲] Finding top traders for {token_address} over the last {self.days} days")
         
         # Process the token data
-        success = self.process_traders_data([self.contract], threads=10)
+        success = self.process_traders_data([token_address], threads=10)
         if not success:
             return False
             
         # Save results using shortened address as identifier
-        identifier = f"{self.contract[:6]}...{self.contract[-4:]}"
+        identifier = f"{token_address[:6]}...{token_address[-4:]}"
         self.save_results(identifier)
         
         return True
@@ -256,26 +264,48 @@ class EthTimestampTransactions(TimestampTransactions):
         Args:
             **kwargs: Keyword arguments including:
                 contract_address (str): The Ethereum contract address
-                start_time (int): Start timestamp (Unix epoch)
-                end_time (int): End timestamp (Unix epoch)
+                start_time (int): Start timestamp
+                end_time (int): End timestamp
                 output_dir (Path, optional): Directory to save results
         """
-        contract_address = kwargs.get('contract_address')
-        super().__init__(contract_address)
+        self.contract_address = kwargs.get('contract_address')
         self.start_time = kwargs.get('start_time')
         self.end_time = kwargs.get('end_time')
         self.output_dir = kwargs.get('output_dir')
-        self.contract = contract_address
-
-    def run(self) -> bool:
-        """Run timestamp transaction analysis."""
-        if not all([self.contract, self.start_time, self.end_time]):
+        super().__init__(self.start_time)
+        self.contract = self.contract_address
+    
+    def run(self, contract_address: str, start_time: int, end_time: int) -> bool:
+        """
+        Run the timestamp transactions analysis.
+        
+        Args:
+            contract_address: The Ethereum contract address to analyze
+            start_time: Start timestamp
+            end_time: End timestamp
+            
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        if not all([contract_address, start_time, end_time]):
             print("[🐲] Missing required parameters!")
             return False
-
-        # Process transactions for the given time range
-        # Implementation would go here
-        return True
+            
+        print(f"[🐲] Finding transactions for {contract_address} between {start_time} and {end_time}")
+        
+        try:
+            transactions = self.get_transactions(start_time)
+            
+            if self.output_dir:
+                # Save results
+                output_file = self.output_dir / f"tx_{contract_address[:6]}_{start_time}_{end_time}.json"
+                with open(output_file, 'w') as f:
+                    json.dump(transactions, f, indent=2)
+                    
+            return True
+        except Exception as e:
+            logger.error(f"Error processing transactions: {e}")
+            return False
 
 class EthScanAllTx(ScanAllTx):
     """Ethereum version of ScanAllTx."""

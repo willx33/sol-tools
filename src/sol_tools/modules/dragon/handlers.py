@@ -600,7 +600,7 @@ def eth_top_traders():
         if not validate_credentials("ethereum"):
             return
         
-        # Ask for token address
+        # Ask for token address and days
         token_questions = [
             inquirer.Text(
                 "token_address",
@@ -621,6 +621,10 @@ def eth_top_traders():
             return
         
         token_address = token_answers.get("token_address")
+        if not token_address:
+            print("\n❌ No token address provided")
+            return
+            
         days = int(token_answers.get("days", "30"))
         
         print(f"\n🔍 Finding top traders for {token_address} over the last {days} days...")
@@ -642,8 +646,8 @@ def eth_top_traders():
                 print("\n❌ Failed to initialize top traders analyzer")
                 return False
                 
-            # Run the analysis
-            result = top_traders.run(token_address=kwargs['token_address'])
+            # Run the analysis with the token address
+            result = top_traders.run(token_address=token_address)
             
             if result:
                 print("\n✅ Top traders analysis completed successfully!")
@@ -667,71 +671,78 @@ def eth_scan_all_tx():
     clear_terminal()
     print("🐲 Dragon Ethereum Transaction Scanner")
     
-    # Check for required environment variables
-    from ...utils.common import validate_credentials
-    if not validate_credentials("ethereum"):
-        return
-    
-    # Ask for addresses
-    address_questions = [
-        inquirer.Text(
-            "addresses",
-            message="Enter Ethereum addresses (comma separated):",
-            validate=lambda _, x: all(addr.strip().startswith('0x') and len(addr.strip()) == 42 for addr in x.split(','))
-        ),
-        inquirer.Text(
-            "start_block",
-            message="Starting block (optional, leave empty for default):",
-            default=""
-        ),
-        inquirer.Text(
-            "end_block",
-            message="Ending block (optional, leave empty for latest):",
-            default=""
-        )
-    ]
-    
-    address_answers = inquirer.prompt(address_questions)
-    
-    if not address_answers:
-        return
-    
-    addresses = [addr.strip() for addr in address_answers.get("addresses", "").split(',')]
-    start_block_str = address_answers.get("start_block", "").strip()
-    end_block_str = address_answers.get("end_block", "").strip()
-    
-    start_block = int(start_block_str) if start_block_str else None
-    end_block = int(end_block_str) if end_block_str else None
-    
     try:
-        # Import the adapter
+        # Import the adapter first to catch initialization errors
         adapter = _get_dragon_adapter()
+        
+        # Check for required environment variables
+        from ...utils.common import validate_credentials
+        if not validate_credentials("ethereum"):
+            return
+        
+        # Ask for addresses and block range
+        questions = [
+            inquirer.Text(
+                "addresses",
+                message="Enter Ethereum addresses (comma separated):",
+                validate=lambda _, x: all(addr.strip().startswith('0x') and len(addr.strip()) == 42 for addr in x.split(','))
+            ),
+            inquirer.Text(
+                "start_block",
+                message="Starting block (optional, leave empty for default):",
+                default=""
+            ),
+            inquirer.Text(
+                "end_block",
+                message="Ending block (optional, leave empty for latest):",
+                default=""
+            )
+        ]
+        
+        answers = inquirer.prompt(questions)
+        
+        if not answers:
+            return
+        
+        addresses = [addr.strip() for addr in answers.get("addresses", "").split(',')]
+        start_block_str = answers.get("start_block", "").strip()
+        end_block_str = answers.get("end_block", "").strip()
+        
+        start_block = int(start_block_str) if start_block_str else None
+        end_block = int(end_block_str) if end_block_str else None
         
         print(f"\n🔍 Scanning transactions for {len(addresses)} addresses...")
         
         # Create output directory
         output_dir = ensure_data_dir("ethereum", "transaction-scans", data_type="output")
         
-        # Create instance with the appropriate parameters
-        scanner = adapter.eth_scan_all_tx(
-            addresses=addresses,
-            start_block=start_block,
-            end_block=end_block,
-            output_dir=output_dir
-        )
+        try:
+            # Create instance with the appropriate parameters
+            kwargs = {
+                'addresses': addresses,
+                'start_block': start_block,
+                'end_block': end_block,
+                'output_dir': output_dir
+            }
+            scanner = adapter.eth_scan_all_tx(**kwargs)
+            
+            if scanner is None:
+                print("\n❌ Failed to initialize transaction scanner")
+                return False
+                
+            # Run the scan
+            result = scanner.run()
+            
+            if result:
+                print("\n✅ Transaction scanning completed successfully!")
+                print(f"📁 Results saved to: {output_dir}")
+            else:
+                print("\n❌ Failed to scan transactions.")
         
-        # Call the run method
-        if scanner is None:
-            print("\n❌ Failed to initialize transaction scanner")
-            return False
-        result = scanner.run()
-        
-        if result:
-            print("\n✅ Transaction scanning completed successfully!")
-            print(f"📁 Results saved to: {output_dir}")
-        else:
-            print("\n❌ Failed to scan transactions.")
-    
+        except ImportError as e:
+            print(f"\n❌ Ethereum module initialization error: {str(e)}")
+            print("Please ensure all Ethereum dependencies are installed correctly.")
+            
     except Exception as e:
         print(f"\n❌ Error during transaction scanning: {str(e)}")
     
@@ -786,7 +797,10 @@ def eth_timestamp_transactions():
             return
             
         contract_address = answers.get("contract_address")
-        
+        if not contract_address:
+            print("\n❌ No contract address provided")
+            return
+            
         try:
             start_time_str = answers.get("start_time", "")
             end_time_str = answers.get("end_time", "")
@@ -819,11 +833,11 @@ def eth_timestamp_transactions():
                 print("\n❌ Failed to initialize timestamp transactions analyzer")
                 return False
                 
-            # Run the analysis
+            # Run the analysis with all required parameters
             result = timestamp_tx.run(
-                contract_address=kwargs['contract_address'],
-                start_time=kwargs['start_time'],
-                end_time=kwargs['end_time']
+                contract_address=contract_address,
+                start_time=start_time,
+                end_time=end_time
             )
             
             if result:
