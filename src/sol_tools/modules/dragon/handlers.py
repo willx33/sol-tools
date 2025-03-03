@@ -93,12 +93,8 @@ def _get_dragon_adapter():
     """Get initialized Dragon adapter."""
     try:
         adapter = DragonAdapter()
-        # Initialize the adapter asynchronously
-        async def _initialize():
-            return await adapter.initialize()
-            
-        # Run the async initialization in a proper coroutine
-        asyncio.run(_initialize())
+        # Initialize the adapter directly - it's not an async method
+        adapter.initialize()
         
         if not hasattr(adapter, 'get_token_data_handler') or adapter.get_token_data_handler() is None:
             logger = logging.getLogger(__name__)
@@ -129,7 +125,7 @@ def solana_bundle_checker():
         NoTruncationText(
             "contract_address",
             message="Enter Solana contract address(es) (space-separated for multiple)",
-            validate=lambda _, x: all(len(addr.strip()) in [43, 44] for addr in x.split()) if x else False
+            validate=lambda x: all(len(addr.strip()) in [43, 44] for addr in x.split()) if x else False
         )
     ]
     answers = prompt_user(questions)
@@ -606,7 +602,7 @@ def gmgn_token_data():
         NoTruncationText(
             "contract_address",
             message="Enter Solana contract address(es) (space-separated for multiple)",
-            validate=lambda _, x: all(len(addr.strip()) in [43, 44] for addr in x.split()) if x else False
+            validate=lambda x: all(len(addr.strip()) in [43, 44] for addr in x.split()) if x else False
         )
     ]
     answers = prompt_user(questions)

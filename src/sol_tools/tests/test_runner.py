@@ -21,6 +21,12 @@ import logging
 from pathlib import Path
 from typing import Dict, List, Any, Optional, Tuple, Set, Mapping
 
+# Try to import dotenv for environment variable loading
+try:
+    from dotenv import load_dotenv
+except ImportError:
+    load_dotenv = None
+
 # Define a local setup_logging function in case it's not available
 def setup_logging(level="INFO"):
     """Set up logging with the specified level."""
@@ -168,13 +174,26 @@ def check_missing_env_vars(module_name: str) -> List[str]:
     if not module_info:
         return []
     
-    # Get required environment variables
-    required_env_vars = module_info.get("env_vars", [])
+    # Get required environment variables - fix the key name
+    required_env_vars = module_info.get("required_env_vars", [])
+    
+    # Debug information
+    if os.environ.get("DEBUG_TESTS") == "1":
+        print(f"DEBUG: Required env vars for {module_name}: {required_env_vars}")
     
     # Check if any environment variables are missing
     missing_env_vars = []
     for var in required_env_vars:
-        if var not in os.environ or not os.environ[var]:
+        # Check if variable is not set or is empty
+        value = os.environ.get(var, "")
+        is_present = var in os.environ and value.strip()
+        
+        if os.environ.get("DEBUG_TESTS") == "1":
+            print(f"DEBUG: Checking {var} - Present in os.environ: {var in os.environ}, " 
+                  f"Value: {'<empty>' if not value.strip() else value[:3] + '***'}, "
+                  f"Is Valid: {is_present}")
+        
+        if not is_present:
             missing_env_vars.append(var)
     
     return missing_env_vars
@@ -375,6 +394,24 @@ async def run_all_tests(module_name=None):
     cprint("\n🧪 Sol Tools Test Runner", "cyan")
     cprint("Running comprehensive tests organized by menu structure", "cyan")
     
+    # Ensure environment variables are loaded from .env file
+    try:
+        if load_dotenv:
+            env_file = os.environ.get("SOL_TOOLS_ENV_FILE", os.path.join(os.path.expanduser("~"), ".sol_tools", ".env"))
+            
+            if os.path.exists(env_file):
+                cprint(f"Loading environment variables from {env_file}", "blue")
+                load_dotenv(env_file, override=True)
+                
+                # Verify key variables were loaded
+                for key_var in ["HELIUS_API_KEY", "DUNE_API_KEY", "TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID"]:
+                    if key_var in os.environ and os.environ[key_var].strip():
+                        cprint(f"  ✓ {key_var} loaded successfully", "green")
+            else:
+                cprint(f"Warning: .env file not found at {env_file}", "yellow")
+    except Exception:
+        cprint("Warning: dotenv not installed, skipping .env file loading", "yellow")
+    
     # Print environment variables
     print_env_vars()
     print("\n")
@@ -566,8 +603,14 @@ def print_env_vars():
     if env_vars:
         for var in env_vars:
             value = os.environ.get(var, "")
-            is_empty = value.strip() == ""
-            status = f"present, but empty" if is_empty else "present"
+            is_empty = not value.strip()
+            # Show the actual value (partially redacted) if it exists
+            if not is_empty:
+                # Redact for security while showing some of the value
+                redacted_value = value[:4] + "*" * (len(value) - 4) if len(value) > 4 else "****"
+                status = f"present ({redacted_value})"
+            else:
+                status = "present, but empty"
             print(f"  ✓ {var} ({status})")
     else:
         print(f"  No relevant environment variables found.")
@@ -664,6 +707,7 @@ def main():
     parser = argparse.ArgumentParser(description="Sol Tools Test Runner")
     parser.add_argument('--module', help='Run tests for a specific module')
     parser.add_argument('--debug', action='store_true', help='Enable debug output')
+    parser.add_argument('--env-file', help='Path to .env file to load environment variables from')
     
     args = parser.parse_args()
     
@@ -674,6 +718,11 @@ def main():
         os.environ["DEBUG_TESTS"] = "1"
     else:
         setup_logging("INFO")
+    
+    # Handle environment file specification
+    if args.env_file:
+        os.environ["SOL_TOOLS_ENV_FILE"] = args.env_file
+        print(f"Using environment file: {args.env_file}")
     
     # Run the tests
     try:

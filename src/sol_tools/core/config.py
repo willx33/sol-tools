@@ -56,6 +56,26 @@ DEFAULT_CONFIG = {
     "theme": "dark"
 }
 
+# Create a simple safer prompt function
+def safe_prompt(questions):
+    """A wrapper around inquirer.prompt that handles validation safely."""
+    # Use direct input() for Text questions to avoid validation errors
+    if len(questions) == 1 and isinstance(questions[0], inquirer.Text):
+        q = questions[0]
+        console = Console()
+        console.print(f"{q.message}: ", end="")
+        if q.default:
+            console.print(f"[dim]{q.default}[/dim] ", end="")
+        
+        result = input()
+        if not result and q.default:
+            result = q.default
+            
+        return {q.name: result}
+    else:
+        # Use regular inquirer.prompt for other question types
+        return inquirer.prompt(questions)
+
 
 def load_config() -> Dict[str, Any]:
     """Load configuration from files and environment variables."""
@@ -173,7 +193,12 @@ def load_config() -> Dict[str, Any]:
             file_path.touch()
     
     # Load environment variables
-    load_dotenv(ENV_FILE)
+    env_file = os.environ.get('SOL_TOOLS_ENV_FILE', str(ENV_FILE))
+    if Path(env_file).exists():
+        # Use override=True to ensure .env variables override existing environment variables
+        load_dotenv(env_file, override=True)
+    else:
+        print(f"Warning: Environment file not found at {env_file}")
     
     # Load or create main config file
     if MAIN_CONFIG.exists():
@@ -208,7 +233,9 @@ def check_env_vars(module: str) -> Dict[str, bool]:
     """Check if required environment variables are set for a module."""
     results = {}
     for var in REQUIRED_ENV_VARS.get(module, []):
-        results[var] = bool(os.getenv(var))
+        # Improved check: ensure variable exists AND is not empty
+        value = os.environ.get(var, '')
+        results[var] = bool(value and value.strip() != '')
     return results
 
 
@@ -326,7 +353,15 @@ def edit_env_variables() -> None:
         
         # Then choose a variable within that category
         while True:
-            var_choices = organized_vars[selected_category] + ["⬅️ Back"]
+            var_choices = []
+            for var in organized_vars[selected_category]:
+                # Add a check mark for variables that already have values
+                if env_vars.get(var, ""):
+                    var_choices.append(f"{var} ✅")
+                else:
+                    var_choices.append(var)
+            var_choices.append("⬅️ Back")
+            
             questions = [
                 inquirer.List(
                     "variable",
@@ -345,6 +380,10 @@ def edit_env_variables() -> None:
             if selected == "⬅️ Back":
                 break
             
+            # Remove the emoji if present
+            if " ✅" in selected:
+                selected = selected.replace(" ✅", "")
+                
             # Get current value and prompt for new value
             current_value = env_vars.get(selected, "")
             is_sensitive = "KEY" in selected or "TOKEN" in selected or "SECRET" in selected
@@ -369,7 +408,7 @@ def edit_env_variables() -> None:
                     default=placeholder if not default_value else default_value
                 ),
             ]
-            value_answer = inquirer.prompt(questions2)
+            value_answer = safe_prompt(questions2)
             if not value_answer:
                 # User cancelled with Ctrl+C
                 break
@@ -380,8 +419,21 @@ def edit_env_variables() -> None:
             if new_value == placeholder:
                 new_value = ""
             
+            # If clearing an existing value, confirm this explicitly
+            if current_value and not new_value:
+                clear_confirm = [
+                    inquirer.Confirm(
+                        "confirm_clear",
+                        message=f"Are you sure you want to CLEAR the value for {selected}?",
+                        default=False  # Default to No for safety
+                    ),
+                ]
+                clear_answer = inquirer.prompt(clear_confirm)
+                if not clear_answer or not clear_answer["confirm_clear"]:
+                    console.print("[yellow]No changes made.[/yellow]")
+                    continue
             # If current value exists and new value is different, confirm overwrite
-            if current_value and new_value and new_value != current_value:
+            elif current_value and new_value and new_value != current_value:
                 confirm_questions = [
                     inquirer.Confirm(
                         "confirm",
@@ -421,9 +473,18 @@ def edit_env_variables() -> None:
         console.print("\n[green]✓ Environment variables saved successfully![/green]")
         
         try:
-            # Directly reload dotenv to avoid potential circular imports
+            # Reload dotenv with override=True to ensure changes take effect immediately
             from dotenv import load_dotenv as reload_dotenv
             reload_dotenv(ENV_FILE, override=True)
+            
+            # Also update the current process environment variables
+            with open(ENV_FILE, 'r') as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith('#') and '=' in line:
+                        key, value = line.split('=', 1)
+                        os.environ[key] = value
+                        
             console.print("[green]✓ Configuration has been reloaded.[/green]")
         except Exception as e:
             console.print(f"[red]Error reloading environment variables: {e}[/red]")

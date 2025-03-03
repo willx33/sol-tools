@@ -126,12 +126,67 @@ class TelegramTester(BaseTester):
                 cprint("  ⚠️ Skipping test due to missing Telegram credentials", "yellow")
                 return None  # Return None to indicate the test should be skipped
             
-            # Attempt to send a test message
+            # First, let's check the getUpdates API to see if we can determine the correct chat ID format
+            try:
+                updates_url = f"https://api.telegram.org/bot{telegram_bot_token}/getUpdates"
+                updates_response = requests.get(updates_url)
+                
+                if updates_response.status_code == 200:
+                    updates_data = updates_response.json()
+                    cprint(f"  DEBUG: Bot can access updates API", "blue")
+                    
+                    # Look for the correct chat ID in the updates
+                    actual_chat_id = None
+                    if updates_data.get("ok") and updates_data.get("result"):
+                        for update in updates_data["result"]:
+                            # Check in various update types
+                            if update.get("channel_post", {}).get("chat", {}).get("id"):
+                                actual_chat_id = update["channel_post"]["chat"]["id"]
+                                break
+                            elif update.get("message", {}).get("chat", {}).get("id"):
+                                actual_chat_id = update["message"]["chat"]["id"]
+                                break
+                    
+                    if actual_chat_id:
+                        cprint(f"  DEBUG: Found actual chat ID from updates: {actual_chat_id}", "blue")
+                        chat_id = actual_chat_id
+                    else:
+                        # If no chat ID found in updates, try to parse the provided one
+                        try:
+                            # Check if it's a channel ID which may need a negative sign
+                            if telegram_chat_id.isdigit() and len(telegram_chat_id) > 10:
+                                # Try with a negative sign as it might be a channel
+                                chat_id = -int(telegram_chat_id)
+                                cprint(f"  DEBUG: Using negative chat ID for channel: {chat_id}", "blue")
+                            else:
+                                chat_id = int(telegram_chat_id)
+                                cprint(f"  DEBUG: Using chat ID as integer: {chat_id}", "blue")
+                        except ValueError:
+                            chat_id = telegram_chat_id
+                            cprint(f"  DEBUG: Using chat ID as string: {chat_id}", "blue")
+                else:
+                    cprint(f"  DEBUG: Cannot access updates API: {updates_response.text}", "red")
+                    # Fall back to basic parsing of the chat ID
+                    try:
+                        chat_id = int(telegram_chat_id)
+                    except ValueError:
+                        chat_id = telegram_chat_id
+            
+            except Exception as e:
+                cprint(f"  DEBUG: Error checking updates API: {str(e)}", "red")
+                # Fall back to basic parsing of the chat ID
+                try:
+                    chat_id = int(telegram_chat_id)
+                except ValueError:
+                    chat_id = telegram_chat_id
+            
+            # Now try to send the message with the best chat ID we determined
             message = "🧪 Sol Tools Test Runner - Test message"
             url = f"https://api.telegram.org/bot{telegram_bot_token}/sendMessage"
             
+            # Try with the negative chat ID first if it's a large number (likely a channel)
             response = requests.post(url, json={
-                "chat_id": telegram_chat_id,
+                "chat_id": chat_id,
                 "text": message,
                 "parse_mode": "HTML"
             })
@@ -140,6 +195,19 @@ class TelegramTester(BaseTester):
                 cprint(f"  ✓ Test message sent successfully to Telegram", "green")
                 return True
             else:
+                # If failed with the potentially modified chat ID, try with the original one as a fallback
+                if str(chat_id) != telegram_chat_id:
+                    cprint(f"  DEBUG: First attempt failed, trying with original chat ID: {telegram_chat_id}", "blue")
+                    response = requests.post(url, json={
+                        "chat_id": telegram_chat_id,
+                        "text": message,
+                        "parse_mode": "HTML"
+                    })
+                    
+                    if response.status_code == 200:
+                        cprint(f"  ✓ Test message sent successfully to Telegram with original chat ID", "green")
+                        return True
+                
                 cprint(f"  ❌ Failed to send message to Telegram: {response.text}", "red")
                 return False
                 

@@ -111,6 +111,8 @@ def create_handlers() -> Dict[str, Callable[[], Any]]:
         # Utility handlers
         'utils_clear_cache': utils_handlers.clear_cache,
         'utils_test_telegram': utils_handlers.test_telegram,
+        'utils_test_helius': utils_handlers.test_helius,
+        'utils_run_full_tests': utils_handlers.run_full_tests,
     }
     
     return handlers

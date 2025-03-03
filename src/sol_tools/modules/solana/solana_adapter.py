@@ -149,6 +149,54 @@ class SolanaAdapter(BaseAdapter):
         if not (self.telegram_bot_token and self.telegram_chat_id):
             self.logger.warning("Telegram credentials not available")
             return False
+        
+        # Convert chat_id to integer if it's a numeric string
+        try:
+            if isinstance(self.telegram_chat_id, str):
+                # Check if it's potentially a channel ID (long numeric string)
+                if self.telegram_chat_id.isdigit() and len(self.telegram_chat_id) > 10:
+                    # Import conditionally to avoid requiring the dependency if not used
+                    from telegram import Bot
+                    
+                    # Try to get updates to check the actual chat ID format
+                    self.logger.debug("Attempting to determine correct chat ID format from getUpdates")
+                    bot = Bot(token=self.telegram_bot_token)
+                    
+                    # Use synchronous method to get updates in init method
+                    import asyncio
+                    loop = asyncio.new_event_loop()
+                    try:
+                        updates = loop.run_until_complete(bot.get_updates(limit=10))
+                        
+                        # Look for chat ID in updates
+                        for update in updates:
+                            if hasattr(update, 'channel_post') and update.channel_post:
+                                if update.channel_post.chat.id and abs(update.channel_post.chat.id) == int(self.telegram_chat_id):
+                                    # Found matching channel ID (in absolute value)
+                                    self.telegram_chat_id = update.channel_post.chat.id
+                                    self.logger.debug(f"Found channel ID from updates: {self.telegram_chat_id}")
+                                    break
+                            elif hasattr(update, 'message') and update.message:
+                                if update.message.chat.id and abs(update.message.chat.id) == int(self.telegram_chat_id):
+                                    # Found matching chat ID (in absolute value)
+                                    self.telegram_chat_id = update.message.chat.id
+                                    self.logger.debug(f"Found chat ID from updates: {self.telegram_chat_id}")
+                                    break
+                    except Exception as e:
+                        self.logger.debug(f"Failed to get updates: {e}")
+                    finally:
+                        loop.close()
+                        
+                    # If we couldn't determine from updates, try with a negative sign for channel
+                    if isinstance(self.telegram_chat_id, str) and self.telegram_chat_id.isdigit():
+                        self.telegram_chat_id = -int(self.telegram_chat_id)
+                        self.logger.debug(f"Using negative channel ID: {self.telegram_chat_id}")
+                else:
+                    # Regular user/group chat ID
+                    self.telegram_chat_id = int(self.telegram_chat_id)
+                    self.logger.debug(f"Converted chat_id to integer: {self.telegram_chat_id}")
+        except Exception as e:
+            self.logger.warning(f"Failed to convert chat_id to integer, using as string: {e}")
             
         try:
             # Import conditionally to avoid requiring the dependency if not used

@@ -12,7 +12,7 @@ from typing import List, Dict, Any, Optional
 from datetime import datetime
 
 from ...utils.common import clear_terminal, ensure_data_dir, check_proxy_file
-from ...core.config import check_env_vars, get_env_var
+from ...core.config import check_env_vars, get_env_var, safe_prompt
 from .solana_adapter import SolanaAdapter
 
 # We'll check for Dragon availability through the SolanaAdapter, not directly
@@ -44,7 +44,11 @@ def token_monitor():
             default="1000"
         ),
     ]
-    answers = prompt_user(questions)
+    answers = safe_prompt(questions)
+    
+    if not answers:
+        print("Operation cancelled.")
+        return
     
     # Parse token addresses
     from ...utils.common import parse_input_addresses
@@ -160,7 +164,11 @@ def wallet_monitor():
             default='default'
         )
     ]
-    wallet_source = inquirer.prompt(questions)["wallet_source"]
+    answers = safe_prompt(questions)
+    if not answers:
+        print("Operation cancelled.")
+        return
+    wallet_source = answers["wallet_source"]
     
     # Handle based on selection
     if wallet_source == 'default':
@@ -316,7 +324,11 @@ def telegram_scraper():
             default="100"
         ),
     ]
-    answers = inquirer.prompt(questions)
+    answers = safe_prompt(questions)
+    
+    if not answers:
+        print("Operation cancelled.")
+        return
     
     channel = answers["channel"]
     try:
@@ -338,10 +350,14 @@ def telegram_scraper():
             default=True
         ),
     ]
-    answers = inquirer.prompt(questions)
+    answers = safe_prompt(questions)
+    
+    if not answers:
+        print("Operation cancelled.")
+        return
     
     filter_type = answers["filter_type"]
-    export_csv = answers["export_csv"]
+    export_csv = bool(answers["export_csv"]) if answers and "export_csv" in answers else True
     
     # Initialize Solana adapter
     adapter = SolanaAdapter()
@@ -419,7 +435,7 @@ def dragon_solana_bundle():
         NoTruncationText(
             "contract_address",
             message="Enter Solana contract address(es) (space-separated for multiple)",
-            validate=lambda _, x: all(len(addr.strip()) in [43, 44] for addr in x.split()) if x else False
+            validate=lambda x: all(len(addr.strip()) in [43, 44] for addr in x.split()) if x else False
         )
     ]
     answers = prompt_user(questions)
@@ -523,7 +539,12 @@ def dragon_solana_wallet():
             default='default'
         )
     ]
-    file_option = inquirer.prompt(questions)["file_option"]
+    answers = safe_prompt(questions)
+    
+    if not answers:
+        print("Operation cancelled.")
+        return
+    file_option = answers["file_option"]
     
     # Handle file selection based on user choice
     if file_option == 'default':
@@ -551,7 +572,11 @@ def dragon_solana_wallet():
                 default=str(default_wallets_file)
             ),
         ]
-        wallets_path = inquirer.prompt(questions)["wallets_file"]
+        answers = safe_prompt(questions)
+        if not answers:
+            print("Operation cancelled.")
+            return
+        wallets_path = answers["wallets_file"]
         
     # Other questions for the Dragon wallet checker
     questions = [
@@ -571,7 +596,7 @@ def dragon_solana_wallet():
             default=False
         )
     ]
-    answers = inquirer.prompt(questions)
+    answers = safe_prompt(questions)
     
     # Load wallets from chosen file
     try:
@@ -591,25 +616,28 @@ def dragon_solana_wallet():
     
     # Parse thread count
     try:
-        threads = int(answers["threads"])
+        threads = int(answers["threads"]) if answers and "threads" in answers else 40
     except ValueError:
         print("⚠️ Invalid thread count, using default 40")
         threads = 40
     
     # Check proxies if requested
-    if answers["use_proxies"]:
-        proxies = check_proxy_file()
-        if not proxies:
-            print("⚠️ No proxies found. Continuing without proxies.")
-            answers["use_proxies"] = False
+    use_proxies = False
+    if answers and "use_proxies" in answers:
+        use_proxies = bool(answers["use_proxies"])
+        if use_proxies:
+            proxies = check_proxy_file()
+            if not proxies:
+                print("⚠️ No proxies found. Continuing without proxies.")
+                use_proxies = False
     
     # Use the adapter
     adapter = SolanaAdapter()
     result = adapter.solana_wallet_checker(
         wallets, 
         threads=threads,
-        skip_wallets=answers["skip_wallets"],
-        use_proxies=answers["use_proxies"]
+        skip_wallets=bool(answers["skip_wallets"]) if answers and "skip_wallets" in answers else False,
+        use_proxies=use_proxies
     )
     
     if result.get("success", False):

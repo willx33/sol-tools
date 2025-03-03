@@ -108,7 +108,9 @@ def check_module_env_vars(module_name: str) -> bool:
     
     # Check if all required env vars for the module are set
     for var in required_env_vars.get(module_name, []):
-        if not os.getenv(var):
+        # Improved check: ensure variable exists AND is not empty
+        value = os.environ.get(var, '')
+        if not value or value.strip() == '':
             return False
     return True
 
@@ -298,8 +300,16 @@ def create_main_menu(handlers: Dict[str, Callable]) -> List[MenuOption]:
                   description="Sets API keys in .env file at project root."),
         MenuOption("Clear Cache", handlers.get('utils_clear_cache'),
                   description="Cleans cache directory."),
-        MenuOption("Test Telegram", handlers.get('utils_test_telegram'),
-                  description="Verifies Telegram API connection with test message."),
+        MenuOption("Test Modules", children=[
+            MenuOption("Test Telegram", handlers.get('utils_test_telegram'),
+                      description="Verifies Telegram API connection with test message."),
+            MenuOption("Test Helius", handlers.get('utils_test_helius'),
+                      description="Verifies Helius API key with getHealth endpoint."),
+            MenuOption("Full Test", handlers.get('utils_run_full_tests'),
+                      description="Runs the full test suite to verify application functionality."),
+            MenuOption("Back", None)
+        ],
+                  description="Test API connections and configurations."),
         MenuOption("Back", None)
     ]
 

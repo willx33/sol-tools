@@ -6,6 +6,8 @@ import json
 import shutil
 import requests
 import pandas as pd
+import inspect
+import asyncio
 from typing import Optional, List, Dict, Any, Tuple, Union, Callable, cast, Type, TypeVar
 from pathlib import Path
 from datetime import datetime
@@ -66,7 +68,9 @@ try:
             
             # Validate
             if self.validate:
+                # Always call validate with just the result
                 validation_result = self.validate(result)
+                
                 if validation_result is not True:
                     console.print(f"[red]{validation_result}[/red]")
                     # Try again recursively
@@ -113,12 +117,32 @@ try:
         # Convert standard Text questions to EnhancedTextInput
         for i, question in enumerate(questions):
             if isinstance(question, _original_inquirer_text):
+                # Handle special case for lambdas that expect 2 arguments
+                validate_func = question.validate
+                if validate_func and callable(validate_func):
+                    # For any validate function that expects 2 args (self, value),
+                    # wrap it to only take one arg (value)
+                    original_validate = validate_func
+                    def wrapped_validate(*args):
+                        # Handle both possible calling patterns:
+                        # 1. wrapped_validate(value) - called by our EnhancedTextInput.execute
+                        # 2. wrapped_validate(self, value) - called by inquirer internals
+                        if len(args) == 1:
+                            return original_validate(args[0])
+                        elif len(args) == 2:
+                            # Discard the first argument (self) and only pass the value
+                            return original_validate(args[1])
+                        else:
+                            # Shouldn't happen, but handle it anyway
+                            return True
+                    validate_func = wrapped_validate
+                
                 # Create a EnhancedTextInput with the same attributes
                 new_question = EnhancedTextInput(
                     question.name,
                     message=question.message,
                     default=question.default,
-                    validate=question.validate
+                    validate=validate_func
                 )
                 questions[i] = new_question
         
@@ -165,7 +189,9 @@ except ImportError:
             result = input() or self.default
             
             if self.validate:
+                # Always call validate with just the result
                 validation_result = self.validate(result)
+                    
                 if validation_result is not True:
                     print(f"Error: {validation_result}")
                     return self.execute()
@@ -678,6 +704,74 @@ def test_telegram():
             
     except Exception as e:
         console.print(f"[red]❌ Error sending Telegram message: {e}[/red]")
+
+
+def test_helius():
+    """Test the Helius API key using the getHealth endpoint."""
+    helius_api_key = get_env_var("HELIUS_API_KEY")
+    
+    if not helius_api_key:
+        console.print("[red]❌ Helius API is not configured. Please set HELIUS_API_KEY in your .env file.[/red]")
+        return
+    
+    try:
+        url = f"https://mainnet.helius-rpc.com/?api-key={helius_api_key}"
+        
+        response = requests.post(url, json={
+            "jsonrpc": "2.0",
+            "id": "1",
+            "method": "getHealth"
+        })
+        
+        if response.status_code == 200:
+            result = response.json()
+            if result.get("result") == "ok":
+                console.print(f"[green]✅ Helius API is healthy! API key is valid.[/green]")
+            else:
+                console.print(f"[yellow]⚠️ Helius API responded but reported unhealthy status: {result}[/yellow]")
+        else:
+            console.print(f"[red]❌ Failed to connect to Helius API: HTTP {response.status_code}[/red]")
+            console.print(f"[red]Response: {response.text}[/red]")
+            
+    except Exception as e:
+        console.print(f"[red]❌ Error testing Helius API: {e}[/red]")
+
+
+def run_full_tests():
+    """Run the full test suite and return to the menu."""
+    console.print("[bold blue]Running full test suite...[/bold blue]")
+    
+    try:
+        # Import the test runner from tests
+        from ..tests.test_runner import run_all_tests
+        
+        # Create a minimal args object with required attributes
+        class Args:
+            test_module = None
+            verbose = False
+        
+        args = Args()
+        
+        # Run the tests with asyncio
+        with console.status("[bold green]Running tests...[/bold green]"):
+            exit_code = asyncio.run(run_all_tests(args.test_module))
+        
+        if exit_code == 0:
+            console.print("[bold green]✅ All tests passed![/bold green]")
+        else:
+            console.print("[bold red]❌ Some tests failed![/bold red]")
+        
+        # Pause to show the results before returning to the menu
+        console.print("\n[bold]Press any key to return to the menu...[/bold]")
+        input()
+        
+    except ImportError as e:
+        console.print(f"[bold red]⚠️ Failed to import test runner: {str(e)}[/bold red]")
+        console.print("[bold red]❌ Could not find test framework[/bold red]")
+        
+        # Pause before returning to the menu
+        console.print("\n[bold]Press any key to return to the menu...[/bold]")
+        input()
 
 
 def ensure_data_dir(module: str, subdir: Optional[str] = None, data_type: str = "output") -> Path:
@@ -1308,7 +1402,7 @@ def validate_credentials(module_name: str) -> bool:
     env_vars = check_env_vars(module_name)
     
     if not all(env_vars.values()):
-        # Fix: Create the missing list here
+        # Create a list of missing variables
         missing_vars = [var for var, present in env_vars.items() if not present]
         clear_terminal()
         console.print(f"[bold red]❌ Missing required credentials for this module[/bold red]")
