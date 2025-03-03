@@ -315,6 +315,10 @@ def edit_env_variables() -> None:
         ]
         
         answers = inquirer.prompt(questions)
+        if not answers:
+            # User cancelled with Ctrl+C
+            break
+            
         selected_category = answers["category"]
         
         if selected_category == "⬅️ Back":
@@ -332,6 +336,10 @@ def edit_env_variables() -> None:
             ]
             
             answers = inquirer.prompt(questions)
+            if not answers:
+                # User cancelled with Ctrl+C
+                break
+                
             selected = answers["variable"]
             
             if selected == "⬅️ Back":
@@ -362,6 +370,10 @@ def edit_env_variables() -> None:
                 ),
             ]
             value_answer = inquirer.prompt(questions2)
+            if not value_answer:
+                # User cancelled with Ctrl+C
+                break
+                
             new_value = value_answer["value"]
             
             # Check if they entered the placeholder text by mistake
@@ -378,7 +390,10 @@ def edit_env_variables() -> None:
                     ),
                 ]
                 confirm = inquirer.prompt(confirm_questions)
-                
+                if not confirm:
+                    # User cancelled with Ctrl+C
+                    break
+                    
                 if not confirm["confirm"]:
                     console.print("[yellow]No changes made.[/yellow]")
                     continue
@@ -396,14 +411,22 @@ def edit_env_variables() -> None:
                     console.print(f"[yellow]⚠ Cleared {selected}[/yellow]")
                 
                 # Save immediately after each change
-                save_env_file(env_vars, env_comments)
+                try:
+                    save_env_file(env_vars, env_comments)
+                except Exception as e:
+                    console.print(f"[red]Error saving environment variables: {e}[/red]")
     
     # Only show final success message if changes were made
     if changes_made:
         console.print("\n[green]✓ Environment variables saved successfully![/green]")
-        console.print("[green]✓ Configuration has been reloaded.[/green]")
-        # Reload environment variables
-        load_dotenv(ENV_FILE)
+        
+        try:
+            # Directly reload dotenv to avoid potential circular imports
+            from dotenv import load_dotenv as reload_dotenv
+            reload_dotenv(ENV_FILE, override=True)
+            console.print("[green]✓ Configuration has been reloaded.[/green]")
+        except Exception as e:
+            console.print(f"[red]Error reloading environment variables: {e}[/red]")
 
 
 def save_env_file(env_vars, comments=None):

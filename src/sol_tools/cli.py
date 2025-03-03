@@ -338,6 +338,7 @@ def main():
     # Create and run the appropriate menu
     if args.text_menu:
         # Use inquirer menu if explicitly requested
+        print("Using text-based menu as requested")
         menu = InquirerMenu(handlers)
         menu.run()
     else:
@@ -348,6 +349,7 @@ def main():
         except Exception as e:
             print(f"Error in curses menu: {e}")
             print("Falling back to inquirer menu")
+            # Reuse the same handlers to avoid rebuilding the main menu
             menu = InquirerMenu(handlers)
             menu.run()
 

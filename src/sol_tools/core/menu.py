@@ -1,8 +1,11 @@
-"""Menu system for the Sol Tools CLI."""
+"""Menu generation and display for Sol Tools."""
 
 import curses
 import inquirer
+import os
 from typing import Dict, List, Optional, Callable, Any, Union
+
+# Import only what's needed from other modules
 from .config import edit_env_variables
 
 class MenuOption:
@@ -91,16 +94,28 @@ def check_module_env_vars(module_name: str) -> bool:
     Returns:
         True if all required variables are set, False if any are missing
     """
-    from .config import check_env_vars
+    # Define the required env vars directly to avoid circular imports
+    required_env_vars = {
+        "dragon": [],
+        "dune": ["DUNE_API_KEY"],
+        "solana": ["HELIUS_API_KEY"],
+        "ethereum": [],
+        "gmgn": [],
+        "telegram": ["TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID"],
+        "bullx": [],
+        "sharp": []
+    }
     
-    env_vars = check_env_vars(module_name)
-    return all(env_vars.values()) if env_vars else True
+    # Check if all required env vars for the module are set
+    for var in required_env_vars.get(module_name, []):
+        if not os.getenv(var):
+            return False
+    return True
 
 def create_main_menu(handlers: Dict[str, Callable]) -> List[MenuOption]:
     """
     Build the top-level menu structure.
     """
-    print("Creating main menu...")
     # Check environment variables for each module
     solana_env_vars_missing = not check_module_env_vars("solana")
     dragon_env_vars_missing = not check_module_env_vars("dragon")
@@ -537,23 +552,18 @@ class InquirerMenu:
     """Fallback menu system using inquirer library."""
     
     def __init__(self, handlers: Dict[str, Callable]):
+        print("Creating main menu...")
         self.manager = MenuManager()
+        self.handlers = handlers
+        # Build the main menu just once in the constructor
         self.main_menu = create_main_menu(handlers)
         self.manager.push_menu(self.main_menu)
         self.running = True
-        self.recursion_counter = 0  # Add counter to track recursion
     
     def run(self):
         """Run the inquirer-based menu system."""
         while self.running:
             try:
-                # Recursion safeguard
-                self.recursion_counter += 1
-                if self.recursion_counter > 20:
-                    print("ERROR: Excessive recursion detected in menu system. Exiting to prevent stack overflow.")
-                    self.running = False
-                    return
-                    
                 # Create choices list from current menu
                 choices = []
                 for option in self.manager.current_menu:

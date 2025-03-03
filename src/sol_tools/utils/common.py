@@ -6,7 +6,7 @@ import json
 import shutil
 import requests
 import pandas as pd
-from typing import Optional, List, Dict, Any, Tuple, Union, Callable
+from typing import Optional, List, Dict, Any, Tuple, Union, Callable, cast, Type, TypeVar
 from pathlib import Path
 from datetime import datetime
 from rich.console import Console
@@ -24,68 +24,59 @@ console = Console()
 
 # Import inquirer classes
 try:
-    from inquirer import Text as InquirerText
-    from inquirer.render.console import ConsoleRender
     import inquirer
+    from inquirer.questions import Text as InquirerText
+    from inquirer.render.console import ConsoleRender
     import readchar
-    import time
     import sys
     from blessed import Terminal
     
-    # Create a simple but effective direct input implementation
-    class NoTruncationText(InquirerText):
+    # Type variables for class compatibility
+    T = TypeVar('T')
+    
+    # Create a simple but effective direct input implementation - use a unique name to avoid conflicts
+    class EnhancedTextInput(InquirerText):
         """
         A simplified Text input that properly handles paste operations.
         
-        This implementation bypasses the inquirer rendering engine completely
-        and directly manages terminal input to prevent duplicate prompts during paste.
+        This overrides the default inquirer Text input to fix an issue where
+        pasting text with newlines or large amounts of text causes rendering glitches.
         """
-        def __init__(self, *args, **kwargs):
+        def __init__(self, name, message="", default="", validate=None, **kwargs):
             # Initialize parent class
-            super().__init__(*args, **kwargs)
-            
-            # Set up validation
-            self._validate_func = kwargs.get('validate')
-
+            super().__init__(
+                name, 
+                message=message,
+                default=default,
+                validate=validate, 
+                **kwargs
+            )
+        
         def execute(self):
             """
-            Simple direct input method that completely avoids the paste issue
-            by handling input directly without using the inquirer rendering engine.
+            Execute text input in a simplified way that properly handles paste operations.
             """
-            # Get the prompt message (no truncation)
-            message = self.message
+            console = Console()
+            console.print(f"{self.message}: ", end="")
+            if self.default:
+                console.print(f"[dim]{self.default}[/dim] ", end="")
             
-            # Get the default value
-            default = self.default or ""
-            default_display = f" [{default}]" if default else ""
+            # Get input
+            result = input() or self.default
             
-            # Display the prompt once and directly capture input
-            user_input = input(f"{message}{default_display}: ")
+            # Validate
+            if self.validate:
+                validation_result = self.validate(result)
+                if validation_result is not True:
+                    console.print(f"[red]{validation_result}[/red]")
+                    # Try again recursively
+                    return self.execute()
             
-            # Apply default if user didn't enter anything
-            if not user_input and default:
-                user_input = default
-                
-            # Run validation if provided
-            if self._validate_func and callable(self._validate_func):
-                # Only attempt validation if we have a value
-                if user_input:
-                    try:
-                        is_valid = self._validate_func(None, user_input)
-                        if not is_valid:
-                            print(f"Invalid input. Please try again.")
-                            return self.execute()  # Recursive call to retry
-                    except Exception as e:
-                        print(f"Validation error: {e}")
-                        return self.execute()  # Recursive call to retry
-                
-            # Store the value and return
-            self.current_value = user_input
-            return user_input
-            
+            return result
+        
         def get_message(self):
-            """Get the prompt message without truncation"""
-            return self.message
+            """Custom message rendering to keep things simple."""
+            return f"{self.message}: "
 
     # Create a function to prompt the user, bypassing inquirer's rendering
     def prompt_user(questions):
@@ -96,7 +87,7 @@ try:
         result = {}
         
         for question in questions:
-            if isinstance(question, NoTruncationText):
+            if isinstance(question, EnhancedTextInput):
                 # Handle our custom text input directly
                 result[question.name] = question.execute()
             else:
@@ -119,11 +110,11 @@ try:
         Replacement for inquirer.prompt that automatically handles Text inputs
         in a paste-safe manner, without requiring manual changes throughout the codebase.
         """
-        # Convert standard Text questions to NoTruncationText
+        # Convert standard Text questions to EnhancedTextInput
         for i, question in enumerate(questions):
             if isinstance(question, _original_inquirer_text):
-                # Create a NoTruncationText with the same attributes
-                new_question = NoTruncationText(
+                # Create a EnhancedTextInput with the same attributes
+                new_question = EnhancedTextInput(
                     question.name,
                     message=question.message,
                     default=question.default,
@@ -132,16 +123,54 @@ try:
                 questions[i] = new_question
         
         # Use our prompt_user function which handles the mix of question types
-        return prompt_user(questions)
+        # but make sure we don't call ourselves recursively
+        result = {}
+        
+        for question in questions:
+            if isinstance(question, EnhancedTextInput):
+                # Handle our custom text input directly
+                result[question.name] = question.execute()
+            else:
+                # Pass other question types to the original inquirer prompt
+                temp_result = _original_inquirer_prompt([question], *args, **kwargs)
+                if temp_result:
+                    result.update(temp_result)
+        
+        return result
 
     # Replace the prompt method system-wide
     inquirer.prompt = _paste_safe_prompt
     
+    # Define public names - these are the only ones that should be imported
+    # by other modules to avoid name conflicts
+    NoTruncationText = EnhancedTextInput
+    PasteAwareTextInput = EnhancedTextInput
+    
 except ImportError:
-    # Fallback if inquirer isn't available
-    class NoTruncationText:
+    # ===== FALLBACK IMPLEMENTATION FOR WHEN INQUIRER IS NOT AVAILABLE =====
+    class BasicTextInput:
         """Fallback if inquirer isn't available."""
-        pass
+        def __init__(self, name, message="", default="", validate=None, **kwargs):
+            self.name = name
+            self.message = message
+            self.default = default
+            self.validate = validate
+            
+        def execute(self):
+            """Simple input handler for when inquirer isn't available."""
+            print(f"{self.message}: ", end="")
+            if self.default:
+                print(f"{self.default} ", end="")
+            
+            result = input() or self.default
+            
+            if self.validate:
+                validation_result = self.validate(result)
+                if validation_result is not True:
+                    print(f"Error: {validation_result}")
+                    return self.execute()
+                    
+            return result
         
     def prompt_user(questions):
         """Fallback prompt function if inquirer isn't available."""
@@ -149,6 +178,10 @@ except ImportError:
         for question in questions:
             result[question.name] = input(f"{question.message}: ")
         return result
+    
+    # Define public names - consistent with the above try block
+    NoTruncationText = BasicTextInput
+    PasteAwareTextInput = BasicTextInput
 
 
 def parse_input_addresses(input_value: str) -> List[str]:
@@ -243,23 +276,28 @@ class ProgressManager:
         self.task_id = self.progress.add_task(self.description, total=self.total)
         return self
     
-    def update(self, completed: float, total: float = None, description: str = None):
+    def update(self, completed: float, total: Optional[float] = None, description: Optional[str] = None):
         """Update progress of the current step."""
-        if self.task_id is not None:
-            update_kwargs = {"completed": completed}
+        if self.task_id is not None and self.progress is not None:
+            # Create a clean kwargs dict with only the valid arguments
+            update_kwargs = {}
+            update_kwargs["completed"] = completed
+            
             if total is not None:
                 update_kwargs["total"] = total
             if description is not None:
                 update_kwargs["description"] = description
             
+            # Use type-safe update call
             self.progress.update(self.task_id, **update_kwargs)
     
-    def complete(self, success: bool = True, message: str = None):
+    def complete(self, success: bool = True, message: Optional[str] = None):
         """Finish the progress tracking."""
-        if self.live:
+        if self.live and self.progress is not None and self.task_id is not None:
             if success:
                 final_msg = message or "Process completed successfully!"
                 success_color = 'bright_green'
+                # Use type-safe update call with only valid arguments
                 self.progress.update(
                     self.task_id, 
                     description=f"[bold {success_color}]✓ {final_msg}[/bold {success_color}]", 
@@ -268,6 +306,7 @@ class ProgressManager:
             else:
                 final_msg = message or "Process failed!"
                 warning_color = 'bright_red'
+                # Use type-safe update call with only valid arguments
                 self.progress.update(
                     self.task_id, 
                     description=f"[bold {warning_color}]✗ {final_msg}[/bold {warning_color}]"
@@ -360,122 +399,78 @@ class WorkflowResult:
         self.progress_manager = manager
     
     def print_summary(self):
-        """Print a richly formatted summary of the workflow results."""
-        # Create a nested panel structure for better organization
-        from rich.panel import Panel
-        from rich.layout import Layout
-        from rich.columns import Columns
+        """Print a rich summary of the workflow results."""
+        from rich.console import Console
+        from rich.table import Table
+        from rich import box
         from rich.text import Text
         
-        # If failed, show error message
-        if not self.success:
-            error_panel = Panel(
-                f"[bold red]{self.error_message}[/bold red]",
-                title="[bold red]Error[/bold red]",
-                border_style="red"
-            )
-            console.print("\n[bold red]Workflow Failed[/bold red]")
-            console.print(error_panel)
-            return
+        console = Console()
+        table = Table(show_header=False, box=box.SIMPLE)
         
-        # Create header panel
-        header_text = Text.assemble(
-            ("Workflow Summary", "bold purple"),
-            "\n",
-            ("✓ ", "bright_green"),
-            ("Completed Successfully", "bold bright_green")
-        )
+        # Add columns
+        table.add_column("label", style="bold")
+        table.add_column("value")
         
-        # Create time information text
-        duration_str = format_duration(self.duration())
-        time_text = Text.assemble(
-            ("Duration: ", "bold"),
-            (f"{duration_str}", "cyan"),
-            "\n",
-            ("Completed at: ", "bold"),
-            (f"{self.end_time.strftime('%Y-%m-%d %H:%M:%S')}", "cyan")
-        )
+        # Add title
+        title = Text("Workflow Results", style="bold cyan underline")
+        table.add_row("", title)
         
-        # Create panels for different sections
-        time_panel = Panel(time_text, title="⏱️ Time Information", border_style="cyan")
-        
-        # Create statistics panel if there are statistics
-        stats_panels = []
-        if self.stats:
-            # Convert stats to a nicely formatted table
-            table = Table(show_header=True, header_style="bold magenta", border_style="bright_black")
-            table.add_column("Metric", style="dim")
-            table.add_column("Value", style="cyan")
-            
-            for key, value in self.stats.items():
-                formatted_key = key.replace('_', ' ').title()
-                # Format numeric values nicely if possible
-                if isinstance(value, (int, float)):
-                    if isinstance(value, int):
-                        formatted_value = f"{value:,}"
-                    else:
-                        formatted_value = f"{value:,.2f}"
-                else:
-                    formatted_value = str(value)
-                
-                table.add_row(formatted_key, formatted_value)
-            
-            stats_panels.append(Panel(table, title="📊 Statistics", border_style="magenta"))
-        
-        # Create file panels for inputs and outputs
-        file_panels = []
+        # Add input files
         if self.input_files:
-            input_table = Table(show_header=True, header_style="bold blue", expand=True)
-            input_table.add_column("Input Name", style="dim")
-            input_table.add_column("Path", style="bright_blue")
-            
+            table.add_row("\nInput Files:", "")
             for key, path in self.input_files.items():
-                formatted_key = key.replace('_', ' ').title()
-                input_table.add_row(formatted_key, path)
-            
-            file_panels.append(Panel(input_table, title="📥 Input Files", border_style="blue"))
-            
-        if self.output_files:
-            output_table = Table(show_header=True, header_style="bold green", expand=True)
-            output_table.add_column("Output Name", style="dim")
-            output_table.add_column("Path", style="bright_green")
-            
-            for key, path in self.output_files.items():
-                formatted_key = key.replace('_', ' ').title()
-                output_table.add_row(formatted_key, path)
-            
-            file_panels.append(Panel(output_table, title="📤 Output Files", border_style="green"))
-            
-        # Create summary layout
-        layout = Layout()
-        layout.split_column(
-            Layout(Panel(header_text, border_style="purple"), size=3),
-            Layout(time_panel, size=6),
-            Layout(
-                Columns(stats_panels) if stats_panels else Panel("[dim]No statistics to display[/dim]", border_style="dim"), 
-                size=12
-            ),
-            Layout(
-                Columns(file_panels) if file_panels else Panel("[dim]No files to display[/dim]", border_style="dim"),
-                size=16
-            )
-        )
+                table.add_row(f"  {key}", path)
         
-        # Print the layout
-        console.print("\n")
-        console.print(layout)
+        # Add output files
+        if self.output_files:
+            table.add_row("\nOutput Files:", "")
+            for key, path in self.output_files.items():
+                table.add_row(f"  {key}", path)
+        
+        # Add stats
+        if self.stats:
+            table.add_row("\nStatistics:", "")
+            for key, value in self.stats.items():
+                table.add_row(f"  {key}", str(value))
+        
+        # Add processed timestamp
+        completed_label = Text("Completed at: ", style="bold")
+        completed_value = Text(self.end_time.strftime('%Y-%m-%d %H:%M:%S') if self.end_time else "N/A", style="cyan")
+        table.add_row("\n", "")
+        table.add_row(completed_label, completed_value)
+        
+        # Add status
+        if self.error_message:
+            error_label = Text("Error: ", style="bold red")
+            error_value = Text(self.error_message, style="red")
+            table.add_row("\n", "")
+            table.add_row(error_label, error_value)
+        else:
+            status_label = Text("Status: ", style="bold")
+            status_value = Text("Success", style="green")
+            table.add_row("\n", "")
+            table.add_row(status_label, status_value)
+            
+        # Add duration
+        duration_str = format_duration(self.duration()) if self.start_time and self.end_time else "Unknown"
+        duration_label = Text("Duration: ", style="bold")
+        duration_value = Text(duration_str, style="cyan")
+        table.add_row(duration_label, duration_value)
+            
+        console.print(table)
         console.print("\n[bright_green]✓[/bright_green] [bold]Workflow completed[/bold]\n")
     
-    def export_results(self, export_format: str = 'json', output_path: str = None) -> str:
+    def export_results(self, export_format: str = 'json', output_path: Optional[str] = None) -> Optional[str]:
         """
         Export workflow results to a file.
         
         Args:
-            export_format: 'json', 'csv', or 'excel'
-            output_path: Path to save the file (optional)
+            export_format: Format to export (json, csv, xlsx)
+            output_path: Path to save the exported file
             
         Returns:
-            Path to the exported file
+            The path to the exported file if successful, None otherwise
         """
         if not output_path:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -1270,22 +1265,22 @@ def process_multiple_inputs(inputs: List[str],
     }
 
 
-def check_proxy_file(proxy_path: Optional[str] = None) -> List[str]:
+def check_proxy_file(proxy_path: Optional[Union[str, Path]] = None) -> List[str]:
     """
-    Check if proxy file exists and get proxies.
+    Check if proxies file exists and load proxies.
     
     Args:
-        proxy_path: Optional path to proxy file, defaults to input-data/proxies/proxies.txt
+        proxy_path: Path to the proxies file, will use default if None
         
     Returns:
-        List of proxy strings or empty list if no proxies
+        List of proxy strings
     """
     if proxy_path is None:
         from ..core.config import INPUT_DATA_DIR
-        proxy_path = INPUT_DATA_DIR / "proxies" / "proxies.txt"
+        proxy_path = str(INPUT_DATA_DIR / "proxies" / "proxies.txt")
         
     try:
-        if os.path.exists(proxy_path):
+        if proxy_path and os.path.exists(proxy_path):
             with open(proxy_path, 'r') as f:
                 proxies = [line.strip() for line in f if line.strip()]
             return proxies
@@ -1299,35 +1294,32 @@ def check_proxy_file(proxy_path: Optional[str] = None) -> List[str]:
 
 def validate_credentials(module_name: str) -> bool:
     """
-    Check if all required environment variables for a module are present.
-    Shows error message and returns False if any are missing.
+    Check if all required credentials are set for a module.
     
     Args:
-        module_name: Module name to check credentials for (e.g., 'solana', 'dragon')
+        module_name: Name of the module to check
         
     Returns:
-        True if all required credentials are present, False otherwise
+        True if all required credentials are set, False otherwise
     """
-    # Import here to avoid circular imports
     from ..core.config import check_env_vars
     
-    # Check for required environment variables
+    console = Console()
     env_vars = check_env_vars(module_name)
     
-    # If no vars required (like some Sharp tools), return True
-    if not env_vars:
-        return True
-        
     if not all(env_vars.values()):
-        missing = [var for var, present in env_vars.items() if not present]
+        # Fix: Create the missing list here
+        missing_vars = [var for var, present in env_vars.items() if not present]
         clear_terminal()
         console.print(f"[bold red]❌ Missing required credentials for this module[/bold red]")
-        console.print(f"The following environment variables are not set: {', '.join(missing)}")
-        console.print("\nPlease set them in Settings > Edit Environment Variables")
-        console.print("\nPress Enter to return to main menu...")
-        input()
-        return False
+        console.print("\nThe following environment variables are required but not set:")
+        for var in missing_vars:
+            console.print(f"  - [yellow]{var}[/yellow]")
         
+        console.print("\nPlease set them in Settings > Edit Environment Variables")
+        input("\nPress Enter to continue...")
+        return False
+    
     return True
 
 
