@@ -196,7 +196,8 @@ async def run_telegram_tests(options: Optional[Dict[str, Any]] = None) -> int:
                 failed_tests.append(test_name)
         
         # Print summary
-        print(f"\n{STATUS_INDICATORS['passed' if not failed_tests else 'failed']} Telegram Summary: {len(passed_tests)}/{len(test_results)} tests passed, {len(skipped_tests)} skipped")
+        # Commented out to avoid duplicate summary in the test runner output
+        # print(f"\n{STATUS_INDICATORS['skipped' if len(skipped_tests) == len(test_results) else 'passed' if not failed_tests else 'failed']} Telegram Summary: {len(passed_tests)}/{len(test_results)} tests passed, {len(skipped_tests)} skipped")
         
         # If all tests were skipped or all remaining tests passed, consider it a success
         if len(failed_tests) == 0:

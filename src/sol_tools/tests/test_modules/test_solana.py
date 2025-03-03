@@ -526,40 +526,32 @@ class SolanaTester(BaseTester):
         # Run the tests using the base class method
         return await super().run_all_tests()
 
-async def run_tests(options: Optional[Dict[str, Any]] = None) -> int:
-    """Run all Solana module tests."""
+async def run_tests(options: Optional[Dict[str, Any]] = None) -> Dict[str, Dict[str, Any]]:
+    """
+    Run all Solana module tests.
+    
+    Args:
+        options: Dictionary of test options
+    
+    Returns:
+        Dictionary mapping test names to test results
+    """
+    # Create a tester instance
     tester = SolanaTester(options)
+    
     try:
-        test_results = await tester.run_all_tests()
-        
-        # Clean up resources
-        try:
-            tester.cleanup()
-        except Exception as cleanup_error:
-            print(f"Warning: Error during cleanup: {cleanup_error}")
-        
-        # Get all non-skipped test results
-        non_skipped_results = [result for result in test_results.values() 
-                              if result.get("status") != "skipped"]
-        
-        # If all tests were skipped, return 2 (special code for "all skipped")
-        if not non_skipped_results:
-            return 2
-            
-        # Return 0 (success) if all non-skipped tests passed, 1 (failure) otherwise
-        return 0 if all(result.get("status") == "passed" 
-                       for result in non_skipped_results) else 1
-                       
+        # Run all tests
+        results = await tester.run_all_tests()
+        return results
     except Exception as e:
         print(f"Error running Solana tests: {str(e)}")
-        
-        # Clean up resources
-        try:
-            tester.cleanup()
-        except Exception as cleanup_error:
-            print(f"Warning: Error during cleanup: {cleanup_error}")
-            
-        return 1
+        import traceback
+        traceback.print_exc()
+        # Return a dictionary with a single error entry to match the expected return type
+        return {"error": {"status": "error", "message": str(e)}}
+    finally:
+        # Clean up test files
+        tester.cleanup()
 
 if __name__ == "__main__":
     # Allow running this file directly for testing

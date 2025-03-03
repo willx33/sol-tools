@@ -118,82 +118,127 @@ class BaseTester:
     
     async def run_test(self, test_name: str, test_func: Callable) -> Dict[str, Any]:
         """
-        Run a single test function and return the result.
+        Run a single test and return results.
         
         Args:
             test_name: Name of the test
-            test_func: Function to run for the test
+            test_func: Function to run
             
         Returns:
-            Dictionary with test result information
+            Dictionary containing test results
         """
-        self.total_tests += 1
+        # Initialize test result
+        result = {
+            "name": test_name,
+            "status": "running",
+            "duration": 0,
+            "start_time": time.time(),
+            "message": None,
+            "exception": None,
+            "skipped_reason": None
+        }
         
-        # Check if this test has required env vars
-        required_vars = self.test_env_vars.get(test_name, [])
-        missing_vars = []
-        
-        # Check which env vars are missing
-        for var in required_vars:
-            if not os.environ.get(var):
-                missing_vars.append(var)
-        
-        # Skip the test if any required env vars are missing
-        if missing_vars:
-            self.skipped_tests += 1
-            print(f"{STATUS_INDICATORS['skipped']} {test_name}")
-            print(f"     ⚠️  Missing environment variables: {', '.join(missing_vars)}")
-            return {
-                "name": test_name,
+        # Check if any required environment variables are missing
+        missing_env_vars = self.check_missing_env_vars(test_name)
+        if missing_env_vars:
+            # Skip test if environment variables are missing
+            result.update({
                 "status": "skipped",
-                "required_env_vars": missing_vars,
-                "missing_env_vars": missing_vars
-            }
+                "skipped_reason": f"Missing environment variables: {', '.join(missing_env_vars)}",
+                "end_time": time.time(),
+                "duration": 0
+            })
+            self.skipped_tests += 1
+            self.total_tests += 1
+            
+            # Display skip message
+            print(f"{STATUS_INDICATORS['skipped']} {test_name}")
+            print(f"     ⚠️  {result['skipped_reason']}")
+            
+            return result
         
         # Run the test
+        self.total_tests += 1
+        start_time = time.time()
         print(f"{STATUS_INDICATORS['running']} Running: {test_name}")
         
         try:
-            start_time = time.time()
-            # Handle both async and non-async test functions
-            if asyncio.iscoroutinefunction(test_func):
-                result = await test_func()
-            else:
-                result = test_func()
-                
-            elapsed_time = time.time() - start_time
+            # Call the test function
+            test_result = await test_func()
+            end_time = time.time()
+            elapsed_time = end_time - start_time
             
-            # Handle None return value as a skip (added for Dragon module tests)
-            if result is None:
-                self.skipped_tests += 1
-                print(f"{STATUS_INDICATORS['skipped']} {test_name} ({elapsed_time:.2f}s)")
+            # Handle different return types from test functions
+            if test_result is None:
+                # None result means the test was skipped
                 status = "skipped"
-            elif result:
-                self.passed_tests += 1
+                self.skipped_tests += 1
+            elif isinstance(test_result, bool):
+                # Boolean result indicates pass/fail
+                if test_result:
+                    status = "passed"
+                    self.passed_tests += 1
+                else:
+                    status = "failed"
+            else:
+                # Any other result type is treated as a structured result
+                # This allows tests to return more detailed information
+                if isinstance(test_result, dict) and "status" in test_result:
+                    status = test_result["status"]
+                    if status == "passed":
+                        self.passed_tests += 1
+                    elif status == "skipped":
+                        self.skipped_tests += 1
+                else:
+                    # Default to passed if the result is truthy
+                    status = "passed" if test_result else "failed"
+                    if status == "passed":
+                        self.passed_tests += 1
+            
+            # Print test status
+            if status == "passed":
                 print(f"{STATUS_INDICATORS['passed']} {test_name} ({elapsed_time:.2f}s)")
-                status = "passed"
+            elif status == "skipped":
+                print(f"{STATUS_INDICATORS['skipped']} {test_name}")
             else:
                 print(f"{STATUS_INDICATORS['failed']} {test_name} ({elapsed_time:.2f}s)")
-                status = "failed"
                 
             # Return structured result
-            return {
-                "name": test_name,
-                "status": status,
-                "elapsed_time": elapsed_time
-            }
+            if isinstance(test_result, dict) and "status" in test_result:
+                # If the test returned a dict with status, merge it with our result
+                result.update(test_result)
+                # Make sure to update the status and duration
+                result["status"] = status
+                result["duration"] = elapsed_time
+            else:
+                # Otherwise just update the basic fields
+                result.update({
+                    "status": status,
+                    "duration": elapsed_time,
+                    "end_time": end_time
+                })
+            return result
             
         except Exception as e:
-            print(f"{STATUS_INDICATORS['failed']} {test_name}")
+            # Handle exceptions during test execution
+            end_time = time.time()
+            elapsed_time = end_time - start_time
+            
+            self.logger.error(f"Error in test {test_name}")
+            self.logger.exception(str(e))
+            
+            print(f"{STATUS_INDICATORS['failed']} {test_name} ({elapsed_time:.2f}s)")
             print(f"     ❌ Error: {str(e)}")
-            self.logger.exception(f"Error in test {test_name}")
             
             # Return structured result
-            return {
-                "name": test_name,
+            result.update({
                 "status": "failed",
-                "reason": str(e)
-            }
+                "reason": str(e),
+                "exception": str(e),
+                "duration": elapsed_time,
+                "end_time": end_time
+            })
+            return result
     
     def validate_data_structure(self, data: Any, schema: Dict, path: str = "") -> List[str]:
         """
@@ -411,42 +456,112 @@ class BaseTester:
     
     def discover_test_env_vars(self) -> Dict[str, List[str]]:
         """
-        Discover required environment variables for each test method.
+        Discover environment variables required by each test method.
         
-        This method inspects all test methods (starting with test_) and looks for
-        docstring annotations specifying required environment variables.
-        
-        Format: @requires_env: ENV_VAR1, ENV_VAR2
+        This method inspects each test method for the presence of
+        environment variable requirements in docstrings or function annotations.
         
         Returns:
-            Dictionary mapping test names to lists of required env vars
+            A dictionary mapping test names to lists of required environment variables
         """
         env_vars = {}
         
-        # Get all methods starting with "test_"
-        test_methods = inspect.getmembers(
-            self, 
-            predicate=lambda x: inspect.ismethod(x) and x.__name__.startswith("test_")
-        )
-        
-        for name, method in test_methods:
-            # Get the docstring
-            docstring = inspect.getdoc(method)
-            if not docstring:
-                continue
+        # Get all test methods (starting with 'test_')
+        for attr_name in dir(self):
+            if attr_name.startswith('test_'):
+                method = getattr(self, attr_name)
                 
-            # Look for the @requires_env annotation
-            for line in docstring.splitlines():
-                if line.strip().startswith("@requires_env:"):
-                    # Extract the environment variables
-                    vars_part = line.split("@requires_env:", 1)[1].strip()
-                    required_vars = [v.strip() for v in vars_part.split(",")]
-                    env_vars[name] = required_vars
-                    break
+                # Skip if not callable
+                if not callable(method):
+                    continue
+                
+                # Initialize as empty list
+                env_vars[attr_name] = []
+                
+                # Check for docstring with environment variable requirements
+                if method.__doc__ and "requires:" in method.__doc__.lower():
+                    doc_lines = method.__doc__.splitlines()
+                    for line in doc_lines:
+                        if "requires:" in line.lower():
+                            # Extract environment variable names
+                            _, requires_str = line.lower().split("requires:", 1)
+                            required_vars = [
+                                v.strip().upper() 
+                                for v in requires_str.split(",")
+                                if v.strip()
+                            ]
+                            env_vars[attr_name].extend(required_vars)
         
-        # Store the discovered env vars
-        self.test_env_vars = env_vars
         return env_vars
+
+    def check_env_vars(self, env_vars: List[str]) -> Tuple[bool, List[str]]:
+        """
+        Check if all required environment variables are set.
+        
+        Args:
+            env_vars: List of environment variable names to check
+            
+        Returns:
+            Tuple of (all_present, missing_vars) where:
+              - all_present is True if all variables are set
+              - missing_vars is a list of missing variable names
+        """
+        missing = []
+        valid = True
+        
+        for var in env_vars:
+            if var not in os.environ or not os.environ[var]:
+                missing.append(var)
+                valid = False
+                
+        return valid, missing
+
+    def check_missing_env_vars(self, test_name: str) -> List[str]:
+        """
+        Check if a specific test has missing environment variables.
+        
+        Args:
+            test_name: The name of the test method to check
+            
+        Returns:
+            List of missing environment variable names
+        """
+        # Get required environment variables for this test
+        test_env_vars = self.test_env_vars.get(test_name, [])
+        # Combine with module-level required env vars
+        required_env_vars = list(set(test_env_vars + self.required_env_vars))
+        
+        # Check if all environment variables are set
+        _, missing = self.check_env_vars(required_env_vars)
+        return missing
+
+    def create_env_var_doc(self) -> str:
+        """
+        Creates a documentation string for environment variables used by this tester.
+        
+        Returns:
+            A formatted string describing required environment variables
+        """
+        all_env_vars = set(self.required_env_vars)
+        
+        # Add environment variables from individual tests
+        for vars_list in self.test_env_vars.values():
+            all_env_vars.update(vars_list)
+            
+        if not all_env_vars:
+            return "No environment variables required"
+            
+        # Check which ones are set
+        env_var_status = []
+        for var in sorted(all_env_vars):
+            if var in os.environ and os.environ[var]:
+                env_var_status.append(f"✓ {var} (set)")
+            elif var in os.environ:
+                env_var_status.append(f"✓ {var} (present, but empty)")
+            else:
+                env_var_status.append(f"✗ {var} (not set)")
+                
+        return "Required environment variables:\n  " + "\n  ".join(env_var_status)
     
     async def run_all_tests(self) -> Dict[str, Dict[str, Any]]:
         """
