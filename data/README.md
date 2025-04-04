@@ -17,7 +17,7 @@ data/
 │   │   └── wallet-lists/      # Ethereum wallet address lists
 │   ├── proxies/               # Proxy server configurations
 │   │   └── proxies.txt        # List of proxies for API requests
-│   ├── sharp/                 # Sharp tools input data
+│   ├── sharp/                 # Data tools input data
 │   └── solana/                # Solana blockchain input data
 │       ├── token-lists/       # Solana token address lists
 │       └── wallet-lists/      # Solana wallet address lists
@@ -39,8 +39,8 @@ data/
 │   │       ├── top-traders/     # Top traders analysis
 │   │       ├── top-holders/     # Top holders analysis
 │   │       └── early-buyers/    # Early buyers analysis
-│   ├── sharp-tools/           # Sharp tools output data
-│   │   ├── wallets/           # Wallet data from Sharp tools
+│   ├── sharp-tools/           # Data tools output data
+│   │   ├── wallets/           # Wallet data from Data tools
 │   │   │   └── split/         # Split wallet lists
 │   │   └── csv/               # CSV processing results
 │   │       ├── merged/        # Merged CSV files
@@ -95,7 +95,7 @@ data/
 ### Sharp-Tools
 
 - **Output Data**:
-  - `sharp-tools/wallets/`: Wallet data processed by Sharp tools
+  - `sharp-tools/wallets/`: Wallet data processed by Data tools
   - `sharp-tools/csv/merged/`: Merged CSV files
   - `sharp-tools/csv/unmerged/`: Original unmerged CSV files
   - `sharp-tools/csv/filtered/`: Filtered CSV data

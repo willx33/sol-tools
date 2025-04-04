@@ -314,7 +314,7 @@ def create_main_menu(handlers: Dict[str, Callable]) -> List[MenuOption]:
         MenuOption("🌀 Solana Tools", children=solana_menu,
                   description="Sol blockchain monitoring, analytics, and tracking.",
                   missing_env_vars=False),
-        MenuOption("🗡️ Sharp Tools", children=sharp_menu,
+        MenuOption("🗡️ Data Tools", children=sharp_menu,
                   description="Wallet analysis, CSV processing, and BullX integration.",
                   missing_env_vars=False),
         MenuOption("🔌 API Tools", children=api_menu,

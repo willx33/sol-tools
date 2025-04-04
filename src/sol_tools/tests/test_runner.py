@@ -78,7 +78,7 @@ MENU_STRUCTURE = {
         "Whale Tracker 🐉": ["Dragon", "Solana"],
         "Early Investor Finder 🐉": ["Dragon", "Solana"]
     },
-    "Sharp Tools": {
+    "Data Tools": {
         "Wallet Analyzer": ["Sharp"],
         "Address Splitter": ["Sharp"],
         "CSV Combiner": ["Sharp"],
@@ -143,7 +143,7 @@ AVAILABLE_MODULES = {
         "module_path": "src.sol_tools.tests.test_modules.test_sharp",
         "run_func": "run_sharp_tests",
         "submodules": [],
-        "category": "Sharp Tools",
+        "category": "Data Tools",
         "description": "Tests for Sharp API integration",
         "required_env_vars": []
     },

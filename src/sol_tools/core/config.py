@@ -141,7 +141,7 @@ def load_config() -> Dict[str, Any]:
     (OUTPUT_DATA_DIR / "ethereum" / "dragon" / "top-holders").mkdir(parents=True, exist_ok=True)
     (OUTPUT_DATA_DIR / "ethereum" / "dragon" / "early-buyers").mkdir(parents=True, exist_ok=True)
     
-    # Sharp Tools modules
+    # Data Tools modules
     (OUTPUT_DATA_DIR / "sharp-tools").mkdir(parents=True, exist_ok=True)
     (OUTPUT_DATA_DIR / "sharp-tools" / "wallets").mkdir(parents=True, exist_ok=True)
     (OUTPUT_DATA_DIR / "sharp-tools" / "csv").mkdir(parents=True, exist_ok=True)
