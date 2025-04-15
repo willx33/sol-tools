@@ -30,3 +30,14 @@ sol-tools --clean
 - **Cross-Chain Analysis** for Solana and Ethereum
 - **API Integrations** with Dune, GMGN, BullX
 - **Interactive CLI** with keyboard navigation
+
+## Screenshots
+![Main Menu](images/st1.png)
+---
+![Sol Tools](images/st2.png)
+---
+![Data Tools](images/st3.png)
+---
+![GMGN API](images/st4.png)
+---
+![Settings](images/st6.png)
